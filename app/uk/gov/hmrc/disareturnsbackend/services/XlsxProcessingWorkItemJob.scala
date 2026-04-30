@@ -45,7 +45,8 @@ class XlsxProcessingWorkItemJob @Inject() (
     fileUploadRepository: FileUploadRepository,
     objectStoreConnector: ObjectStoreConnector,
     upscanConnector: UpscanConnector,
-    jobReportWriter: XlsxProcessingJobReportWriter
+    jobReportWriter: XlsxProcessingJobReportWriter,
+    processResidentMemorySampler: ProcessResidentMemorySampler
 )(implicit mat: Materializer)
     extends Logging
     with TempFileSupport {
@@ -130,11 +131,20 @@ class XlsxProcessingWorkItemJob @Inject() (
     val queueWaitMillis =
       math.max(0L, java.time.Duration.between(workItemAvailableAt, startedAt).toMillis)
     val initialHeapUsedBytes = heapUsedBytes()
+    val initialProcessResidentMemoryBytes = processResidentMemorySampler.currentProcessResidentMemoryBytes()
     var peakHeapUsedBytes = initialHeapUsedBytes
+    var peakProcessResidentMemoryBytes = initialProcessResidentMemoryBytes
     var fileSizeBytes = 0L
 
     def updatePeakHeap(): Unit = {
       peakHeapUsedBytes = math.max(peakHeapUsedBytes, heapUsedBytes())
+    }
+
+    def updatePeakProcessResidentMemory(): Unit = {
+      peakProcessResidentMemoryBytes = maxObserved(
+        peakProcessResidentMemoryBytes,
+        processResidentMemorySampler.currentProcessResidentMemoryBytes()
+      )
     }
 
     withTempFile("disa-return-", ".xlsx") { tempFile =>
@@ -142,30 +152,41 @@ class XlsxProcessingWorkItemJob @Inject() (
         source <- upscanConnector.downloadFile(filename)
         _ <- source.runWith(FileIO.toPath(tempFile)).andThen { case _ =>
           updatePeakHeap()
+          updatePeakProcessResidentMemory()
         }
         _ = {
           fileSizeBytes = Files.size(tempFile)
           updatePeakHeap()
+          updatePeakProcessResidentMemory()
         }
         report <- xlsxProcessingService.validate(tempFile).andThen { case _ =>
           updatePeakHeap()
+          updatePeakProcessResidentMemory()
         }
         _ <- storeValidatedFile(tempFile, report).andThen { case _ =>
           updatePeakHeap()
+          updatePeakProcessResidentMemory()
         }
         _ <- updateFileUploadStatus(filename, report).andThen { case _ =>
           updatePeakHeap()
+          updatePeakProcessResidentMemory()
         }
         _ <- xlsxProcessingWorkItemRepository
           .completeAndDelete(workItem.id)
           .andThen { case _ =>
             updatePeakHeap()
+            updatePeakProcessResidentMemory()
           }
       } yield {
         val finishedAt = clock.instant()
         val totalMillis = (System.nanoTime() - startedNanos) / 1000000L
         val finalHeapUsed = heapUsedBytes()
+        val finalProcessResidentMemoryBytes = processResidentMemorySampler.currentProcessResidentMemoryBytes()
         val finalPeakUsed = math.max(peakHeapUsedBytes, finalHeapUsed)
+        val finalPeakProcessResidentMemoryBytes = maxObserved(
+          peakProcessResidentMemoryBytes,
+          finalProcessResidentMemoryBytes
+        )
         logger.info(
           s"[XlsxProcessingWorkItemJob] Worker $workerId completed work item for $filename; submitted=${report.isValid}; failureCount=$workItemFailureCount"
         )
@@ -189,6 +210,9 @@ class XlsxProcessingWorkItemJob @Inject() (
             jvmHeapUsedBytesStart = initialHeapUsedBytes,
             jvmHeapUsedBytesPeak = finalPeakUsed,
             jvmHeapUsedBytesEnd = finalHeapUsed,
+            processResidentMemoryBytesStart = initialProcessResidentMemoryBytes,
+            processResidentMemoryBytesPeak = finalPeakProcessResidentMemoryBytes,
+            processResidentMemoryBytesEnd = finalProcessResidentMemoryBytes,
             outcome = "success",
             errorMessage = None
           )
@@ -199,7 +223,12 @@ class XlsxProcessingWorkItemJob @Inject() (
       val finishedAt = clock.instant()
       val totalMillis = (System.nanoTime() - startedNanos) / 1000000L
       val finalHeapUsed = heapUsedBytes()
+      val finalProcessResidentMemoryBytes = processResidentMemorySampler.currentProcessResidentMemoryBytes()
       val finalPeakUsed = math.max(peakHeapUsedBytes, finalHeapUsed)
+      val finalPeakProcessResidentMemoryBytes = maxObserved(
+        peakProcessResidentMemoryBytes,
+        finalProcessResidentMemoryBytes
+      )
       logger.error(
         s"[XlsxProcessingWorkItemJob] Worker $workerId failed processing work item for $filename; failureCount=$workItemFailureCount",
         exception
@@ -234,6 +263,9 @@ class XlsxProcessingWorkItemJob @Inject() (
               jvmHeapUsedBytesStart = initialHeapUsedBytes,
               jvmHeapUsedBytesPeak = finalPeakUsed,
               jvmHeapUsedBytesEnd = finalHeapUsed,
+              processResidentMemoryBytesStart = initialProcessResidentMemoryBytes,
+              processResidentMemoryBytesPeak = finalPeakProcessResidentMemoryBytes,
+              processResidentMemoryBytesEnd = finalProcessResidentMemoryBytes,
               outcome = "failed",
               errorMessage = Some(exception.getMessage)
             )
@@ -278,4 +310,12 @@ class XlsxProcessingWorkItemJob @Inject() (
 
   private def heapUsedBytes(): Long =
     ManagementFactory.getMemoryMXBean.getHeapMemoryUsage.getUsed
+
+  private def maxObserved(left: Option[Long], right: Option[Long]): Option[Long] =
+    (left, right) match {
+      case (Some(l), Some(r)) => Some(math.max(l, r))
+      case (Some(l), None)    => Some(l)
+      case (None, Some(r))    => Some(r)
+      case (None, None)       => None
+    }
 }

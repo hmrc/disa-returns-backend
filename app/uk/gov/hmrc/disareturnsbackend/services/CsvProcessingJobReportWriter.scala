@@ -24,6 +24,9 @@ import java.nio.file.{Files, Path, StandardOpenOption}
 import java.time.Instant
 import javax.inject.{Inject, Singleton}
 
+// Memory fields are process/JVM-wide snapshots taken while the work item runs.
+// JVM heap fields are JVM heap snapshots; resident memory fields are process RSS snapshots where available.
+// Neither set represents memory owned by a single file or work item.
 final case class CsvProcessingJobReportRow(
     workItemId: String,
     workItemReceivedAt: Instant,
@@ -43,6 +46,9 @@ final case class CsvProcessingJobReportRow(
     jvmHeapUsedBytesStart: Long,
     jvmHeapUsedBytesPeak: Long,
     jvmHeapUsedBytesEnd: Long,
+    processResidentMemoryBytesStart: Option[Long],
+    processResidentMemoryBytesPeak: Option[Long],
+    processResidentMemoryBytesEnd: Option[Long],
     outcome: String,
     errorMessage: Option[String]
 )
@@ -73,6 +79,9 @@ class CsvProcessingJobReportWriter @Inject() (
       "jvmHeapUsedBytesStart",
       "jvmHeapUsedBytesPeak",
       "jvmHeapUsedBytesEnd",
+      "processResidentMemoryBytesStart",
+      "processResidentMemoryBytesPeak",
+      "processResidentMemoryBytesEnd",
       "outcome",
       "errorMessage"
     ).mkString(",") + "\n"
@@ -128,6 +137,9 @@ class CsvProcessingJobReportWriter @Inject() (
       row.jvmHeapUsedBytesStart,
       row.jvmHeapUsedBytesPeak,
       row.jvmHeapUsedBytesEnd,
+      row.processResidentMemoryBytesStart.fold("")(_.toString),
+      row.processResidentMemoryBytesPeak.fold("")(_.toString),
+      row.processResidentMemoryBytesEnd.fold("")(_.toString),
       row.outcome,
       row.errorMessage.getOrElse("")
     ).map(csv).mkString(",") + "\n"
