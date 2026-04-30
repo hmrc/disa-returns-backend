@@ -21,6 +21,7 @@ import org.apache.pekko.stream.Materializer
 import org.apache.pekko.stream.scaladsl.FileIO
 import play.api.Logging
 import play.api.inject.ApplicationLifecycle
+import play.api.libs.Files.TemporaryFileCreator
 import uk.gov.hmrc.disareturnsbackend.connectors.*
 import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.repositories.*
@@ -46,10 +47,13 @@ class CsvProcessingWorkItemJob @Inject() (
     objectStoreConnector: ObjectStoreConnector,
     upscanConnector: UpscanConnector,
     jobReportWriter: CsvProcessingJobReportWriter,
-    processResidentMemorySampler: ProcessResidentMemorySampler
+    processResidentMemorySampler: ProcessResidentMemorySampler,
+    tempFileCreator: TemporaryFileCreator
 )(implicit mat: Materializer)
     extends Logging
     with TempFileSupport {
+
+  override protected val temporaryFileCreator: TemporaryFileCreator = tempFileCreator
 
   private val pollInterval = 10.seconds
   private val workerCount =

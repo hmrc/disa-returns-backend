@@ -17,21 +17,24 @@
 package uk.gov.hmrc.disareturnsbackend.services
 
 import play.api.Logging
+import play.api.libs.Files.{TemporaryFile, TemporaryFileCreator}
 
-import java.nio.file.{Files, Path}
+import java.nio.file.Path
 import scala.concurrent.{ExecutionContext, Future}
 
 trait TempFileSupport extends Logging {
+
+  protected def temporaryFileCreator: TemporaryFileCreator
 
   protected def withTempFile[A](
       prefix: String,
       suffix: String
   )(use: Path => Future[A])(implicit ec: ExecutionContext): Future[A] = {
-    val tempFile = Files.createTempFile(prefix, suffix)
+    val tempFile: TemporaryFile = temporaryFileCreator.create(prefix, suffix)
 
-    use(tempFile).andThen { case _ =>
+    use(tempFile.path).andThen { case _ =>
       try {
-        Files.deleteIfExists(tempFile)
+        tempFile.delete()
       } catch {
         case exception: Exception =>
           logger.warn(s"[TempFileSupport][withTempFile] Failed to delete temporary file: $tempFile", exception)

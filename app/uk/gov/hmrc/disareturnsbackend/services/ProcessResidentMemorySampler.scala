@@ -28,24 +28,26 @@ trait ProcessResidentMemorySampler:
   def currentProcessResidentMemoryBytes(): Option[Long]
 
 object ProcessResidentMemorySampler:
-  private val VmRssPattern = """^VmRSS:\s+(\d+)\s+kB$""".r
-
   def parseVmRssBytes(statusText: String): Option[Long] =
     statusText.linesIterator
       .map(_.trim)
       .collectFirst {
-        case VmRssPattern(value) => value.toLong * 1024L
+        case line if line.startsWith("VmRSS:") =>
+          line
+            .stripPrefix("VmRSS:")
+            .trim
+            .split("\\s+")
+            .headOption
+            .flatMap(_.toLongOption)
+            .map(_ * 1024L)
       }
+      .flatten
 
 @Singleton
 class DefaultProcessResidentMemorySampler extends ProcessResidentMemorySampler:
   private val statusPath: Path = Path.of("/proc/self/status")
 
   override def currentProcessResidentMemoryBytes(): Option[Long] =
-    if (!Files.isReadable(statusPath)) {
-      None
-    } else {
-      Try(Files.readString(statusPath, StandardCharsets.UTF_8)).toOption.flatMap(
-        ProcessResidentMemorySampler.parseVmRssBytes
-      )
-    }
+    Try(Files.readString(statusPath, StandardCharsets.UTF_8)).toOption.flatMap(
+      ProcessResidentMemorySampler.parseVmRssBytes
+    )

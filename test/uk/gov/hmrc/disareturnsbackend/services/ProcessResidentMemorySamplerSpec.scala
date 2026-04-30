@@ -22,9 +22,19 @@ import org.scalatest.wordspec.AnyWordSpec
 class ProcessResidentMemorySamplerSpec extends AnyWordSpec with Matchers:
 
   "parseVmRssBytes" should:
-    "parse VmRSS values in bytes" in:
+    "parse VmRSS with tabs" in:
       ProcessResidentMemorySampler.parseVmRssBytes(
-        "Name:\ttest\nVmRSS:\t    123456 kB\n"
+        "Name:\ttest\nVmRSS:\t 123456 kB\n"
+      ) shouldBe Some(123456L * 1024L)
+
+    "parse VmRSS with multiple spaces" in:
+      ProcessResidentMemorySampler.parseVmRssBytes(
+        "Name:\ttest\nVmRSS:      123456 kB\n"
+      ) shouldBe Some(123456L * 1024L)
+
+    "parse VmRSS with a single space" in:
+      ProcessResidentMemorySampler.parseVmRssBytes(
+        "Name:\ttest\nVmRSS: 123456 kB\n"
       ) shouldBe Some(123456L * 1024L)
 
     "return none when VmRSS is missing" in:
