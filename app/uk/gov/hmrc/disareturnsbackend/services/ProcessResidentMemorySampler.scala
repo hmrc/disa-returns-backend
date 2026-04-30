@@ -20,6 +20,7 @@ import com.google.inject.ImplementedBy
 
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path}
+import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
 import scala.util.Try
 
@@ -27,27 +28,65 @@ import scala.util.Try
 trait ProcessResidentMemorySampler:
   def currentProcessResidentMemoryBytes(): Option[Long]
 
+trait ProcessCommandRunner:
+  def run(command: Seq[String], timeoutMillis: Long): Option[String]
+
+private final class DefaultProcessCommandRunner extends ProcessCommandRunner:
+  override def run(command: Seq[String], timeoutMillis: Long): Option[String] =
+    Try {
+      val process = new ProcessBuilder(command: _*).redirectErrorStream(true).start()
+
+      if (!process.waitFor(timeoutMillis, TimeUnit.MILLISECONDS)) {
+        process.destroyForcibly()
+        None
+      } else {
+        Some(new String(process.getInputStream.readAllBytes(), StandardCharsets.UTF_8))
+      }
+    }.toOption.flatten
+
 object ProcessResidentMemorySampler:
+  private val VmRssPattern = """^VmRSS:\s+(\d+)\s+kB$""".r
+
   def parseVmRssBytes(statusText: String): Option[Long] =
     statusText.linesIterator
       .map(_.trim)
       .collectFirst {
-        case line if line.startsWith("VmRSS:") =>
-          line
-            .stripPrefix("VmRSS:")
-            .trim
-            .split("\\s+")
-            .headOption
-            .flatMap(_.toLongOption)
-            .map(_ * 1024L)
+        case VmRssPattern(value) => value.toLong * 1024L
       }
-      .flatten
+
+  def parsePsRssBytes(output: String): Option[Long] =
+    output.linesIterator
+      .map(_.trim)
+      .find(_.nonEmpty)
+      .flatMap(_.toLongOption)
+      .map(_ * 1024L)
 
 @Singleton
 class DefaultProcessResidentMemorySampler extends ProcessResidentMemorySampler:
-  private val statusPath: Path = Path.of("/proc/self/status")
+  private val psTimeoutMillis = 1000L
+
+  protected def statusPath: Path = Path.of("/proc/self/status")
+
+  protected def processCommandRunner: ProcessCommandRunner = new DefaultProcessCommandRunner
+
+  protected def osName: String = System.getProperty("os.name", "")
+
+  protected def currentPid: Long = ProcessHandle.current().pid()
 
   override def currentProcessResidentMemoryBytes(): Option[Long] =
-    Try(Files.readString(statusPath, StandardCharsets.UTF_8)).toOption.flatMap(
-      ProcessResidentMemorySampler.parseVmRssBytes
-    )
+    if (isMacOs) {
+      currentProcessResidentMemoryBytesFromPs
+    } else {
+      Try(Files.readString(statusPath, StandardCharsets.UTF_8)).toOption.flatMap(
+        ProcessResidentMemorySampler.parseVmRssBytes
+      )
+    }
+
+  private def currentProcessResidentMemoryBytesFromPs: Option[Long] =
+    processCommandRunner.run(
+      Seq("ps", "-o", "rss=", "-p", currentPid.toString),
+      psTimeoutMillis
+    ).flatMap(ProcessResidentMemorySampler.parsePsRssBytes)
+
+  private def isMacOs: Boolean =
+    osName.toLowerCase.contains("mac")

@@ -104,9 +104,20 @@ class ProcessingJobReportWriterIntegrationSpec extends AnyWordSpec with Matchers
     errorMessage = None
   )
 
+  private val rowWithoutResidentMemory = row.copy(
+    processResidentMemoryBytesStart = None,
+    processResidentMemoryBytesPeak = None,
+    processResidentMemoryBytesEnd = None
+  )
+
+  private val expectedBlankResidentMemoryRow = expectedRow
+    .updated(18, "")
+    .updated(19, "")
+    .updated(20, "")
+
   "CsvProcessingJobReportWriter" should:
     "write the expected header and row layout" in:
-      assertWriterOutput { reportFile =>
+      assertWriterOutput() { reportFile =>
         new CsvProcessingJobReportWriter(
           new AppConfig(
             Configuration(
@@ -117,9 +128,21 @@ class ProcessingJobReportWriterIntegrationSpec extends AnyWordSpec with Matchers
         ).write(row)
       }
 
+    "serialize blank resident memory fields when unavailable" in:
+      assertWriterOutput(expectedBlankResidentMemoryRow) { reportFile =>
+        new CsvProcessingJobReportWriter(
+          new AppConfig(
+            Configuration(
+              "appName" -> "disa-returns-backend-test",
+              "csvProcessingJob.reportFile" -> reportFile.toString
+            )
+          )
+        ).write(rowWithoutResidentMemory)
+      }
+
   "XlsxProcessingJobReportWriter" should:
     "write the expected header and row layout" in:
-      assertWriterOutput { reportFile =>
+      assertWriterOutput() { reportFile =>
         new XlsxProcessingJobReportWriter(
           new AppConfig(
             Configuration(
@@ -156,7 +179,47 @@ class ProcessingJobReportWriterIntegrationSpec extends AnyWordSpec with Matchers
         )
       }
 
-  private def assertWriterOutput(writeRow: java.nio.file.Path => Unit): Unit =
+    "serialize blank resident memory fields when unavailable" in:
+      assertWriterOutput(expectedBlankResidentMemoryRow) { reportFile =>
+        new XlsxProcessingJobReportWriter(
+          new AppConfig(
+            Configuration(
+              "appName" -> "disa-returns-backend-test",
+              "xlsxProcessingJob.reportFile" -> reportFile.toString
+            )
+          )
+        ).write(
+          XlsxProcessingJobReportRow(
+            workItemId = rowWithoutResidentMemory.workItemId,
+            workItemReceivedAt = rowWithoutResidentMemory.workItemReceivedAt,
+            workItemAvailableAt = rowWithoutResidentMemory.workItemAvailableAt,
+            workItemFailureCount = rowWithoutResidentMemory.workItemFailureCount,
+            queueWaitMillis = rowWithoutResidentMemory.queueWaitMillis,
+            startedAt = rowWithoutResidentMemory.startedAt,
+            finishedAt = rowWithoutResidentMemory.finishedAt,
+            workerId = rowWithoutResidentMemory.workerId,
+            filename = rowWithoutResidentMemory.filename,
+            fileSizeBytes = rowWithoutResidentMemory.fileSizeBytes,
+            rowsProcessed = rowWithoutResidentMemory.rowsProcessed,
+            validRows = rowWithoutResidentMemory.validRows,
+            invalidRows = rowWithoutResidentMemory.invalidRows,
+            maxErrorsReached = rowWithoutResidentMemory.maxErrorsReached,
+            totalMillis = rowWithoutResidentMemory.totalMillis,
+            jvmHeapUsedBytesStart = rowWithoutResidentMemory.jvmHeapUsedBytesStart,
+            jvmHeapUsedBytesPeak = rowWithoutResidentMemory.jvmHeapUsedBytesPeak,
+            jvmHeapUsedBytesEnd = rowWithoutResidentMemory.jvmHeapUsedBytesEnd,
+            processResidentMemoryBytesStart = None,
+            processResidentMemoryBytesPeak = None,
+            processResidentMemoryBytesEnd = None,
+            outcome = rowWithoutResidentMemory.outcome,
+            errorMessage = rowWithoutResidentMemory.errorMessage
+          )
+        )
+      }
+
+  private def assertWriterOutput(
+      expectedRow: Vector[String] = this.expectedRow
+  )(writeRow: java.nio.file.Path => Unit): Unit =
     val reportFile = Files.createTempDirectory("report-writer-test").resolve("report.csv")
 
     try {
