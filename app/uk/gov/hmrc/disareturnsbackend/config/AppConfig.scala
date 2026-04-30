@@ -55,4 +55,18 @@ class AppConfig @Inject() (config: Configuration)
           s"target/$appName-csv-processing-job-report-$timestamp.csv"
         }
     )
+
+  lazy val xlsxProcessingJobReportFile: Path =
+    Paths.get(
+      config
+        .getOptional[String]("xlsxProcessingJob.reportFile")
+        .getOrElse {
+          val timestamp =
+            LocalDateTime
+              .now(ZoneId.systemDefault())
+              .format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
+
+          s"target/$appName-xlsx-processing-job-report-$timestamp.csv"
+        }
+    )
 }

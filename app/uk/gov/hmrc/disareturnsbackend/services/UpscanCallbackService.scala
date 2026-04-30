@@ -22,13 +22,16 @@ import uk.gov.hmrc.disareturnsbackend.repositories.{
   FileUploadRepository
 }
 import uk.gov.hmrc.http.HeaderCarrier
+import uk.gov.hmrc.disareturnsbackend.repositories.XlsxProcessingWorkItemRepository
 
 import javax.inject.{Inject, Singleton}
 import scala.concurrent.{ExecutionContext, Future}
+import java.util.Locale
 
 @Singleton
 class UpscanCallbackService @Inject() (
     csvProcessingWorkItemRepository: CsvProcessingWorkItemRepository,
+    xlsxProcessingWorkItemRepository: XlsxProcessingWorkItemRepository,
     fileUploadRepository: FileUploadRepository
 )(implicit ec: ExecutionContext)
     extends Logging {
@@ -39,6 +42,13 @@ class UpscanCallbackService @Inject() (
     for {
       _ <- fileUploadRepository.create(filename)
       _ <- fileUploadRepository.markReadyForParsing(filename)
-      _ <- csvProcessingWorkItemRepository.enqueue(filename)
+      _ <- enqueueByExtension(filename)
     } yield ()
+
+  private def enqueueByExtension(filename: String): Future[Unit] =
+    if (filename.toLowerCase(Locale.ROOT).endsWith(".xlsx")) {
+      xlsxProcessingWorkItemRepository.enqueue(filename).map(_ => ())
+    } else {
+      csvProcessingWorkItemRepository.enqueue(filename).map(_ => ())
+    }
 }

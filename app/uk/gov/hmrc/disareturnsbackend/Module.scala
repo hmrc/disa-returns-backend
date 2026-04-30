@@ -18,6 +18,8 @@ package uk.gov.hmrc.disareturnsbackend
 
 import uk.gov.hmrc.disareturnsbackend.services.CsvProcessingWorkItemJob
 import uk.gov.hmrc.disareturnsbackend.services.CsvProcessingWorkItemJobStarter
+import uk.gov.hmrc.disareturnsbackend.services.XlsxProcessingWorkItemJob
+import uk.gov.hmrc.disareturnsbackend.services.XlsxProcessingWorkItemJobStarter
 import play.api.{Configuration, Environment}
 import play.api.inject.{Binding, Module => AppModule}
 
@@ -29,9 +31,11 @@ class Module extends AppModule:
       environment: Environment,
       configuration: Configuration
   ): Seq[Binding[_]] =
-    bind[Clock].toInstance(
+      bind[Clock].toInstance(
       Clock.systemDefaultZone
     ) ::
       bind[CsvProcessingWorkItemJob].toSelf ::
       bind[CsvProcessingWorkItemJobStarter].toSelf.eagerly() ::
+      bind[XlsxProcessingWorkItemJob].toSelf ::
+      bind[XlsxProcessingWorkItemJobStarter].toSelf.eagerly() ::
       Nil

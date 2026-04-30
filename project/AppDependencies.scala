@@ -6,12 +6,14 @@ object AppDependencies {
   private val bootstrapVersion = "10.5.0"
   private val hmrcMongoVersion = "2.11.0"
   private val univocityVersion = "2.9.1"
+  private val poiVersion = "5.5.1"
 
   val compile = Seq(
     "uk.gov.hmrc" %% "bootstrap-backend-play-30" % bootstrapVersion,
     "uk.gov.hmrc.mongo" %% "hmrc-mongo-play-30" % hmrcMongoVersion,
     "uk.gov.hmrc.mongo" %% "hmrc-mongo-work-item-repo-play-30" % hmrcMongoVersion,
-    "com.univocity" % "univocity-parsers" % univocityVersion
+    "com.univocity" % "univocity-parsers" % univocityVersion,
+    "org.apache.poi" % "poi-ooxml" % poiVersion
   )
 
   val test = Seq(

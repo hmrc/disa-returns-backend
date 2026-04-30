@@ -1,7 +1,7 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 
-const sizeMarkers = ['-xs', '-s', '-m', '-l', '-xl', '2xl', '3xl'];
+const sizeMarkers = ['-xs', '-s', '-m', '-l', '-xl', '-2xl'];
 const allowedTypes = new Set(['csv', 'xlsx']);
 
 export const options = {
