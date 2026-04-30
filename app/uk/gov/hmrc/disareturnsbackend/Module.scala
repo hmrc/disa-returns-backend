@@ -16,6 +16,8 @@
 
 package uk.gov.hmrc.disareturnsbackend
 
+import uk.gov.hmrc.disareturnsbackend.services.CsvProcessingWorkItemJob
+import uk.gov.hmrc.disareturnsbackend.services.CsvProcessingWorkItemJobStarter
 import play.api.{Configuration, Environment}
 import play.api.inject.{Binding, Module => AppModule}
 
@@ -29,5 +31,7 @@ class Module extends AppModule:
   ): Seq[Binding[_]] =
     bind[Clock].toInstance(
       Clock.systemDefaultZone
-    ) :: // inject if current time needs to be controlled in unit tests
+    ) ::
+      bind[CsvProcessingWorkItemJob].toSelf ::
+      bind[CsvProcessingWorkItemJobStarter].toSelf.eagerly() ::
       Nil

@@ -18,8 +18,41 @@ package uk.gov.hmrc.disareturnsbackend.config
 
 import javax.inject.{Inject, Singleton}
 import play.api.Configuration
+import uk.gov.hmrc.play.bootstrap.config.ServicesConfig
+import java.nio.file.{Path, Paths}
+import java.time.format.DateTimeFormatter
+import java.time.{LocalDateTime, ZoneId}
+import scala.concurrent.duration.{Duration, DurationInt}
 
 @Singleton
-class AppConfig @Inject() (config: Configuration):
+class AppConfig @Inject() (config: Configuration)
+    extends ServicesConfig(config) {
 
   val appName: String = config.get[String]("appName")
+
+  lazy val disaReturnsStubs: String =
+    baseUrl("disa-returns-stubs")
+
+  lazy val objectStoreUrl: String = s"$disaReturnsStubs/object-store"
+
+  lazy val upscanDownloadUrl: String = s"$disaReturnsStubs/upscan-download"
+
+  lazy val csvProcessingJobRequestTimeout: Duration =
+    config
+      .getOptional[Duration]("csvProcessingJob.requestTimeout")
+      .getOrElse(30.minutes)
+
+  lazy val csvProcessingJobReportFile: Path =
+    Paths.get(
+      config
+        .getOptional[String]("csvProcessingJob.reportFile")
+        .getOrElse {
+          val timestamp =
+            LocalDateTime
+              .now(ZoneId.systemDefault())
+              .format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
+
+          s"target/$appName-csv-processing-job-report-$timestamp.csv"
+        }
+    )
+}

@@ -1,1 +1,2 @@
-# microservice specific routes
+
+POST    /upscan-callback uk.gov.hmrc.disareturnsbackend.controllers.UpscanCallbackController.uploadCallback(filename: String)
