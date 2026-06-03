@@ -56,7 +56,7 @@ trait SpecBase
       additionalOverrides: Seq[GuiceableModule] = Nil
   ): GuiceApplicationBuilder = {
 
-    sbtval defaultOverrides: Seq[GuiceableModule] = Seq(
+    val defaultOverrides: Seq[GuiceableModule] = Seq(
       bind[InternalAuthTokenInitialiser]
         .to[NoOpInternalAuthTokenInitialiser]
     )
