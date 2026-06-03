@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 HM Revenue & Customs
+ * Copyright 2026 HM Revenue & Customs
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,18 +16,18 @@
 
 package uk.gov.hmrc.disareturnsbackend.config
 
-import javax.inject.{Inject, Singleton}
-import play.api.Configuration
-import uk.gov.hmrc.play.bootstrap.config.ServicesConfig
+import base.SpecBase
+import org.apache.pekko.Done
 
-@Singleton
-class AppConfig @Inject() (
-    config: Configuration,
-    servicesConfig: ServicesConfig
-) {
+class NoOpInternalAuthTokenInitialiserSpec extends SpecBase {
 
-  val appName: String = config.get[String]("appName")
+  "NoOpInternalAuthTokenInitialiser" - {
+    "initialised" - {
+      "must return Done" in {
+        val initialiser = new NoOpInternalAuthTokenInitialiser()
 
-  val internalAuthService: String = servicesConfig.baseUrl("internal-auth")
-  val internalAuthToken: String = config.get[String]("internal-auth.token")
+        initialiser.initialised.futureValue mustBe Done
+      }
+    }
+  }
 }
