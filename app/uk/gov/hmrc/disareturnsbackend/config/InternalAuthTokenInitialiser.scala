@@ -37,16 +37,15 @@ abstract class InternalAuthTokenInitialiser {
 }
 
 @Singleton
-class NoOpInternalAuthTokenInitialiser @Inject()
-    extends InternalAuthTokenInitialiser {
+class NoOpInternalAuthTokenInitialiser @Inject() extends InternalAuthTokenInitialiser {
   override protected def initialise(): Future[Done] = Future.successful(Done)
 }
 
 @Singleton
 class InternalAuthTokenInitialiserImpl @Inject() (
-    config: AppConfig,
-    httpClient: HttpClientV2,
-    futures: Futures
+  config: AppConfig,
+  httpClient: HttpClientV2,
+  futures: Futures
 )(implicit ec: ExecutionContext)
     extends InternalAuthTokenInitialiser
     with Logging {
@@ -74,13 +73,13 @@ class InternalAuthTokenInitialiserImpl @Inject() (
       .post(url"${config.internalAuthService}/test-only/token")(HeaderCarrier())
       .withBody(
         Json.obj(
-          "token" -> config.internalAuthToken,
-          "principal" -> config.appName,
+          "token"       -> config.internalAuthToken,
+          "principal"   -> config.appName,
           "permissions" -> Seq(
             Json.obj(
-              "resourceType" -> "object-store",
+              "resourceType"     -> "object-store",
               "resourceLocation" -> "disa-returns-backend",
-              "actions" -> List("READ", "WRITE", "DELETE")
+              "actions"          -> List("READ", "WRITE", "DELETE")
             )
           )
         )

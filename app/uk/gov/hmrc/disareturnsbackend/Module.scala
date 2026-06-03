@@ -16,11 +16,7 @@
 
 package uk.gov.hmrc.disareturnsbackend
 
-import config.{
-  InternalAuthTokenInitialiser,
-  InternalAuthTokenInitialiserImpl,
-  NoOpInternalAuthTokenInitialiser
-}
+import config.{InternalAuthTokenInitialiser, InternalAuthTokenInitialiserImpl, NoOpInternalAuthTokenInitialiser}
 import play.api.{Configuration, Environment}
 import play.api.inject.{Binding, Module as AppModule, bind as binding}
 
@@ -29,8 +25,8 @@ import java.time.{Clock, ZoneOffset}
 class Module extends AppModule:
 
   override def bindings(
-      environment: Environment,
-      configuration: Configuration
+    environment: Environment,
+    configuration: Configuration
   ): Seq[Binding[_]] = {
 
     val authTokenInitialiserBindings: Seq[Binding[?]] =

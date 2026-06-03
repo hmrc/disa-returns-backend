@@ -25,15 +25,8 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.scalatestplus.play.guice.GuiceOneAppPerSuite
 import play.api.Application
 import play.api.inject.bind
-import play.api.inject.guice.{
-  GuiceApplicationBuilder,
-  GuiceBuilder,
-  GuiceableModule
-}
-import uk.gov.hmrc.disareturnsbackend.config.{
-  InternalAuthTokenInitialiser,
-  NoOpInternalAuthTokenInitialiser
-}
+import play.api.inject.guice.{GuiceApplicationBuilder, GuiceBuilder, GuiceableModule}
+import uk.gov.hmrc.disareturnsbackend.config.{InternalAuthTokenInitialiser, NoOpInternalAuthTokenInitialiser}
 
 import scala.concurrent.ExecutionContext
 
@@ -53,7 +46,7 @@ trait SpecBase
   override lazy val app: Application = applicationBuilder().build()
 
   protected def applicationBuilder(
-      additionalOverrides: Seq[GuiceableModule] = Nil
+    additionalOverrides: Seq[GuiceableModule] = Nil
   ): GuiceApplicationBuilder = {
 
     val defaultOverrides: Seq[GuiceableModule] = Seq(

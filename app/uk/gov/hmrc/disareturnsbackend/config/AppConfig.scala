@@ -22,12 +22,12 @@ import uk.gov.hmrc.play.bootstrap.config.ServicesConfig
 
 @Singleton
 class AppConfig @Inject() (
-    config: Configuration,
-    servicesConfig: ServicesConfig
+  config: Configuration,
+  servicesConfig: ServicesConfig
 ) {
 
   val appName: String = config.get[String]("appName")
 
   val internalAuthService: String = servicesConfig.baseUrl("internal-auth")
-  val internalAuthToken: String = config.get[String]("internal-auth.token")
+  val internalAuthToken: String   = config.get[String]("internal-auth.token")
 }

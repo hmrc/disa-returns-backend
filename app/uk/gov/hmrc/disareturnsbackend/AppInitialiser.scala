@@ -25,7 +25,7 @@ import scala.concurrent.{ExecutionContext, Future}
 
 @Singleton
 class AppInitialiser @Inject() (
-    internalAuthTokenInitialiser: InternalAuthTokenInitialiser
+  internalAuthTokenInitialiser: InternalAuthTokenInitialiser
 )(implicit ec: ExecutionContext)
     extends Logging {
 

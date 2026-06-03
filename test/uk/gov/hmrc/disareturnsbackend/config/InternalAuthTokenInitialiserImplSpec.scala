@@ -31,23 +31,23 @@ import scala.concurrent.Future
 
 class InternalAuthTokenInitialiserImplSpec extends SpecBase {
 
-  private val internalAuthToken = "valid-internal-auth-token"
-  private val appName = "disa-returns-backend"
+  private val internalAuthToken   = "valid-internal-auth-token"
+  private val appName             = "disa-returns-backend"
   private val internalAuthService = "http://localhost:8470"
-  private val fullTokenUrl = url"$internalAuthService/test-only/token"
+  private val fullTokenUrl        = url"$internalAuthService/test-only/token"
 
   class TestFutures extends Futures {
     var timeoutDuration: Option[FiniteDuration] = None
 
     override def timeout[A](
-        duration: FiniteDuration
+      duration: FiniteDuration
     )(future: => Future[A]): Future[A] = {
       timeoutDuration = Some(duration)
       future
     }
 
     override def delayed[A](duration: FiniteDuration)(
-        future: => Future[A]
+      future: => Future[A]
     ): Future[A] = future
 
     override def delay(duration: FiniteDuration): Future[Done] =
@@ -55,11 +55,11 @@ class InternalAuthTokenInitialiserImplSpec extends SpecBase {
   }
 
   trait TestSetup {
-    val mockAppConfig: AppConfig = mock[AppConfig]
-    val mockHttpClient: HttpClientV2 = mock[HttpClientV2]
-    val mockGetRequestBuilder: RequestBuilder = mock[RequestBuilder]
+    val mockAppConfig: AppConfig               = mock[AppConfig]
+    val mockHttpClient: HttpClientV2           = mock[HttpClientV2]
+    val mockGetRequestBuilder: RequestBuilder  = mock[RequestBuilder]
     val mockPostRequestBuilder: RequestBuilder = mock[RequestBuilder]
-    val futures = new TestFutures
+    val futures                                = new TestFutures
 
     lazy val initialiser =
       new InternalAuthTokenInitialiserImpl(
@@ -100,13 +100,13 @@ class InternalAuthTokenInitialiserImplSpec extends SpecBase {
 
     val expectedCreateTokenRequestBody: JsObject =
       Json.obj(
-        "token" -> internalAuthToken,
-        "principal" -> appName,
+        "token"       -> internalAuthToken,
+        "principal"   -> appName,
         "permissions" -> Seq(
           Json.obj(
-            "resourceType" -> "object-store",
+            "resourceType"     -> "object-store",
             "resourceLocation" -> "disa-returns-backend",
-            "actions" -> List("READ", "WRITE", "DELETE")
+            "actions"          -> List("READ", "WRITE", "DELETE")
           )
         )
       )
