@@ -79,9 +79,6 @@ sbt scalafmtSbt
 # formats just the main source files (excludes test and configuration files)
 sbt scalafmt
 ```
-### Further documentation
-
-You can view further information regarding this service via our [service guide](#).
 
 ### License
 
