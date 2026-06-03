@@ -62,6 +62,9 @@ This service leverages scalaFmt to ensure that the code is formatted correctly.
 Before you commit, please run the following commands to check that the code is formatted correctly:
 
 ```bash
+# runs a scala format check, runs unit tests, runs integration tests and produces a coverage report.
+sbt runAllChecks
+
 # checks all source and sbt files are correctly formatted
 sbt prePrChecks
 
@@ -76,9 +79,6 @@ sbt scalafmtSbt
 # formats just the main source files (excludes test and configuration files)
 sbt scalafmt
 ```
-### Further documentation
-
-You can view further information regarding this service via our [service guide](#).
 
 ### License
 
