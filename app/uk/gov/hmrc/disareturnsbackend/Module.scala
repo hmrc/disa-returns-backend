@@ -16,18 +16,34 @@
 
 package uk.gov.hmrc.disareturnsbackend
 
+import config.{InternalAuthTokenInitialiser, InternalAuthTokenInitialiserImpl, NoOpInternalAuthTokenInitialiser}
 import play.api.{Configuration, Environment}
-import play.api.inject.{Binding, Module => AppModule}
+import play.api.inject.{Binding, Module as AppModule, bind as binding}
 
-import java.time.Clock
+import java.time.{Clock, ZoneOffset}
 
 class Module extends AppModule:
 
   override def bindings(
-      environment: Environment,
-      configuration: Configuration
-  ): Seq[Binding[_]] =
-    bind[Clock].toInstance(
-      Clock.systemDefaultZone
-    ) :: // inject if current time needs to be controlled in unit tests
-      Nil
+    environment: Environment,
+    configuration: Configuration
+  ): Seq[Binding[_]] = {
+
+    val authTokenInitialiserBindings: Seq[Binding[?]] =
+      if (configuration.get[Boolean]("create-internal-auth-token-on-start")) {
+        Seq(
+          binding[InternalAuthTokenInitialiser]
+            .to[InternalAuthTokenInitialiserImpl]
+        )
+      } else {
+        Seq(
+          binding[InternalAuthTokenInitialiser]
+            .to[NoOpInternalAuthTokenInitialiser]
+        )
+      }
+
+    Seq(
+      binding[Clock].to(Clock.systemDefaultZone.withZone(ZoneOffset.UTC)),
+      binding[AppInitialiser].toSelf.eagerly()
+    ) ++ authTokenInitialiserBindings
+  }
