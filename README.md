@@ -30,6 +30,56 @@ sm2 --start DISA_RETURNS_ALL
 sbt run
 ```
 
+## Upscan callback endpoint
+
+Upscan posts final upload scan results to:
+
+```text
+POST /disa-returns-backend/monthly/upscan/callback/:zReference/:taxYear/:month
+```
+
+Route parameters:
+
+| Parameter | Description |
+| --- | --- |
+| `zReference` | DISA ISA manager reference for the monthly return journey |
+| `taxYear` | Tax year for the monthly return journey |
+| `month` | Month for the monthly return journey |
+
+The endpoint accepts Upscan `READY` and `FAILED` callback payloads and returns `202 Accepted` when the payload is valid. Invalid JSON, unknown `fileStatus` values, or unknown `failureReason` values return `400 Bad Request`. Non-JSON requests return `415 Unsupported Media Type`.
+
+Successful upload callback example:
+
+```json
+{
+  "reference": "2b4d6f3a-8c1e-4e4b-9c7a-123456789abc",
+  "downloadUrl": "https://fus-outbound-bucket.s3.eu-west-2.amazonaws.com/object-key?X-Amz-Signature=...",
+  "fileStatus": "READY",
+  "uploadDetails": {
+    "fileName": "return.csv",
+    "fileMimeType": "text/csv",
+    "uploadTimestamp": "2026-05-17T12:00:00Z",
+    "checksum": "396f101dd52e8b2ace0dcf5ed09b1d1f030e608938510ce46e7a5c7a4e775100",
+    "size": 987
+  }
+}
+```
+
+Failed upload callback example:
+
+```json
+{
+  "reference": "2b4d6f3a-8c1e-4e4b-9c7a-123456789abc",
+  "fileStatus": "FAILED",
+  "failureDetails": {
+    "failureReason": "REJECTED",
+    "message": "MIME type [application/zip] is not allowed for service: [disa-returns-frontend]"
+  }
+}
+```
+
+Supported failure reasons are `QUARANTINE`, `REJECTED`, and `UNKNOWN`.
+
 You can then query the app to ensure it is working with the following command:
 
 ```bash

@@ -35,6 +35,7 @@ class InternalAuthTokenInitialiserImplSpec extends SpecBase {
   private val appName             = "disa-returns-backend"
   private val internalAuthService = "http://localhost:8470"
   private val fullTokenUrl        = url"$internalAuthService/test-only/token"
+  private val timeoutDuration     = 30.seconds
 
   class TestFutures extends Futures {
     var timeoutDuration: Option[FiniteDuration] = None
@@ -118,7 +119,7 @@ class InternalAuthTokenInitialiserImplSpec extends SpecBase {
         initialiser.initialised.futureValue mustBe Done
         initialiser.initialised.futureValue mustBe Done
 
-        futures.timeoutDuration mustBe Some(30.seconds)
+        futures.timeoutDuration mustBe Some(timeoutDuration)
         verify(mockGetRequestBuilder).execute[HttpResponse](any(), any())
       }
 
@@ -128,7 +129,7 @@ class InternalAuthTokenInitialiserImplSpec extends SpecBase {
 
         initialiser.initialised.futureValue mustBe Done
 
-        futures.timeoutDuration mustBe Some(30.seconds)
+        futures.timeoutDuration mustBe Some(timeoutDuration)
         verify(mockPostRequestBuilder)
           .withBody(eqTo(expectedCreateTokenRequestBody))(any(), any(), any())
         verify(mockPostRequestBuilder).execute[HttpResponse](any(), any())
@@ -140,7 +141,7 @@ class InternalAuthTokenInitialiserImplSpec extends SpecBase {
 
         val thrown: Throwable = initialiser.initialised.failed.futureValue
 
-        futures.timeoutDuration mustBe Some(30.seconds)
+        futures.timeoutDuration mustBe Some(timeoutDuration)
         thrown mustBe a[RuntimeException]
         thrown.getMessage mustBe "Unable to initialise internal-auth token"
       }
@@ -151,7 +152,7 @@ class InternalAuthTokenInitialiserImplSpec extends SpecBase {
         authTokenIsValidFailure(exception)
 
         initialiser.initialised.failed.futureValue mustBe exception
-        futures.timeoutDuration mustBe Some(30.seconds)
+        futures.timeoutDuration mustBe Some(timeoutDuration)
       }
     }
   }

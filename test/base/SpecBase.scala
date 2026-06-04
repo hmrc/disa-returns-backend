@@ -16,8 +16,7 @@
 
 package base
 
-import org.scalatest.OptionValues
-import org.scalatest.TryValues
+import org.scalatest.{OptionValues, TryValues}
 import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.must.Matchers
@@ -25,7 +24,8 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.scalatestplus.play.guice.GuiceOneAppPerSuite
 import play.api.Application
 import play.api.inject.bind
-import play.api.inject.guice.{GuiceApplicationBuilder, GuiceBuilder, GuiceableModule}
+import play.api.inject.guice.{GuiceApplicationBuilder, GuiceableModule}
+import uk.gov.hmrc.play.audit.http.connector.DatastreamMetrics
 import uk.gov.hmrc.disareturnsbackend.config.{InternalAuthTokenInitialiser, NoOpInternalAuthTokenInitialiser}
 
 import scala.concurrent.ExecutionContext
@@ -51,7 +51,9 @@ trait SpecBase
 
     val defaultOverrides: Seq[GuiceableModule] = Seq(
       bind[InternalAuthTokenInitialiser]
-        .to[NoOpInternalAuthTokenInitialiser]
+        .to[NoOpInternalAuthTokenInitialiser],
+      bind[DatastreamMetrics]
+        .toInstance(DatastreamMetrics.disabled)
     )
 
     val builder = new GuiceApplicationBuilder()
