@@ -22,13 +22,13 @@ import play.api.http.Status.{ACCEPTED, BAD_REQUEST, NOT_FOUND, UNSUPPORTED_MEDIA
 import play.api.libs.json.{Json, OWrites}
 import play.api.libs.ws.readableAsString
 import uk.gov.hmrc.disareturnsbackend.BaseIntegrationSpec
-import uk.gov.hmrc.disareturnsbackend.models.upscan.{
-  UpscanUploadDetails,
-  UpscanUploadFailure,
-  UpscanUploadFailureDetails,
-  UpscanUploadFailureReason,
-  UpscanUploadResult,
-  UpscanUploadSuccess
+import uk.gov.hmrc.disareturnsbackend.models.{
+  UpscanDetails,
+  UpscanFailure,
+  UpscanFailureDetails,
+  UpscanFailureReason,
+  UpscanResult,
+  UpscanSuccess
 }
 
 import java.time.Instant
@@ -47,7 +47,7 @@ class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
 
   private val upscanReference = "2b4d6f3a-8c1e-4e4b-9c7a-123456789abc"
 
-  private val uploadDetails = UpscanUploadDetails(
+  private val uploadDetails = UpscanDetails(
     fileName = "return.csv",
     fileMimeType = "text/csv",
     uploadTimestamp = Instant.parse("2026-05-17T12:00:00Z"),
@@ -55,7 +55,7 @@ class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
     size = 1024L
   )
 
-  private val successfulUploadResult: UpscanUploadResult = UpscanUploadSuccess(
+  private val successfulUploadResult: UpscanResult = UpscanSuccess(
     reference = upscanReference,
     downloadUrl = downloadUrl,
     uploadDetails = uploadDetails
@@ -71,7 +71,7 @@ class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
 
     "return 202 Accepted for FAILED QUARANTINE callback payload" in {
       val result = postUploadResult(
-        failedUploadResult(UpscanUploadFailureReason.Quarantine, "Eicar-Test-Signature")
+        failedUploadResult(UpscanFailureReason.Quarantine, "Eicar-Test-Signature")
       )
 
       result.status shouldBe ACCEPTED
@@ -80,7 +80,7 @@ class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
     "return 202 Accepted for FAILED REJECTED callback payload" in {
       val result = postUploadResult(
         failedUploadResult(
-          UpscanUploadFailureReason.Rejected,
+          UpscanFailureReason.Rejected,
           "MIME type [application/zip] is not allowed for service: [disa-returns-frontend]"
         )
       )
@@ -90,7 +90,7 @@ class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
 
     "return 202 Accepted for FAILED UNKNOWN callback payload" in {
       val result = postUploadResult(
-        failedUploadResult(UpscanUploadFailureReason.Unknown, "Unable to parse upscan failure details")
+        failedUploadResult(UpscanFailureReason.Unknown, "Unable to parse upscan failure details")
       )
 
       result.status shouldBe ACCEPTED
@@ -103,7 +103,7 @@ class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
       )
 
       result.status shouldBe BAD_REQUEST
-      result.body   should include("Invalid UpscanUploadResult payload")
+      result.body   should include("Invalid UpscanResult payload")
     }
 
     "return 400 Bad Request when failureReason is invalid" in {
@@ -119,7 +119,7 @@ class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
       )
 
       result.status shouldBe BAD_REQUEST
-      result.body   should include("Invalid UpscanUploadResult payload")
+      result.body   should include("Invalid UpscanResult payload")
     }
 
     "return 400 Bad Request when the JSON body is malformed" in {
@@ -141,16 +141,16 @@ class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
     }
   }
 
-  private def failedUploadResult(failureReason: UpscanUploadFailureReason, message: String): UpscanUploadResult =
-    UpscanUploadFailure(
+  private def failedUploadResult(failureReason: UpscanFailureReason, message: String): UpscanResult =
+    UpscanFailure(
       reference = upscanReference,
-      failureDetails = UpscanUploadFailureDetails(
+      failureDetails = UpscanFailureDetails(
         failureReason = failureReason,
         message = message
       )
     )
 
-  private def postUploadResult(body: UpscanUploadResult) =
+  private def postUploadResult(body: UpscanResult) =
     postJson(fullCallbackPath, Json.toJson(body))
 
   private final case class InvalidFileStatusPayload(reference: String, fileStatus: String)

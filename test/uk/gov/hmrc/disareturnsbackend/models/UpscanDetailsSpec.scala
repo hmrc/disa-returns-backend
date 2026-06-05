@@ -14,17 +14,17 @@
  * limitations under the License.
  */
 
-package uk.gov.hmrc.disareturnsbackend.models.upscan
+package uk.gov.hmrc.disareturnsbackend.models
 
 import play.api.libs.json.{JsValue, Json, OFormat}
 import uk.gov.hmrc.disareturnsbackend.utils.JsonFormatSpec
 
 import java.time.Instant
 
-class UpscanUploadDetailsSpec extends JsonFormatSpec[UpscanUploadDetails] {
+class UpscanDetailsSpec extends JsonFormatSpec[UpscanDetails] {
 
-  override def model: UpscanUploadDetails =
-    UpscanUploadDetails(
+  override def model: UpscanDetails =
+    UpscanDetails(
       fileName = "return.csv",
       fileMimeType = "text/csv",
       uploadTimestamp = Instant.parse("2026-05-17T12:00:00Z"),
@@ -45,5 +45,5 @@ class UpscanUploadDetailsSpec extends JsonFormatSpec[UpscanUploadDetails] {
         |""".stripMargin
     )
 
-  override implicit def format: OFormat[UpscanUploadDetails] = UpscanUploadDetails.format
+  override implicit def format: OFormat[UpscanDetails] = UpscanDetails.format
 }

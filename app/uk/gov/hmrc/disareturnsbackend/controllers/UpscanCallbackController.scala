@@ -19,25 +19,35 @@ package uk.gov.hmrc.disareturnsbackend.controllers
 import play.api.Logging
 import play.api.libs.json.JsValue
 import play.api.mvc.{Action, ControllerComponents}
-import uk.gov.hmrc.disareturnsbackend.models.upscan.UpscanUploadResult
+import uk.gov.hmrc.disareturnsbackend.models.UpscanResult
+import uk.gov.hmrc.disareturnsbackend.services.UpscanCallbackService
 import uk.gov.hmrc.play.bootstrap.backend.controller.BackendController
 import uk.gov.hmrc.play.bootstrap.controller.WithJsonBody
 
 import javax.inject.Inject
-import scala.concurrent.Future
+import scala.concurrent.ExecutionContext
+import scala.util.control.NonFatal
 
 class UpscanCallbackController @Inject() (
-  cc: ControllerComponents
-) extends BackendController(cc)
+  cc: ControllerComponents,
+  upscanCallbackService: UpscanCallbackService
+)(implicit ec: ExecutionContext)
+    extends BackendController(cc)
     with WithJsonBody
     with Logging {
 
-  def callback(zReference: String, taxYear: String, month: String): Action[JsValue] = Action.async(parse.json) { implicit request =>
-    withJsonBody[UpscanUploadResult] { upscanUploadResult =>
-      logger.info(
-        s"[UpscanCallbackController][callback] Received upscan callback for zReference [$zReference], taxYear [$taxYear], month [$month], upload reference [${upscanUploadResult.reference}]"
-      )
-      Future.successful(Accepted)
+  def monthlyReturnUpscanCallback(zReference: String, taxYear: String, month: String): Action[JsValue] =
+    Action.async(parse.json) { implicit request =>
+      withJsonBody[UpscanResult] { upscanResult =>
+        logger.info(
+          s"[UpscanCallbackController][monthlyReturnUpscanCallback] Received upscan callback for zReference [$zReference], taxYear [$taxYear], month [$month], upload reference [${upscanResult.reference}]"
+        )
+        upscanCallbackService
+          .monthlyReturnUpscanCallback(zReference, taxYear, month, upscanResult)
+          .map(_ => Accepted)
+          .recover { case NonFatal(_) =>
+            ServiceUnavailable
+          }
+      }
     }
-  }
 }

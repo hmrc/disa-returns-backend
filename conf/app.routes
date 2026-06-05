@@ -1,4 +1,4 @@
 # microservice specific routes
 
 ## Callbacks
-POST   /monthly/upscan/callback/:zReference/:taxYear/:month   uk.gov.hmrc.disareturnsbackend.controllers.UpscanCallbackController.callback(zReference: String, taxYear: String, month: String)
+POST   /monthly/upscan/callback/:zReference/:taxYear/:month   uk.gov.hmrc.disareturnsbackend.controllers.UpscanCallbackController.monthlyReturnUpscanCallback(zReference: String, taxYear: String, month: String)

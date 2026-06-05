@@ -14,21 +14,21 @@
  * limitations under the License.
  */
 
-package uk.gov.hmrc.disareturnsbackend.models.upscan
+package uk.gov.hmrc.disareturnsbackend.models
 
 import base.SpecBase
 import play.api.libs.json.{JsError, Json, OWrites}
-import uk.gov.hmrc.disareturnsbackend.models.upscan.UpscanUploadFailureReason._
+import uk.gov.hmrc.disareturnsbackend.models.UpscanFailureReason._
 
 import java.time.Instant
 
-class UpscanUploadResultSpec extends SpecBase {
+class UpscanResultSpec extends SpecBase {
 
-  private val reference = "2b4d6f3a-8c1e-4e4b-9c7a-123456789abc"
+  private val reference   = "2b4d6f3a-8c1e-4e4b-9c7a-123456789abc"
   private val downloadUrl =
     "https://fus-outbound-bucket.s3.eu-west-2.amazonaws.com/object-key?X-Amz-Signature=abc"
 
-  private val uploadDetails = UpscanUploadDetails(
+  private val uploadDetails = UpscanDetails(
     fileName = "return.csv",
     fileMimeType = "text/csv",
     uploadTimestamp = Instant.parse("2026-05-17T12:00:00Z"),
@@ -36,8 +36,8 @@ class UpscanUploadResultSpec extends SpecBase {
     size = 1024L
   )
 
-  private val successResult: UpscanUploadResult =
-    UpscanUploadSuccess(
+  private val successResult: UpscanResult =
+    UpscanSuccess(
       reference = reference,
       downloadUrl = downloadUrl,
       uploadDetails = uploadDetails
@@ -61,14 +61,14 @@ class UpscanUploadResultSpec extends SpecBase {
         |""".stripMargin
     )
 
-  "UpscanUploadResult format" - {
+  "UpscanResult format" - {
 
     "must serialise a successful upload callback" in {
       Json.toJson(successResult) mustBe successJson
     }
 
     "must deserialise a successful upload callback" in {
-      successJson.as[UpscanUploadResult] mustBe successResult
+      successJson.as[UpscanResult] mustBe successResult
     }
 
     "must serialise a failed upload callback" in {
@@ -88,23 +88,22 @@ class UpscanUploadResultSpec extends SpecBase {
       )
     }
 
-    "must deserialise a failed upload callback for each Upscan failure reason" in {
-      UpscanUploadFailureReason.values.foreach { failureReason =>
+    "must deserialise a failed upload callback for each Upscan failure reason" in
+      UpscanFailureReason.values.foreach { failureReason =>
         val result = failedUploadResult(failureReason, "Upscan failure message")
 
-        Json.toJson(result).as[UpscanUploadResult] mustBe result
+        Json.toJson(result).as[UpscanResult] mustBe result
       }
-    }
 
     "must fail to deserialise an unknown fileStatus" in {
       Json
         .toJson(InvalidFileStatusPayload(reference, "SCANNING"))
-        .validate[UpscanUploadResult] mustBe
-        JsError("Invalid upscan upload fileStatus")
+        .validate[UpscanResult] mustBe
+        JsError("Invalid upscan fileStatus")
     }
 
     "must fail to deserialise a missing fileStatus" in {
-      Json.toJson(MissingFileStatusPayload(reference)).validate[UpscanUploadResult].isError mustBe true
+      Json.toJson(MissingFileStatusPayload(reference)).validate[UpscanResult].isError mustBe true
     }
 
     "must fail to deserialise an invalid failureReason" in {
@@ -116,22 +115,22 @@ class UpscanUploadResultSpec extends SpecBase {
             InvalidFailureDetails("DUPLICATE", "Duplicate file")
           )
         )
-        .validate[UpscanUploadResult]
+        .validate[UpscanResult]
         .isError mustBe true
     }
 
     "must fail to deserialise a successful upload without uploadDetails" in {
       Json
         .toJson(SuccessWithoutUploadDetailsPayload(reference, downloadUrl, "READY"))
-        .validate[UpscanUploadResult]
+        .validate[UpscanResult]
         .isError mustBe true
     }
   }
 
-  private def failedUploadResult(failureReason: UpscanUploadFailureReason, message: String): UpscanUploadResult =
-    UpscanUploadFailure(
+  private def failedUploadResult(failureReason: UpscanFailureReason, message: String): UpscanResult =
+    UpscanFailure(
       reference = reference,
-      failureDetails = UpscanUploadFailureDetails(
+      failureDetails = UpscanFailureDetails(
         failureReason = failureReason,
         message = message
       )

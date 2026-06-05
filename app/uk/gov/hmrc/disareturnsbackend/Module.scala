@@ -19,6 +19,7 @@ package uk.gov.hmrc.disareturnsbackend
 import config.{InternalAuthTokenInitialiser, InternalAuthTokenInitialiserImpl, NoOpInternalAuthTokenInitialiser}
 import play.api.{Configuration, Environment}
 import play.api.inject.{Binding, Module as AppModule, bind as binding}
+import uk.gov.hmrc.disareturnsbackend.mappers.{UpscanCallbackMapper, UpscanCallbackMapperImpl}
 
 import java.time.{Clock, ZoneOffset}
 
@@ -44,6 +45,7 @@ class Module extends AppModule:
 
     Seq(
       binding[Clock].to(Clock.systemDefaultZone.withZone(ZoneOffset.UTC)),
+      binding[UpscanCallbackMapper].to[UpscanCallbackMapperImpl],
       binding[AppInitialiser].toSelf.eagerly()
     ) ++ authTokenInitialiserBindings
   }

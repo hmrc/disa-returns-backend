@@ -14,16 +14,16 @@
  * limitations under the License.
  */
 
-package uk.gov.hmrc.disareturnsbackend.models.upscan
+package uk.gov.hmrc.disareturnsbackend.models
 
 import play.api.libs.json.{JsValue, Json, OFormat}
-import uk.gov.hmrc.disareturnsbackend.models.upscan.UpscanUploadFailureReason.Quarantine
+import uk.gov.hmrc.disareturnsbackend.models.UpscanFailureReason.Quarantine
 import uk.gov.hmrc.disareturnsbackend.utils.JsonFormatSpec
 
-class UpscanUploadFailureDetailsSpec extends JsonFormatSpec[UpscanUploadFailureDetails] {
+class UpscanFailureDetailsSpec extends JsonFormatSpec[UpscanFailureDetails] {
 
-  override def model: UpscanUploadFailureDetails =
-    UpscanUploadFailureDetails(
+  override def model: UpscanFailureDetails =
+    UpscanFailureDetails(
       failureReason = Quarantine,
       message = "Eicar-Test-Signature"
     )
@@ -38,5 +38,5 @@ class UpscanUploadFailureDetailsSpec extends JsonFormatSpec[UpscanUploadFailureD
         |""".stripMargin
     )
 
-  override implicit def format: OFormat[UpscanUploadFailureDetails] = UpscanUploadFailureDetails.format
+  override implicit def format: OFormat[UpscanFailureDetails] = UpscanFailureDetails.format
 }

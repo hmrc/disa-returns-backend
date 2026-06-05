@@ -14,48 +14,48 @@
  * limitations under the License.
  */
 
-package uk.gov.hmrc.disareturnsbackend.models.upscan
+package uk.gov.hmrc.disareturnsbackend.models
 
 import base.SpecBase
 import play.api.libs.json.{JsError, JsString, Json}
-import uk.gov.hmrc.disareturnsbackend.models.upscan.UpscanUploadFailureReason._
+import uk.gov.hmrc.disareturnsbackend.models.UpscanFailureReason._
 
-class UpscanUploadFailureReasonSpec extends SpecBase {
+class UpscanFailureReasonSpec extends SpecBase {
 
-  "UpscanUploadFailureReason format" - {
+  "UpscanFailureReason format" - {
 
     "must serialise Quarantine" in {
-      Json.toJson[UpscanUploadFailureReason](Quarantine) mustBe JsString("QUARANTINE")
+      Json.toJson[UpscanFailureReason](Quarantine) mustBe JsString("QUARANTINE")
     }
 
     "must serialise Rejected" in {
-      Json.toJson[UpscanUploadFailureReason](Rejected) mustBe JsString("REJECTED")
+      Json.toJson[UpscanFailureReason](Rejected) mustBe JsString("REJECTED")
     }
 
     "must serialise Unknown" in {
-      Json.toJson[UpscanUploadFailureReason](Unknown) mustBe JsString("UNKNOWN")
+      Json.toJson[UpscanFailureReason](Unknown) mustBe JsString("UNKNOWN")
     }
 
     "must deserialise Quarantine" in {
-      JsString("QUARANTINE").as[UpscanUploadFailureReason] mustBe Quarantine
+      JsString("QUARANTINE").as[UpscanFailureReason] mustBe Quarantine
     }
 
     "must deserialise Rejected" in {
-      JsString("REJECTED").as[UpscanUploadFailureReason] mustBe Rejected
+      JsString("REJECTED").as[UpscanFailureReason] mustBe Rejected
     }
 
     "must deserialise Unknown" in {
-      JsString("UNKNOWN").as[UpscanUploadFailureReason] mustBe Unknown
+      JsString("UNKNOWN").as[UpscanFailureReason] mustBe Unknown
     }
 
     "must fail to deserialise an unknown reason" in {
-      JsString("DUPLICATE").validate[UpscanUploadFailureReason] mustBe
-        JsError("Invalid upscan upload failure reason: DUPLICATE")
+      JsString("DUPLICATE").validate[UpscanFailureReason] mustBe
+        JsError("Invalid upscan failure reason: DUPLICATE")
     }
 
     "must fail to deserialise a non-string value" in {
-      Json.obj("x" -> 1).validate[UpscanUploadFailureReason] mustBe
-        JsError("Upscan upload failure reason must be a string")
+      Json.obj("x" -> 1).validate[UpscanFailureReason] mustBe
+        JsError("Upscan failure reason must be a string")
     }
   }
 }

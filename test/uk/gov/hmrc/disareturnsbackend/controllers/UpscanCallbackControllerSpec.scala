@@ -17,27 +17,36 @@
 package uk.gov.hmrc.disareturnsbackend.controllers
 
 import base.SpecBase
-import play.api.http.HeaderNames.CONTENT_TYPE
-import play.api.http.MimeTypes.JSON
-import play.api.libs.json.{Json, OWrites}
+import org.mockito.ArgumentMatchers.eq as eqTo
+import org.mockito.Mockito.{reset, verify, when}
+import org.scalatest.BeforeAndAfterEach
+import play.api.Application
+import play.api.inject.bind
+import play.api.libs.json.{JsValue, Json, OWrites}
 import play.api.test.FakeRequest
 import play.api.test.Helpers.*
-import uk.gov.hmrc.disareturnsbackend.controllers.routes.UpscanCallbackController
-import uk.gov.hmrc.disareturnsbackend.models.upscan.*
+import uk.gov.hmrc.disareturnsbackend.models.*
+import uk.gov.hmrc.disareturnsbackend.services.UpscanCallbackService
 
 import java.time.Instant
+import scala.concurrent.Future
 
-class UpscanCallbackControllerSpec extends SpecBase {
+class UpscanCallbackControllerSpec extends SpecBase with BeforeAndAfterEach {
 
-  private val callbackUrl = UpscanCallbackController.callback(
-    zReference = "Z1234",
-    taxYear = "2026",
-    month = "5"
-  ).url
+  private val mockUpscanCallbackService = mock[UpscanCallbackService]
+
+  override lazy val app: Application = applicationBuilder(
+    Seq(
+      bind[UpscanCallbackService].toInstance(mockUpscanCallbackService)
+    )
+  ).configure("play.http.router" -> "prod.Routes")
+    .build()
+
+  private lazy val controller = app.injector.instanceOf[UpscanCallbackController]
 
   private val upscanReference = "2b4d6f3a-8c1e-4e4b-9c7a-123456789abc"
 
-  private val uploadDetails = UpscanUploadDetails(
+  private val uploadDetails = UpscanDetails(
     fileName = "return.csv",
     fileMimeType = "text/csv",
     uploadTimestamp = Instant.parse("2026-05-17T12:00:00Z"),
@@ -45,85 +54,122 @@ class UpscanCallbackControllerSpec extends SpecBase {
     size = 1024L
   )
 
-  private val successfulUploadResult: UpscanUploadResult = UpscanUploadSuccess(
+  private val successfulUploadResult: UpscanResult = UpscanSuccess(
     reference = upscanReference,
     downloadUrl = "https://fus-outbound-bucket.s3.eu-west-2.amazonaws.com/object-key?X-Amz-Signature=abc",
     uploadDetails = uploadDetails
   )
 
-  private val failedUploadResult: UpscanUploadResult = UpscanUploadFailure(
+  private val failedUploadResult: UpscanResult = UpscanFailure(
     reference = upscanReference,
-    failureDetails = UpscanUploadFailureDetails(
-      failureReason = UpscanUploadFailureReason.Rejected,
+    failureDetails = UpscanFailureDetails(
+      failureReason = UpscanFailureReason.Rejected,
       message = "MIME type [application/zip] is not allowed for service: [disa-returns-frontend]"
     )
   )
 
-  "UpscanCallbackController.callback" - {
+  override protected def beforeEach(): Unit = {
+    super.beforeEach()
+    reset(mockUpscanCallbackService)
+  }
+
+  "UpscanCallbackController.monthlyReturnUpscanCallback" - {
 
     "must return ACCEPTED for valid READY callback payload" in {
-      val request =
-        FakeRequest(POST, callbackUrl)
-          .withJsonBody(Json.toJson(successfulUploadResult))
+      when(
+        mockUpscanCallbackService.monthlyReturnUpscanCallback(
+          eqTo("Z1234"),
+          eqTo("2026"),
+          eqTo("5"),
+          eqTo(successfulUploadResult)
+        )
+      ).thenReturn(Future.successful(()))
 
-      val result = route(app, request).value
+      val result = monthlyReturnUpscanCallback(Json.toJson(successfulUploadResult))
 
       status(result) mustBe ACCEPTED
+      verify(mockUpscanCallbackService).monthlyReturnUpscanCallback(
+        eqTo("Z1234"),
+        eqTo("2026"),
+        eqTo("5"),
+        eqTo(successfulUploadResult)
+      )
     }
 
     "must return ACCEPTED for valid FAILED callback payload" in {
-      val request =
-        FakeRequest(POST, callbackUrl)
-          .withJsonBody(Json.toJson(failedUploadResult))
+      when(
+        mockUpscanCallbackService.monthlyReturnUpscanCallback(
+          eqTo("Z1234"),
+          eqTo("2026"),
+          eqTo("5"),
+          eqTo(failedUploadResult)
+        )
+      ).thenReturn(Future.successful(()))
 
-      val result = route(app, request).value
+      val result = monthlyReturnUpscanCallback(Json.toJson(failedUploadResult))
 
       status(result) mustBe ACCEPTED
+      verify(mockUpscanCallbackService).monthlyReturnUpscanCallback(
+        eqTo("Z1234"),
+        eqTo("2026"),
+        eqTo("5"),
+        eqTo(failedUploadResult)
+      )
+    }
+
+    "must return SERVICE_UNAVAILABLE when the callback service fails" in {
+      when(
+        mockUpscanCallbackService.monthlyReturnUpscanCallback(
+          eqTo("Z1234"),
+          eqTo("2026"),
+          eqTo("5"),
+          eqTo(successfulUploadResult)
+        )
+      ).thenReturn(Future.failed(new RuntimeException("mongodb down")))
+
+      val result = monthlyReturnUpscanCallback(Json.toJson(successfulUploadResult))
+
+      status(result) mustBe SERVICE_UNAVAILABLE
+      verify(mockUpscanCallbackService).monthlyReturnUpscanCallback(
+        eqTo("Z1234"),
+        eqTo("2026"),
+        eqTo("5"),
+        eqTo(successfulUploadResult)
+      )
     }
 
     "must return BAD_REQUEST when the payload has an unknown fileStatus" in {
-      val request =
-        FakeRequest(POST, callbackUrl)
-          .withJsonBody(Json.toJson(InvalidFileStatusPayload(upscanReference, "SCANNING")))
+      val result = monthlyReturnUpscanCallback(Json.toJson(InvalidFileStatusPayload(upscanReference, "SCANNING")))
 
-      val result = route(app, request).value
-
-      status(result)          mustBe BAD_REQUEST
-      contentAsString(result) must include("Invalid UpscanUploadResult payload")
+      status(result) mustBe BAD_REQUEST
+      contentAsString(result) must include("Invalid UpscanResult payload")
     }
 
     "must return BAD_REQUEST when the payload has an unknown failureReason" in {
-      val request =
-        FakeRequest(POST, callbackUrl)
-          .withJsonBody(Json.toJson(InvalidFailureReasonPayload(upscanReference, "FAILED", InvalidFailureDetails("DUPLICATE", "Duplicate file"))))
-
-      val result = route(app, request).value
-
-      status(result)          mustBe BAD_REQUEST
-      contentAsString(result) must include("Invalid UpscanUploadResult payload")
-    }
-
-    "must return BAD_REQUEST when the JSON body is malformed" in {
-      val request =
-        FakeRequest(POST, callbackUrl)
-          .withHeaders(CONTENT_TYPE -> JSON)
-          .withTextBody("invalid-json")
-
-      val result = route(app, request).value
+      val result = monthlyReturnUpscanCallback(
+        Json.toJson(
+          InvalidFailureReasonPayload(
+            upscanReference,
+            "FAILED",
+            InvalidFailureDetails("DUPLICATE", "Duplicate file")
+          )
+        )
+      )
 
       status(result) mustBe BAD_REQUEST
-    }
-
-    "must return UNSUPPORTED_MEDIA_TYPE when the request body is invalid JSON and Content-Type unset" in {
-      val request =
-        FakeRequest(POST, callbackUrl)
-          .withTextBody("invalid-json")
-
-      val result = route(app, request).value
-
-      status(result) mustBe UNSUPPORTED_MEDIA_TYPE
+      contentAsString(result) must include("Invalid UpscanResult payload")
     }
   }
+
+  private def monthlyReturnUpscanCallback(requestBody: JsValue) =
+    controller.monthlyReturnUpscanCallback(
+      zReference = "Z1234",
+      taxYear = "2026",
+      month = "5"
+    )(
+      FakeRequest()
+        .withBody(requestBody)
+    )
 
   private final case class InvalidFileStatusPayload(reference: String, fileStatus: String)
 
