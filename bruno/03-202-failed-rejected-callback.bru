@@ -1,0 +1,30 @@
+meta {
+  name: 03-202-failed-rejected-callback
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}{{servicePath}}/monthly/upscan/callback/{{zReference}}/{{taxYear}}/{{month}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "reference": "{{upscanReference}}",
+    "fileStatus": "FAILED",
+    "failureDetails": {
+      "failureReason": "REJECTED",
+      "message": "MIME type [application/zip] is not allowed for service: [disa-returns-frontend]"
+    }
+  }
+}
+
+assert {
+  res.status: eq 202
+}

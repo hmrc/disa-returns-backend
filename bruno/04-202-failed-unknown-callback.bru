@@ -1,0 +1,30 @@
+meta {
+  name: 04-202-failed-unknown-callback
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}{{servicePath}}/monthly/upscan/callback/{{zReference}}/{{taxYear}}/{{month}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "reference": "{{upscanReference}}",
+    "fileStatus": "FAILED",
+    "failureDetails": {
+      "failureReason": "UNKNOWN",
+      "message": "Unable to parse upscan failure details"
+    }
+  }
+}
+
+assert {
+  res.status: eq 202
+}

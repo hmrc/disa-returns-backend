@@ -30,4 +30,6 @@ class AppConfig @Inject() (
 
   val internalAuthService: String = servicesConfig.baseUrl("internal-auth")
   val internalAuthToken: String   = config.get[String]("internal-auth.token")
+
+  val monthlyReturnTimeToLiveInDays: Long = config.get[Long]("mongodb.monthlyReturnTimeToLiveInDays")
 }

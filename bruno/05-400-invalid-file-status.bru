@@ -1,0 +1,35 @@
+meta {
+  name: 05-400-invalid-file-status
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}{{servicePath}}/monthly/upscan/callback/{{zReference}}/{{taxYear}}/{{month}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "reference": "{{upscanReference}}",
+    "fileStatus": "SCANNING"
+  }
+}
+
+assert {
+  res.status: eq 400
+}
+
+tests {
+  test("response body contains invalid payload message", function() {
+    const responseBody = res.body ?? res.getBody();
+    const body = typeof responseBody === "string" ? responseBody : JSON.stringify(responseBody);
+  
+    expect(body).to.include("Invalid UpscanResult payload");
+  });
+}
