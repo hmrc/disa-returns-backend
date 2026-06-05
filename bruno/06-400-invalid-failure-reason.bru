@@ -1,0 +1,39 @@
+meta {
+  name: 06-400-invalid-failure-reason
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}{{servicePath}}/monthly/upscan/callback/{{zReference}}/{{taxYear}}/{{month}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "reference": "{{upscanReference}}",
+    "fileStatus": "FAILED",
+    "failureDetails": {
+      "failureReason": "DUPLICATE",
+      "message": "Duplicate file"
+    }
+  }
+}
+
+assert {
+  res.status: eq 400
+}
+
+tests {
+  test("response body contains invalid payload message", function() {
+    const responseBody = res.body ?? res.getBody();
+    const body = typeof responseBody === "string" ? responseBody : JSON.stringify(responseBody);
+  
+    expect(body).to.include("Invalid UpscanResult payload");
+  });
+}
