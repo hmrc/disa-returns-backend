@@ -46,8 +46,7 @@ class UpscanCallbackMapperSpec extends SpecBase {
     }
   }
 
-  "toFileUploadStatus" - {
-
+  "toFileUploadStatus" -
     Seq(
       UpscanFailureReason.Quarantine -> FileUploadStatus.UpscanQuarantine,
       UpscanFailureReason.Rejected   -> FileUploadStatus.UpscanRejected,
@@ -57,10 +56,8 @@ class UpscanCallbackMapperSpec extends SpecBase {
         mapper.toFileUploadStatus(upscanFailureReason) mustBe fileUploadStatus
       }
     }
-  }
 
-  "toFileUploadFailureReason" - {
-
+  "toFileUploadFailureReason" -
     Seq(
       UpscanFailureReason.Quarantine -> FileUploadFailureReason.Quarantine,
       UpscanFailureReason.Rejected   -> FileUploadFailureReason.Rejected,
@@ -70,5 +67,4 @@ class UpscanCallbackMapperSpec extends SpecBase {
         mapper.toFileUploadFailureReason(upscanFailureReason) mustBe fileUploadFailureReason
       }
     }
-  }
 }

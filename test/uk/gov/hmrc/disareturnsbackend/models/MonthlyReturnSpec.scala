@@ -25,15 +25,15 @@ import java.time.Instant
 
 class MonthlyReturnSpec extends SpecBase {
 
-  private val zReference       = "Z1234"
-  private val taxYear          = "2026"
-  private val month            = "5"
-  private val uploadReference  = "2b4d6f3a-8c1e-4e4b-9c7a-123456789abc"
-  private val downloadUrl      = "https://fus-outbound-bucket.s3.eu-west-2.amazonaws.com/object-key?X-Amz-Signature=abc"
-  private val createdOn        = Instant.parse("2026-05-17T12:00:00Z")
-  private val completedOn      = Instant.parse("2026-05-17T12:01:00Z")
-  private val existingUpdated  = Instant.parse("2026-05-17T11:00:00Z")
-  private val fileUploadDetails = FileUploadDetails(
+  private val zReference         = "Z1234"
+  private val taxYear            = "2026"
+  private val month              = "5"
+  private val uploadReference    = "2b4d6f3a-8c1e-4e4b-9c7a-123456789abc"
+  private val downloadUrl        = "https://fus-outbound-bucket.s3.eu-west-2.amazonaws.com/object-key?X-Amz-Signature=abc"
+  private val createdOn          = Instant.parse("2026-05-17T12:00:00Z")
+  private val completedOn        = Instant.parse("2026-05-17T12:01:00Z")
+  private val existingUpdated    = Instant.parse("2026-05-17T11:00:00Z")
+  private val fileUploadDetails  = FileUploadDetails(
     fileName = "return.csv",
     fileMimeType = "text/csv",
     uploadTimestamp = Instant.parse("2026-05-17T12:00:00Z"),
@@ -158,11 +158,11 @@ class MonthlyReturnSpec extends SpecBase {
   "FileUploadStatus format" - {
 
     Seq(
-      Created           -> "CREATED",
+      Created                        -> "CREATED",
       FileUploadStatus.UpscanSuccess -> "UPSCAN_SUCCESS",
-      UpscanQuarantine -> "UPSCAN_QUARANTINE",
-      UpscanRejected    -> "UPSCAN_REJECTED",
-      UpscanUnknown     -> "UPSCAN_UNKNOWN"
+      UpscanQuarantine               -> "UPSCAN_QUARANTINE",
+      UpscanRejected                 -> "UPSCAN_REJECTED",
+      UpscanUnknown                  -> "UPSCAN_UNKNOWN"
     ).foreach { case (modelValue, jsonValue) =>
       s"must serialise and deserialise $jsonValue" in {
         Json.toJson[FileUploadStatus](modelValue) mustBe JsString(jsonValue)

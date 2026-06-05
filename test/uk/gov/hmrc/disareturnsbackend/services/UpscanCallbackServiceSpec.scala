@@ -29,16 +29,16 @@ import scala.concurrent.Future
 
 class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
 
-  private val mockMonthlyReturnRepository = mock[MonthlyReturnRepository]
+  private val mockMonthlyReturnRepository                = mock[MonthlyReturnRepository]
   private val upscanCallbackMapper: UpscanCallbackMapper = new UpscanCallbackMapperImpl()
-  private val service                     = new UpscanCallbackService(mockMonthlyReturnRepository, upscanCallbackMapper)
+  private val service                                    = new UpscanCallbackService(mockMonthlyReturnRepository, upscanCallbackMapper)
 
-  private val zReference      = "Z1234"
-  private val taxYear         = "2026"
-  private val month           = "5"
-  private val upscanReference = "2b4d6f3a-8c1e-4e4b-9c7a-123456789abc"
-  private val downloadUrl     = "https://fus-outbound-bucket.s3.eu-west-2.amazonaws.com/object-key?X-Amz-Signature=abc"
-  private val uploadDetails   = UpscanDetails(
+  private val zReference                = "Z1234"
+  private val taxYear                   = "2026"
+  private val month                     = "5"
+  private val upscanReference           = "2b4d6f3a-8c1e-4e4b-9c7a-123456789abc"
+  private val downloadUrl               = "https://fus-outbound-bucket.s3.eu-west-2.amazonaws.com/object-key?X-Amz-Signature=abc"
+  private val uploadDetails             = UpscanDetails(
     fileName = "return.csv",
     fileMimeType = "text/csv",
     uploadTimestamp = Instant.parse("2026-05-17T12:00:00Z"),

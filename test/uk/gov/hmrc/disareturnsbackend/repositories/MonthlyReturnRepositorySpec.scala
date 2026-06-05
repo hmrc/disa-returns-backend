@@ -41,13 +41,13 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
     try dropDatabase()
     finally super.afterAll()
 
-  private val zReference      = "Z1234"
-  private val taxYear         = "2026"
-  private val month           = "5"
-  private val uploadReference = "2b4d6f3a-8c1e-4e4b-9c7a-123456789abc"
-  private val existingUpdated = Instant.parse("2026-05-17T11:00:00Z")
-  private val createdOn       = Instant.parse("2026-05-17T11:30:00Z")
-  private val downloadUrl     = "https://fus-outbound-bucket.s3.eu-west-2.amazonaws.com/object-key?X-Amz-Signature=abc"
+  private val zReference        = "Z1234"
+  private val taxYear           = "2026"
+  private val month             = "5"
+  private val uploadReference   = "2b4d6f3a-8c1e-4e4b-9c7a-123456789abc"
+  private val existingUpdated   = Instant.parse("2026-05-17T11:00:00Z")
+  private val createdOn         = Instant.parse("2026-05-17T11:30:00Z")
+  private val downloadUrl       = "https://fus-outbound-bucket.s3.eu-west-2.amazonaws.com/object-key?X-Amz-Signature=abc"
   private val fileUploadDetails = FileUploadDetails(
     fileName = "return.csv",
     fileMimeType = "text/csv",
@@ -90,7 +90,7 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
       }
 
       "must replace an existing MonthlyReturn for the same key" in {
-        val existing = buildMonthlyReturn(
+        val existing    = buildMonthlyReturn(
           fileUploads = List(createdFileUpload(reference = "old-reference"))
         )
         val replacement = buildMonthlyReturn(
@@ -127,7 +127,9 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
       }
 
       "must append a CREATED file upload when the MonthlyReturn exists" in {
-        repository.upsert(buildMonthlyReturn(fileUploads = List(createdFileUpload(reference = "existing-reference")))).futureValue
+        repository
+          .upsert(buildMonthlyReturn(fileUploads = List(createdFileUpload(reference = "existing-reference"))))
+          .futureValue
 
         repository.createFileUpload(zReference, taxYear, month, uploadReference).futureValue mustBe true
 

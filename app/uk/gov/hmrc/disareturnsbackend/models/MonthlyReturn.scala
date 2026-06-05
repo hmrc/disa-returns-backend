@@ -67,7 +67,7 @@ final case class MonthlyReturn(
           failureReason = failureReason,
           failureMessage = failureMessage
         )
-      case fileUpload                                    => fileUpload
+      case fileUpload                                      => fileUpload
     }
 
     if (updatedUploads == fileUploads) {
