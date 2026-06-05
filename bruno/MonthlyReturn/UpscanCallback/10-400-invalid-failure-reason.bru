@@ -1,11 +1,11 @@
 meta {
-  name: 06-400-invalid-failure-reason
+  name: 10-400-invalid-failure-reason
   type: http
-  seq: 6
+  seq: 11
 }
 
 post {
-  url: {{baseUrl}}{{servicePath}}/monthly/upscan/callback/{{zReference}}/{{taxYear}}/{{month}}
+  url: {{baseUrl}}{{servicePath}}/monthly/upscan/callback/{{callbackZReference}}/{{taxYear}}/{{month}}
   body: json
   auth: none
 }

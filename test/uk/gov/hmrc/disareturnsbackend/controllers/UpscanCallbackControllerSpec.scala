@@ -28,7 +28,6 @@ import play.api.test.Helpers.*
 import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.services.UpscanCallbackService
 
-import java.time.Instant
 import scala.concurrent.Future
 
 class UpscanCallbackControllerSpec extends SpecBase with BeforeAndAfterEach {
@@ -42,21 +41,26 @@ class UpscanCallbackControllerSpec extends SpecBase with BeforeAndAfterEach {
   ).configure("play.http.router" -> "prod.Routes")
     .build()
 
-  private lazy val controller = app.injector.instanceOf[UpscanCallbackController]
+  private lazy val controller = inject[UpscanCallbackController]
 
-  private val upscanReference = "2b4d6f3a-8c1e-4e4b-9c7a-123456789abc"
+  private val zReference = testZReference
+  private val taxYear    = testTaxYear
+  private val month      = testMonth
+  private val routeMonth = testRouteMonth
+
+  private val upscanReference = testUploadReference
 
   private val uploadDetails = UpscanDetails(
-    fileName = "return.csv",
-    fileMimeType = "text/csv",
-    uploadTimestamp = Instant.parse("2026-05-17T12:00:00Z"),
-    checksum = "396f101dd52e8b2ace0dcf5ed09b1d1f030e608938510ce46e7a5c7a4e775100",
-    size = 1024L
+    fileName = testFileName,
+    fileMimeType = testFileMimeType,
+    uploadTimestamp = testCreatedOn,
+    checksum = testChecksum,
+    size = testFileSize
   )
 
   private val successfulUploadResult: UpscanResult = UpscanSuccess(
     reference = upscanReference,
-    downloadUrl = "https://fus-outbound-bucket.s3.eu-west-2.amazonaws.com/object-key?X-Amz-Signature=abc",
+    downloadUrl = testDownloadUrl,
     uploadDetails = uploadDetails
   )
 
@@ -64,7 +68,7 @@ class UpscanCallbackControllerSpec extends SpecBase with BeforeAndAfterEach {
     reference = upscanReference,
     failureDetails = UpscanFailureDetails(
       failureReason = UpscanFailureReason.Rejected,
-      message = "MIME type [application/zip] is not allowed for service: [disa-returns-frontend]"
+      message = testMimeTypeFailureMessage
     )
   )
 
@@ -78,9 +82,9 @@ class UpscanCallbackControllerSpec extends SpecBase with BeforeAndAfterEach {
     "must return ACCEPTED for valid READY callback payload" in {
       when(
         mockUpscanCallbackService.monthlyReturnUpscanCallback(
-          eqTo("Z1234"),
-          eqTo("2026"),
-          eqTo("5"),
+          eqTo(zReference),
+          eqTo(taxYear),
+          eqTo(month),
           eqTo(successfulUploadResult)
         )
       ).thenReturn(Future.successful(()))
@@ -89,9 +93,9 @@ class UpscanCallbackControllerSpec extends SpecBase with BeforeAndAfterEach {
 
       status(result) mustBe ACCEPTED
       verify(mockUpscanCallbackService).monthlyReturnUpscanCallback(
-        eqTo("Z1234"),
-        eqTo("2026"),
-        eqTo("5"),
+        eqTo(zReference),
+        eqTo(taxYear),
+        eqTo(month),
         eqTo(successfulUploadResult)
       )
     }
@@ -99,9 +103,9 @@ class UpscanCallbackControllerSpec extends SpecBase with BeforeAndAfterEach {
     "must return ACCEPTED for valid FAILED callback payload" in {
       when(
         mockUpscanCallbackService.monthlyReturnUpscanCallback(
-          eqTo("Z1234"),
-          eqTo("2026"),
-          eqTo("5"),
+          eqTo(zReference),
+          eqTo(taxYear),
+          eqTo(month),
           eqTo(failedUploadResult)
         )
       ).thenReturn(Future.successful(()))
@@ -110,9 +114,9 @@ class UpscanCallbackControllerSpec extends SpecBase with BeforeAndAfterEach {
 
       status(result) mustBe ACCEPTED
       verify(mockUpscanCallbackService).monthlyReturnUpscanCallback(
-        eqTo("Z1234"),
-        eqTo("2026"),
-        eqTo("5"),
+        eqTo(zReference),
+        eqTo(taxYear),
+        eqTo(month),
         eqTo(failedUploadResult)
       )
     }
@@ -120,29 +124,30 @@ class UpscanCallbackControllerSpec extends SpecBase with BeforeAndAfterEach {
     "must return SERVICE_UNAVAILABLE when the callback service fails" in {
       when(
         mockUpscanCallbackService.monthlyReturnUpscanCallback(
-          eqTo("Z1234"),
-          eqTo("2026"),
-          eqTo("5"),
+          eqTo(zReference),
+          eqTo(taxYear),
+          eqTo(month),
           eqTo(successfulUploadResult)
         )
-      ).thenReturn(Future.failed(new RuntimeException("mongodb down")))
+      ).thenReturn(Future.failed(new RuntimeException(testMongoDownMessage)))
 
       val result = monthlyReturnUpscanCallback(Json.toJson(successfulUploadResult))
 
       status(result) mustBe SERVICE_UNAVAILABLE
       verify(mockUpscanCallbackService).monthlyReturnUpscanCallback(
-        eqTo("Z1234"),
-        eqTo("2026"),
-        eqTo("5"),
+        eqTo(zReference),
+        eqTo(taxYear),
+        eqTo(month),
         eqTo(successfulUploadResult)
       )
     }
 
     "must return BAD_REQUEST when the payload has an unknown fileStatus" in {
-      val result = monthlyReturnUpscanCallback(Json.toJson(InvalidFileStatusPayload(upscanReference, "SCANNING")))
+      val result =
+        monthlyReturnUpscanCallback(Json.toJson(InvalidFileStatusPayload(upscanReference, invalidFileStatusString)))
 
       status(result) mustBe BAD_REQUEST
-      contentAsString(result) must include("Invalid UpscanResult payload")
+      contentAsString(result) must include(invalidUpscanResultPayloadMessage)
     }
 
     "must return BAD_REQUEST when the payload has an unknown failureReason" in {
@@ -150,22 +155,22 @@ class UpscanCallbackControllerSpec extends SpecBase with BeforeAndAfterEach {
         Json.toJson(
           InvalidFailureReasonPayload(
             upscanReference,
-            "FAILED",
-            InvalidFailureDetails("DUPLICATE", "Duplicate file")
+            failedFileStatusString,
+            InvalidFailureDetails(invalidFailureReasonString, testDuplicateFileMessage)
           )
         )
       )
 
       status(result) mustBe BAD_REQUEST
-      contentAsString(result) must include("Invalid UpscanResult payload")
+      contentAsString(result) must include(invalidUpscanResultPayloadMessage)
     }
   }
 
   private def monthlyReturnUpscanCallback(requestBody: JsValue) =
     controller.monthlyReturnUpscanCallback(
-      zReference = "Z1234",
-      taxYear = "2026",
-      month = "5"
+      zReference = zReference,
+      taxYear = taxYear,
+      month = routeMonth
     )(
       FakeRequest()
         .withBody(requestBody)

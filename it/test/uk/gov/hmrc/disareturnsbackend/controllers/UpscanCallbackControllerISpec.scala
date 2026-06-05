@@ -31,33 +31,25 @@ import uk.gov.hmrc.disareturnsbackend.models.{
   UpscanSuccess
 }
 
-import java.time.Instant
-
 class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
 
-  private val servicePath =
-    "/disa-returns-backend"
+  private val callbackPath = s"/monthly/upscan/callback/$testZReference/$testTaxYear/$testRouteMonth"
 
-  private val callbackPath = "/monthly/upscan/callback/Z1234/2026/5"
+  private val fullCallbackPath = testServicePath + callbackPath
 
-  private val fullCallbackPath = servicePath + callbackPath
-
-  private val downloadUrl =
-    "https://fus-outbound-bucket.s3.eu-west-2.amazonaws.com/object-key?X-Amz-Signature=abc"
-
-  private val upscanReference = "2b4d6f3a-8c1e-4e4b-9c7a-123456789abc"
+  private val upscanReference = testUploadReference
 
   private val uploadDetails = UpscanDetails(
-    fileName = "return.csv",
-    fileMimeType = "text/csv",
-    uploadTimestamp = Instant.parse("2026-05-17T12:00:00Z"),
-    checksum = "396f101dd52e8b2ace0dcf5ed09b1d1f030e608938510ce46e7a5c7a4e775100",
-    size = 1024L
+    fileName = testFileName,
+    fileMimeType = testFileMimeType,
+    uploadTimestamp = testCreatedOn,
+    checksum = testChecksum,
+    size = testFileSize
   )
 
   private val successfulUploadResult: UpscanResult = UpscanSuccess(
     reference = upscanReference,
-    downloadUrl = downloadUrl,
+    downloadUrl = testDownloadUrl,
     uploadDetails = uploadDetails
   )
 
@@ -71,7 +63,7 @@ class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
 
     "return 202 Accepted for FAILED QUARANTINE callback payload" in {
       val result = postUploadResult(
-        failedUploadResult(UpscanFailureReason.Quarantine, "Eicar-Test-Signature")
+        failedUploadResult(UpscanFailureReason.Quarantine, testEicarSignatureMessage)
       )
 
       result.status shouldBe ACCEPTED
@@ -81,7 +73,7 @@ class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
       val result = postUploadResult(
         failedUploadResult(
           UpscanFailureReason.Rejected,
-          "MIME type [application/zip] is not allowed for service: [disa-returns-frontend]"
+          testMimeTypeFailureMessage
         )
       )
 
@@ -90,7 +82,7 @@ class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
 
     "return 202 Accepted for FAILED UNKNOWN callback payload" in {
       val result = postUploadResult(
-        failedUploadResult(UpscanFailureReason.Unknown, "Unable to parse upscan failure details")
+        failedUploadResult(UpscanFailureReason.Unknown, testUnableToParseFailureMessage)
       )
 
       result.status shouldBe ACCEPTED
@@ -99,11 +91,11 @@ class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
     "return 400 Bad Request when fileStatus is invalid" in {
       val result = postJson(
         fullCallbackPath,
-        Json.toJson(InvalidFileStatusPayload(upscanReference, "SCANNING"))
+        Json.toJson(InvalidFileStatusPayload(upscanReference, invalidFileStatusString))
       )
 
       result.status shouldBe BAD_REQUEST
-      result.body   should include("Invalid UpscanResult payload")
+      result.body   should include(invalidUpscanResultPayloadMessage)
     }
 
     "return 400 Bad Request when failureReason is invalid" in {
@@ -112,24 +104,24 @@ class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
         Json.toJson(
           InvalidFailureReasonPayload(
             upscanReference,
-            "FAILED",
-            InvalidFailureDetails("DUPLICATE", "Duplicate file")
+            failedFileStatusString,
+            InvalidFailureDetails(invalidFailureReasonString, testDuplicateFileMessage)
           )
         )
       )
 
       result.status shouldBe BAD_REQUEST
-      result.body   should include("Invalid UpscanResult payload")
+      result.body   should include(invalidUpscanResultPayloadMessage)
     }
 
     "return 400 Bad Request when the JSON body is malformed" in {
-      val result = postString(fullCallbackPath, "invalid-json", JSON)
+      val result = postString(fullCallbackPath, invalidJsonBody, JSON)
 
       result.status shouldBe BAD_REQUEST
     }
 
     "return 415 Unsupported Media Type when the request body is not JSON" in {
-      val result = postString(fullCallbackPath, "invalid-json", MimeTypes.TEXT)
+      val result = postString(fullCallbackPath, invalidJsonBody, MimeTypes.TEXT)
 
       result.status shouldBe UNSUPPORTED_MEDIA_TYPE
     }

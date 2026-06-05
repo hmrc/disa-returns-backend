@@ -18,13 +18,12 @@ package uk.gov.hmrc.disareturnsbackend.services
 
 import base.SpecBase
 import org.mockito.ArgumentMatchers.{any, eq as eqTo}
-import org.mockito.Mockito.{reset, verify, when}
+import org.mockito.Mockito.{never, reset, verify, when}
 import org.scalatest.BeforeAndAfterEach
 import uk.gov.hmrc.disareturnsbackend.mappers.{UpscanCallbackMapper, UpscanCallbackMapperImpl}
 import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository
 
-import java.time.Instant
 import scala.concurrent.Future
 
 class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
@@ -33,24 +32,34 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
   private val upscanCallbackMapper: UpscanCallbackMapper = new UpscanCallbackMapperImpl()
   private val service                                    = new UpscanCallbackService(mockMonthlyReturnRepository, upscanCallbackMapper)
 
-  private val zReference                = "Z1234"
-  private val taxYear                   = "2026"
-  private val month                     = "5"
-  private val upscanReference           = "2b4d6f3a-8c1e-4e4b-9c7a-123456789abc"
-  private val downloadUrl               = "https://fus-outbound-bucket.s3.eu-west-2.amazonaws.com/object-key?X-Amz-Signature=abc"
+  private val zReference                = testZReference
+  private val taxYear                   = yearOnlyTestTaxYear
+  private val month                     = testMonth
+  private val upscanReference           = testUploadReference
+  private val upscanDownloadUrl         = testDownloadUrl
   private val uploadDetails             = UpscanDetails(
-    fileName = "return.csv",
-    fileMimeType = "text/csv",
-    uploadTimestamp = Instant.parse("2026-05-17T12:00:00Z"),
-    checksum = "396f101dd52e8b2ace0dcf5ed09b1d1f030e608938510ce46e7a5c7a4e775100",
-    size = 1024L
+    fileName = testFileName,
+    fileMimeType = testFileMimeType,
+    uploadTimestamp = testCreatedOn,
+    checksum = testChecksum,
+    size = testFileSize
   )
   private val expectedFileUploadDetails = FileUploadDetails(
     fileName = uploadDetails.fileName,
     fileMimeType = uploadDetails.fileMimeType,
     uploadTimestamp = uploadDetails.uploadTimestamp,
     checksum = uploadDetails.checksum,
-    size = uploadDetails.size
+    size = uploadDetails.size,
+    upscanDownloadUrl = upscanDownloadUrl
+  )
+  private val monthlyReturn             = MonthlyReturn(
+    zReference = zReference,
+    taxYear = taxYear,
+    month = month,
+    createdOn = testExistingUpdatedOn.minusSeconds(3600),
+    nilReturn = false,
+    fileUploads = Nil,
+    lastUpdated = testExistingUpdatedOn
   )
 
   override protected def beforeEach(): Unit = {
@@ -61,7 +70,7 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
   "monthlyReturnUpscanCallback" - {
 
     "must complete a file upload as UPSCAN_SUCCESS for a READY callback" in {
-      stubCompleteFileUpload(result = true)
+      stubCompleteUpscan(result = true)
 
       service
         .monthlyReturnUpscanCallback(
@@ -70,22 +79,49 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
           month,
           UpscanSuccess(
             reference = upscanReference,
-            downloadUrl = downloadUrl,
+            downloadUrl = upscanDownloadUrl,
             uploadDetails = uploadDetails
           )
         )
         .futureValue
 
-      verify(mockMonthlyReturnRepository).completeFileUpload(
+      verify(mockMonthlyReturnRepository).completeUpscan(
         eqTo(zReference),
         eqTo(taxYear),
         eqTo(month),
         eqTo(upscanReference),
         eqTo(FileUploadStatus.UpscanSuccess),
         eqTo(Some(expectedFileUploadDetails)),
-        eqTo(Some(downloadUrl)),
         eqTo(Option.empty[FileUploadFailureReason]),
         eqTo(Option.empty[String])
+      )
+    }
+
+    "must not complete a file upload for a nil return" in {
+      stubGetMonthlyReturn(Future.successful(Some(monthlyReturn.copy(nilReturn = true))))
+
+      service
+        .monthlyReturnUpscanCallback(
+          zReference,
+          taxYear,
+          month,
+          UpscanSuccess(
+            reference = upscanReference,
+            downloadUrl = upscanDownloadUrl,
+            uploadDetails = uploadDetails
+          )
+        )
+        .futureValue
+
+      verify(mockMonthlyReturnRepository, never()).completeUpscan(
+        any[String],
+        any[String],
+        any[Int],
+        any[String],
+        any[FileUploadStatus],
+        any[Option[FileUploadDetails]],
+        any[Option[FileUploadFailureReason]],
+        any[Option[String]]
       )
     }
 
@@ -95,7 +131,7 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
       UpscanFailureReason.Unknown    -> (FileUploadStatus.UpscanUnknown, FileUploadFailureReason.Unknown)
     ).foreach { case (upscanFailureReason, (fileUploadStatus, fileUploadFailureReason)) =>
       s"must complete a file upload as ${fileUploadStatus.value} for a ${upscanFailureReason.value} callback" in {
-        stubCompleteFileUpload(result = false)
+        stubCompleteUpscan(result = false)
 
         service
           .monthlyReturnUpscanCallback(
@@ -106,28 +142,27 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
               reference = upscanReference,
               failureDetails = UpscanFailureDetails(
                 failureReason = upscanFailureReason,
-                message = "Upscan failure message"
+                message = testUpscanFailureMessage
               )
             )
           )
           .futureValue
 
-        verify(mockMonthlyReturnRepository).completeFileUpload(
+        verify(mockMonthlyReturnRepository).completeUpscan(
           eqTo(zReference),
           eqTo(taxYear),
           eqTo(month),
           eqTo(upscanReference),
           eqTo(fileUploadStatus),
           eqTo(Option.empty[FileUploadDetails]),
-          eqTo(Option.empty[String]),
           eqTo(Some(fileUploadFailureReason)),
-          eqTo(Some("Upscan failure message"))
+          eqTo(Some(testUpscanFailureMessage))
         )
       }
     }
 
     "must fail when the repository fails for a READY callback" in {
-      stubCompleteFileUpload(Future.failed(new RuntimeException("mongodb down")))
+      stubCompleteUpscan(Future.failed(new RuntimeException(testMongoDownMessage)))
 
       service
         .monthlyReturnUpscanCallback(
@@ -136,29 +171,28 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
           month,
           UpscanSuccess(
             reference = upscanReference,
-            downloadUrl = downloadUrl,
+            downloadUrl = upscanDownloadUrl,
             uploadDetails = uploadDetails
           )
         )
         .failed
         .futureValue
-        .getMessage mustBe "mongodb down"
+        .getMessage mustBe testMongoDownMessage
 
-      verify(mockMonthlyReturnRepository).completeFileUpload(
+      verify(mockMonthlyReturnRepository).completeUpscan(
         eqTo(zReference),
         eqTo(taxYear),
         eqTo(month),
         eqTo(upscanReference),
         eqTo(FileUploadStatus.UpscanSuccess),
         eqTo(Some(expectedFileUploadDetails)),
-        eqTo(Some(downloadUrl)),
         eqTo(Option.empty[FileUploadFailureReason]),
         eqTo(Option.empty[String])
       )
     }
 
     "must fail when the repository fails for a FAILED callback" in {
-      stubCompleteFileUpload(Future.failed(new RuntimeException("mongodb down")))
+      stubCompleteUpscan(Future.failed(new RuntimeException(testMongoDownMessage)))
 
       service
         .monthlyReturnUpscanCallback(
@@ -169,43 +203,52 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
             reference = upscanReference,
             failureDetails = UpscanFailureDetails(
               failureReason = UpscanFailureReason.Rejected,
-              message = "Upscan failure message"
+              message = testUpscanFailureMessage
             )
           )
         )
         .failed
         .futureValue
-        .getMessage mustBe "mongodb down"
+        .getMessage mustBe testMongoDownMessage
 
-      verify(mockMonthlyReturnRepository).completeFileUpload(
+      verify(mockMonthlyReturnRepository).completeUpscan(
         eqTo(zReference),
         eqTo(taxYear),
         eqTo(month),
         eqTo(upscanReference),
         eqTo(FileUploadStatus.UpscanRejected),
         eqTo(Option.empty[FileUploadDetails]),
-        eqTo(Option.empty[String]),
         eqTo(Some(FileUploadFailureReason.Rejected)),
-        eqTo(Some("Upscan failure message"))
+        eqTo(Some(testUpscanFailureMessage))
       )
     }
   }
 
-  private def stubCompleteFileUpload(result: Boolean): Unit =
-    stubCompleteFileUpload(Future.successful(result))
+  private def stubCompleteUpscan(result: Boolean): Unit =
+    stubCompleteUpscan(Future.successful(result))
 
-  private def stubCompleteFileUpload(result: Future[Boolean]): Unit =
+  private def stubCompleteUpscan(result: Future[Boolean]): Unit =
+    stubGetMonthlyReturn(Future.successful(Some(monthlyReturn)))
+
     when(
-      mockMonthlyReturnRepository.completeFileUpload(
+      mockMonthlyReturnRepository.completeUpscan(
         any[String],
         any[String],
-        any[String],
+        any[Int],
         any[String],
         any[FileUploadStatus],
         any[Option[FileUploadDetails]],
-        any[Option[String]],
         any[Option[FileUploadFailureReason]],
         any[Option[String]]
+      )
+    ).thenReturn(result)
+
+  private def stubGetMonthlyReturn(result: Future[Option[MonthlyReturn]]): Unit =
+    when(
+      mockMonthlyReturnRepository.get(
+        any[String],
+        any[String],
+        any[Int]
       )
     ).thenReturn(result)
 }

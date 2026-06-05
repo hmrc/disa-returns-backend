@@ -1,0 +1,33 @@
+meta {
+  name: 00-201-create-return-for-success-callback
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{callbackZReference}}/{{taxYear}}/{{month}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "nilReturn": false
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.headers.location: eq {{servicePath}}/monthly/{{callbackZReference}}/{{taxYear}}/{{month}}
+}
+
+script:pre-request {
+  const value = (Date.now() + Math.floor(Math.random() * 1000)) % 10000;
+  bru.setVar("callbackZReference", `Z${value.toString().padStart(4, "0")}`);
+  bru.setVar("fileUploadCreated", "false");
+  bru.setVar("readyCallbackRecorded", "false");
+}

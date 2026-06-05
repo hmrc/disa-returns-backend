@@ -3,13 +3,123 @@
 
 ## Endpoints
 
-| Endpoint                                                                                                                                                                                                   | Parameters                                                                                                                                | Description                                                                                                                                          |
-|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------|
-| <code>POST /disa-returns-backend/monthly/upscan/callback/<span style="color: #8250df;">:zReference</span>/<span style="color: #0969da;">:taxYear</span>/<span style="color: #1a7f37;">:month</span></code> | <ul><li><code>zReference</code>: ISA manager reference</li><li><code>taxYear</code>: Tax year</li><li><code>month</code>: Month</li></ul> | Receives the Upscan callback for a monthly return file upload and records the final scan result against the matching monthly return database record. |
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/disa-returns-backend/monthly/:zReference/:taxYear/:month` | Gets an existing monthly return. |
+| `GET` | `/disa-returns-backend/monthly/:zReference/:taxYear/:month/files/:reference` | Gets a file upload for a monthly return. |
+| `POST` | `/disa-returns-backend/monthly/:zReference/:taxYear/:month` | Creates a monthly return. |
+| `POST` | `/disa-returns-backend/monthly/:zReference/:taxYear/:month/files` | Creates a file upload placeholder for a monthly return. |
+| `PUT` | `/disa-returns-backend/monthly/:zReference/:taxYear/:month/nilReturn` | Updates whether the monthly return is a nil return. |
+| `POST` | `/disa-returns-backend/monthly/upscan/callback/:zReference/:taxYear/:month` | Receives the Upscan callback for a monthly return file upload. |
+
+Path parameters:
+
+- `zReference`: ISA manager reference in `Z1234` format. Lowercase values are accepted and normalised to uppercase.
+- `taxYear`: Tax year in `2026-27` format.
+- `month`: Month number from `1` to `12`, for example `5` for May.
+
+Invalid path parameters return `400 Bad Request`.
+
+### Create Monthly Return
+
+`POST /disa-returns-backend/monthly/:zReference/:taxYear/:month`
+
+Request body:
+
+```json
+{
+  "nilReturn": false
+}
+```
+
+- Returns `201 Created` with the resource path in the `Location` header when the monthly return is created.
+- Returns `409 Conflict` when a monthly return already exists for the same `zReference`, `taxYear`, and `month`.
+- Returns `503 Service Unavailable` when MongoDB is unavailable.
+- A monthly return created with `"nilReturn": true` is created without file uploads.
+
+### Create File Upload
+
+`POST /disa-returns-backend/monthly/:zReference/:taxYear/:month/files`
+
+Request body:
+
+```json
+{
+  "reference": "2b4d6f3a-8c1e-4e4b-9c7a-123456789abc"
+}
+```
+
+- Returns `201 Created` with the file upload resource path in the `Location` header when the file upload placeholder is created.
+- Returns `409 Conflict` when a file upload already exists with the same `reference`.
+- Returns `404 Not Found` when the monthly return does not exist or cannot accept file uploads.
+- Returns `503 Service Unavailable` when MongoDB is unavailable.
+
+### Get File Upload
+
+`GET /disa-returns-backend/monthly/:zReference/:taxYear/:month/files/:reference`
+
+- Returns `200 OK` with the file upload when the monthly return and file upload exist.
+- Returns `404 Not Found` when the monthly return does not exist.
+- Returns `404 Not Found` when the monthly return exists but the file upload does not exist.
+- Returns `503 Service Unavailable` when MongoDB is unavailable.
+
+Example response:
+
+```json
+{
+  "reference": "2b4d6f3a-8c1e-4e4b-9c7a-123456789abc",
+  "status": "CREATED",
+  "createdOn": "2026-05-17T12:00:00Z"
+}
+```
+
+### Get Monthly Return
+
+`GET /disa-returns-backend/monthly/:zReference/:taxYear/:month`
+
+- Returns `200 OK` with the monthly return when the record exists.
+- Returns `404 Not Found` when the monthly return does not exist.
+- Returns `503 Service Unavailable` when MongoDB is unavailable.
+
+Example response:
+
+```json
+{
+  "zReference": "Z1234",
+  "taxYear": "2026-27",
+  "month": 5,
+  "nilReturn": false,
+  "fileUploads": [],
+  "createdOn": "2026-05-17T12:00:00Z",
+  "lastUpdated": "2026-05-17T12:00:00Z"
+}
+```
+
+### Update Nil Return
+
+`PUT /disa-returns-backend/monthly/:zReference/:taxYear/:month/nilReturn`
+
+Request body:
+
+```json
+{
+  "value": true
+}
+```
+
+- Returns `200 OK` with the updated monthly return when the record exists.
+- Setting `value` to `true` removes all file uploads from the monthly return.
+- Setting `value` to `false` updates `nilReturn` to `false` and leaves file uploads empty.
+- Missing or non-boolean `value` fields return `400 Bad Request`.
+- Returns `404 Not Found` when the monthly return does not exist.
+- Returns `503 Service Unavailable` when MongoDB is unavailable.
 
 ### Monthly Upscan Callback
 
 - The endpoint accepts Upscan `READY` and `FAILED` callback payloads and returns `202 Accepted` when the payload is valid.
+- If the monthly return is a nil return, the callback still returns `202 Accepted` but the file result is not stored.
+- If the monthly return is not a nil return, the callback stores the file result. Existing upload references are completed in place; new callback references are added as completed file uploads.
+- Completed file uploads include `upscanCompletedOn`, which records when Upscan processing completed, and `fileUploadDetails.upscanDownloadUrl` for the Upscan download URL.
 - Invalid JSON, unknown `fileStatus` values, or unknown `failureReason` values return `400 Bad Request`.
 - Non-JSON requests return `415 Unsupported Media Type`.
 
@@ -26,6 +136,25 @@ Successful upload callback example:
     "uploadTimestamp": "2026-05-17T12:00:00Z",
     "checksum": "396f101dd52e8b2ace0dcf5ed09b1d1f030e608938510ce46e7a5c7a4e775100",
     "size": 1024
+  }
+}
+```
+
+Stored file upload after a successful callback:
+
+```json
+{
+  "reference": "2b4d6f3a-8c1e-4e4b-9c7a-123456789abc",
+  "status": "UPSCAN_SUCCESS",
+  "createdOn": "2026-05-17T12:00:00Z",
+  "upscanCompletedOn": "2026-05-17T12:01:00Z",
+  "fileUploadDetails": {
+    "fileName": "return.csv",
+    "fileMimeType": "text/csv",
+    "uploadTimestamp": "2026-05-17T12:00:00Z",
+    "checksum": "396f101dd52e8b2ace0dcf5ed09b1d1f030e608938510ce46e7a5c7a4e775100",
+    "size": 1024,
+    "upscanDownloadUrl": "https://fus-outbound-bucket.s3.eu-west-2.amazonaws.com/object-key?X-Amz-Signature=..."
   }
 }
 ```
@@ -86,6 +215,21 @@ To run the integration tests:
 ```bash
 sbt it/test
 ```
+
+### Bruno Collection
+
+The Bruno collection is under `bruno/MonthlyReturn` and is organised into:
+
+- `Create`
+- `Get`
+- `Update`
+- `UpscanCallback`
+
+The collection can be run as a whole against a running local service. The first create request generates fresh valid `zReference` values for that run, then the later requests reuse those values to create a monthly return, get it, update `nilReturn` to `true`, and update it back to `false`. The Upscan callback folder also creates a fresh non-nil monthly return with `callbackZReference`, creates a file upload placeholder with `POST /files`, gets that file upload with `GET /files/:reference`, sends a READY callback, then gets the monthly return to confirm the completed file upload was recorded. The GET-after-READY request runs the READY callback setup requests in its pre-request script when needed, so it can also be run directly.
+
+Generated Bruno `zReference` values are set as runtime variables with `bru.setVar`, not environment variables, so running the collection should not rewrite `bruno/environments/Local.bru`. If you run a later request on its own, run `Create/01-201-create-nil-return-false` first or provide the generated variables manually.
+
+The callback requests return `202 Accepted`. Completed file upload details appear on the GET after the READY callback in the collection run.
 
 ### Before you commit
 

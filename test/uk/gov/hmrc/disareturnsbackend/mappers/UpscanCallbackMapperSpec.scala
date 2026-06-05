@@ -19,8 +19,6 @@ package uk.gov.hmrc.disareturnsbackend.mappers
 import base.SpecBase
 import uk.gov.hmrc.disareturnsbackend.models.*
 
-import java.time.Instant
-
 class UpscanCallbackMapperSpec extends SpecBase {
 
   private val mapper: UpscanCallbackMapper = new UpscanCallbackMapperImpl()
@@ -29,19 +27,20 @@ class UpscanCallbackMapperSpec extends SpecBase {
 
     "must map UpscanDetails to FileUploadDetails" in {
       val uploadDetails = UpscanDetails(
-        fileName = "return.csv",
-        fileMimeType = "text/csv",
-        uploadTimestamp = Instant.parse("2026-05-17T12:00:00Z"),
-        checksum = "396f101dd52e8b2ace0dcf5ed09b1d1f030e608938510ce46e7a5c7a4e775100",
-        size = 1024L
+        fileName = testFileName,
+        fileMimeType = testFileMimeType,
+        uploadTimestamp = testCreatedOn,
+        checksum = testChecksum,
+        size = testFileSize
       )
 
-      mapper.toFileUploadDetails(uploadDetails) mustBe FileUploadDetails(
+      mapper.toFileUploadDetails(uploadDetails, testDownloadUrl) mustBe FileUploadDetails(
         fileName = uploadDetails.fileName,
         fileMimeType = uploadDetails.fileMimeType,
         uploadTimestamp = uploadDetails.uploadTimestamp,
         checksum = uploadDetails.checksum,
-        size = uploadDetails.size
+        size = uploadDetails.size,
+        upscanDownloadUrl = testDownloadUrl
       )
     }
   }

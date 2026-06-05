@@ -1,9 +1,11 @@
 vars {
   baseUrl: http://localhost:1207
   servicePath: /disa-returns-backend
-  zReference: Z1234
-  taxYear: 2026
+  invalidZReference: 1234
+  taxYear: 2026-27
+  invalidTaxYear: 2026
   month: 5
+  invalidMonth: 13
   upscanReference: 2b4d6f3a-8c1e-4e4b-9c7a-123456789abc
   downloadUrl: https://fus-outbound-bucket.s3.eu-west-2.amazonaws.com/object-key?X-Amz-Signature=abc
   fileName: return.csv

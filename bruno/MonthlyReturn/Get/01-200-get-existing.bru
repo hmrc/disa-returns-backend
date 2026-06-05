@@ -1,0 +1,18 @@
+meta {
+  name: 01-200-get-existing
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{zReference}}/{{taxYear}}/{{month}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.zReference: eq {{zReference}}
+  res.body.taxYear: eq {{taxYear}}
+  res.body.month: eq {{month}}
+}

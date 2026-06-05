@@ -1,11 +1,11 @@
 meta {
-  name: 08-415-unsupported-media-type
+  name: 12-415-unsupported-media-type
   type: http
-  seq: 8
+  seq: 13
 }
 
 post {
-  url: {{baseUrl}}{{servicePath}}/monthly/upscan/callback/{{zReference}}/{{taxYear}}/{{month}}
+  url: {{baseUrl}}{{servicePath}}/monthly/upscan/callback/{{callbackZReference}}/{{taxYear}}/{{month}}
   body: text
   auth: none
 }

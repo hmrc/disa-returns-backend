@@ -1,0 +1,26 @@
+meta {
+  name: 02-201-create-nil-return-true
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{nilZReference}}/{{taxYear}}/{{month}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "nilReturn": true
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.headers.location: eq {{servicePath}}/monthly/{{nilZReference}}/{{taxYear}}/{{month}}
+}

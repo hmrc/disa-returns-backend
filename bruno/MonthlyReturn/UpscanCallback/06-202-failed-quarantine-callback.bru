@@ -1,11 +1,11 @@
 meta {
-  name: 04-202-failed-unknown-callback
+  name: 06-202-failed-quarantine-callback
   type: http
-  seq: 4
+  seq: 7
 }
 
 post {
-  url: {{baseUrl}}{{servicePath}}/monthly/upscan/callback/{{zReference}}/{{taxYear}}/{{month}}
+  url: {{baseUrl}}{{servicePath}}/monthly/upscan/callback/{{callbackZReference}}/{{taxYear}}/{{month}}
   body: json
   auth: none
 }
@@ -19,8 +19,8 @@ body:json {
     "reference": "{{upscanReference}}",
     "fileStatus": "FAILED",
     "failureDetails": {
-      "failureReason": "UNKNOWN",
-      "message": "Unable to parse upscan failure details"
+      "failureReason": "QUARANTINE",
+      "message": "Eicar-Test-Signature"
     }
   }
 }

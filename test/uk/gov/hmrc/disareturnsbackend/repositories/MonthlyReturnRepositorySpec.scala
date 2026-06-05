@@ -21,6 +21,7 @@ import uk.gov.hmrc.disareturnsbackend.config.AppConfig
 import uk.gov.hmrc.disareturnsbackend.models.FileUploadFailureReason.Rejected
 import uk.gov.hmrc.disareturnsbackend.models.FileUploadStatus.*
 import uk.gov.hmrc.disareturnsbackend.models.*
+import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository.CreateFileUploadRepositoryResult.*
 import uk.gov.hmrc.mongo.test.DefaultPlayMongoRepositorySupport
 
 import java.time.{Clock, Instant, ZoneOffset}
@@ -29,10 +30,10 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
 
   override protected def databaseName: String = "disa-returns-backend-monthly-return-repository-test"
 
-  private val fixedNow: Instant = Instant.parse("2026-05-17T12:00:00Z")
+  private val fixedNow: Instant = testCreatedOn
   private val fixedClock: Clock = Clock.fixed(fixedNow, ZoneOffset.UTC)
 
-  private lazy val appConfig: AppConfig = app.injector.instanceOf[AppConfig]
+  private lazy val appConfig: AppConfig = inject[AppConfig]
 
   override protected val repository: MonthlyReturnRepository =
     new MonthlyReturnRepository(mongoComponent, appConfig, fixedClock)
@@ -41,19 +42,19 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
     try dropDatabase()
     finally super.afterAll()
 
-  private val zReference        = "Z1234"
-  private val taxYear           = "2026"
-  private val month             = "5"
-  private val uploadReference   = "2b4d6f3a-8c1e-4e4b-9c7a-123456789abc"
-  private val existingUpdated   = Instant.parse("2026-05-17T11:00:00Z")
-  private val createdOn         = Instant.parse("2026-05-17T11:30:00Z")
-  private val downloadUrl       = "https://fus-outbound-bucket.s3.eu-west-2.amazonaws.com/object-key?X-Amz-Signature=abc"
+  private val zReference        = testZReference
+  private val taxYear           = yearOnlyTestTaxYear
+  private val month             = testMonth
+  private val uploadReference   = testUploadReference
+  private val existingUpdated   = testExistingUpdatedOn
+  private val createdOn         = testRepositoryCreatedOn
   private val fileUploadDetails = FileUploadDetails(
-    fileName = "return.csv",
-    fileMimeType = "text/csv",
-    uploadTimestamp = Instant.parse("2026-05-17T11:59:00Z"),
-    checksum = "396f101dd52e8b2ace0dcf5ed09b1d1f030e608938510ce46e7a5c7a4e775100",
-    size = 1024L
+    fileName = testFileName,
+    fileMimeType = testFileMimeType,
+    uploadTimestamp = testCreatedOn,
+    checksum = testChecksum,
+    size = testFileSize,
+    upscanDownloadUrl = testDownloadUrl
   )
 
   "MonthlyReturnRepository" - {
@@ -75,7 +76,46 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
       "must not return a MonthlyReturn with a different key" in {
         repository.upsert(buildMonthlyReturn()).futureValue
 
-        repository.get(zReference, taxYear, "6").futureValue mustBe None
+        repository.get(zReference, taxYear, 6).futureValue mustBe None
+      }
+    }
+
+    "create" - {
+
+      "must create a MonthlyReturn with nilReturn set to false" in {
+        repository.create(zReference, taxYear, month, nilReturn = false).futureValue mustBe true
+
+        repository.get(zReference, taxYear, month).futureValue.value mustBe MonthlyReturn(
+          zReference = zReference,
+          taxYear = taxYear,
+          month = month,
+          createdOn = fixedNow,
+          nilReturn = false,
+          fileUploads = Nil,
+          lastUpdated = fixedNow
+        )
+      }
+
+      "must create a MonthlyReturn with nilReturn set to true and no file uploads" in {
+        repository.create(zReference, taxYear, month, nilReturn = true).futureValue mustBe true
+
+        repository.get(zReference, taxYear, month).futureValue.value mustBe MonthlyReturn(
+          zReference = zReference,
+          taxYear = taxYear,
+          month = month,
+          createdOn = fixedNow,
+          nilReturn = true,
+          fileUploads = Nil,
+          lastUpdated = fixedNow
+        )
+      }
+
+      "must return false when a MonthlyReturn already exists for the same key" in {
+        repository.create(zReference, taxYear, month, nilReturn = true).futureValue mustBe true
+
+        repository.create(zReference, taxYear, month, nilReturn = false).futureValue mustBe false
+
+        repository.get(zReference, taxYear, month).futureValue.value.nilReturn mustBe true
       }
     }
 
@@ -106,24 +146,47 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
       }
     }
 
+    "updateNilReturn" - {
+
+      "must set nilReturn to true and remove file uploads" in {
+        repository
+          .upsert(buildMonthlyReturn(fileUploads = List(createdFileUpload(reference = "existing-reference"))))
+          .futureValue
+
+        val result = repository.updateNilReturn(zReference, taxYear, month, nilReturn = true).futureValue.value
+
+        result.nilReturn mustBe true
+        result.fileUploads mustBe Nil
+        result.createdOn mustBe existingUpdated
+        result.lastUpdated mustBe fixedNow
+
+        repository.get(zReference, taxYear, month).futureValue.value mustBe result
+      }
+
+      "must set nilReturn to false" in {
+        repository.upsert(buildMonthlyReturn(nilReturn = true)).futureValue
+
+        val result = repository.updateNilReturn(zReference, taxYear, month, nilReturn = false).futureValue.value
+
+        result.nilReturn mustBe false
+        result.fileUploads mustBe Nil
+        result.createdOn mustBe existingUpdated
+        result.lastUpdated mustBe fixedNow
+      }
+
+      "must return None when the MonthlyReturn does not exist" in {
+        repository.updateNilReturn(zReference, taxYear, month, nilReturn = true).futureValue mustBe None
+      }
+    }
+
     "createFileUpload" - {
 
-      "must create a MonthlyReturn when one does not exist" in {
-        repository.createFileUpload(zReference, taxYear, month, uploadReference).futureValue mustBe true
+      "must return None when the MonthlyReturn does not exist" in {
+        repository
+          .createFileUpload(zReference, taxYear, month, uploadReference)
+          .futureValue mustBe MonthlyReturnNotFound
 
-        repository.get(zReference, taxYear, month).futureValue.value mustBe MonthlyReturn(
-          zReference = zReference,
-          taxYear = taxYear,
-          month = month,
-          fileUploads = List(
-            FileUpload(
-              reference = uploadReference,
-              status = Created,
-              createdOn = fixedNow
-            )
-          ),
-          lastUpdated = fixedNow
-        )
+        repository.get(zReference, taxYear, month).futureValue mustBe None
       }
 
       "must append a CREATED file upload when the MonthlyReturn exists" in {
@@ -131,9 +194,10 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
           .upsert(buildMonthlyReturn(fileUploads = List(createdFileUpload(reference = "existing-reference"))))
           .futureValue
 
-        repository.createFileUpload(zReference, taxYear, month, uploadReference).futureValue mustBe true
+        val result = repository.createFileUpload(zReference, taxYear, month, uploadReference).futureValue
 
         val stored = repository.get(zReference, taxYear, month).futureValue.value
+        result mustBe FileUploadCreated(stored)
         stored.fileUploads mustBe List(
           createdFileUpload(reference = "existing-reference"),
           FileUpload(
@@ -146,28 +210,61 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
       }
 
       "must not duplicate an existing file upload reference" in {
-        repository.createFileUpload(zReference, taxYear, month, uploadReference).futureValue mustBe true
-        repository.createFileUpload(zReference, taxYear, month, uploadReference).futureValue mustBe false
+        repository.upsert(buildMonthlyReturn()).futureValue
+        repository.createFileUpload(zReference, taxYear, month, uploadReference).futureValue
+        repository
+          .createFileUpload(zReference, taxYear, month, uploadReference)
+          .futureValue mustBe FileUploadAlreadyExists
 
         val stored = repository.get(zReference, taxYear, month).futureValue.value
         stored.fileUploads.map(_.reference) mustBe List(uploadReference)
       }
+
+      "must not append a file upload when the MonthlyReturn is a nil return" in {
+        repository.upsert(buildMonthlyReturn(nilReturn = true)).futureValue
+
+        repository
+          .createFileUpload(zReference, taxYear, month, uploadReference)
+          .futureValue mustBe MonthlyReturnNotFound
+
+        repository.get(zReference, taxYear, month).futureValue.value.fileUploads mustBe Nil
+      }
     }
 
-    "completeFileUpload" - {
+    "getFileUpload" - {
+
+      "must return a FileUpload when the MonthlyReturn and FileUpload exist" in {
+        val fileUpload = createdFileUpload()
+        repository.upsert(buildMonthlyReturn(fileUploads = List(fileUpload))).futureValue
+
+        repository.getFileUpload(zReference, taxYear, month, uploadReference).futureValue mustBe Some(fileUpload)
+      }
+
+      "must return None when the MonthlyReturn does not exist" in {
+        repository.getFileUpload(zReference, taxYear, month, uploadReference).futureValue mustBe None
+      }
+
+      "must return None when the FileUpload does not exist" in {
+        repository.upsert(buildMonthlyReturn()).futureValue
+
+        repository.getFileUpload(zReference, taxYear, month, uploadReference).futureValue mustBe None
+      }
+    }
+
+    "completeUpscan" - {
 
       "must complete a successful file upload" in {
+        repository.upsert(buildMonthlyReturn()).futureValue
         repository.createFileUpload(zReference, taxYear, month, uploadReference).futureValue
 
         repository
-          .completeFileUpload(
+          .completeUpscan(
             zReference = zReference,
             taxYear = taxYear,
             month = month,
             reference = uploadReference,
             status = FileUploadStatus.UpscanSuccess,
-            fileUploadDetails = Some(fileUploadDetails),
-            downloadUrl = Some(downloadUrl)
+            fileUploadDetails = Some(fileUploadDetails)
           )
           .futureValue mustBe true
 
@@ -176,17 +273,17 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
           reference = uploadReference,
           status = FileUploadStatus.UpscanSuccess,
           createdOn = fixedNow,
-          completedOn = Some(fixedNow),
-          fileUploadDetails = Some(fileUploadDetails),
-          downloadUrl = Some(downloadUrl)
+          upscanCompletedOn = Some(fixedNow),
+          fileUploadDetails = Some(fileUploadDetails)
         )
       }
 
       "must complete a failed file upload" in {
+        repository.upsert(buildMonthlyReturn()).futureValue
         repository.createFileUpload(zReference, taxYear, month, uploadReference).futureValue
 
         repository
-          .completeFileUpload(
+          .completeUpscan(
             zReference = zReference,
             taxYear = taxYear,
             month = month,
@@ -194,7 +291,7 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
             status = UpscanRejected,
             fileUploadDetails = None,
             failureReason = Some(Rejected),
-            failureMessage = Some("Duplicate file")
+            failureMessage = Some(testDuplicateFileMessage)
           )
           .futureValue mustBe true
 
@@ -203,51 +300,105 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
           reference = uploadReference,
           status = UpscanRejected,
           createdOn = fixedNow,
-          completedOn = Some(fixedNow),
+          upscanCompletedOn = Some(fixedNow),
           failureReason = Some(Rejected),
-          failureMessage = Some("Duplicate file")
+          failureMessage = Some(testDuplicateFileMessage)
         )
       }
 
       "must return false when the MonthlyReturn does not exist" in {
         repository
-          .completeFileUpload(
+          .completeUpscan(
             zReference = zReference,
             taxYear = taxYear,
             month = month,
             reference = uploadReference,
             status = FileUploadStatus.UpscanSuccess,
-            fileUploadDetails = Some(fileUploadDetails),
-            downloadUrl = Some(downloadUrl)
+            fileUploadDetails = Some(fileUploadDetails)
           )
           .futureValue mustBe false
 
         repository.get(zReference, taxYear, month).futureValue mustBe None
       }
 
-      "must return false when the file upload reference does not exist" in {
+      "must add a completed file upload when the file upload reference does not exist" in {
+        repository.upsert(buildMonthlyReturn()).futureValue
         repository.createFileUpload(zReference, taxYear, month, uploadReference).futureValue
 
         repository
-          .completeFileUpload(
+          .completeUpscan(
             zReference = zReference,
             taxYear = taxYear,
             month = month,
-            reference = "missing-reference",
+            reference = missingUploadReference,
             status = FileUploadStatus.UpscanSuccess,
-            fileUploadDetails = Some(fileUploadDetails),
-            downloadUrl = Some(downloadUrl)
+            fileUploadDetails = Some(fileUploadDetails)
+          )
+          .futureValue mustBe true
+
+        val stored = repository.get(zReference, taxYear, month).futureValue.value
+        stored.fileUploads mustBe List(
+          FileUpload(
+            reference = uploadReference,
+            status = Created,
+            createdOn = fixedNow
+          ),
+          FileUpload(
+            reference = missingUploadReference,
+            status = FileUploadStatus.UpscanSuccess,
+            createdOn = fixedNow,
+            upscanCompletedOn = Some(fixedNow),
+            fileUploadDetails = Some(fileUploadDetails)
+          )
+        )
+      }
+
+      "must add a completed file upload when the MonthlyReturn exists without a CREATED upload" in {
+        repository.upsert(buildMonthlyReturn()).futureValue
+
+        repository
+          .completeUpscan(
+            zReference = zReference,
+            taxYear = taxYear,
+            month = month,
+            reference = uploadReference,
+            status = FileUploadStatus.UpscanSuccess,
+            fileUploadDetails = Some(fileUploadDetails)
+          )
+          .futureValue mustBe true
+
+        repository.get(zReference, taxYear, month).futureValue.value.fileUploads mustBe List(
+          FileUpload(
+            reference = uploadReference,
+            status = FileUploadStatus.UpscanSuccess,
+            createdOn = fixedNow,
+            upscanCompletedOn = Some(fixedNow),
+            fileUploadDetails = Some(fileUploadDetails)
+          )
+        )
+      }
+
+      "must return false when the MonthlyReturn is a nil return" in {
+        repository.upsert(buildMonthlyReturn(nilReturn = true)).futureValue
+
+        repository
+          .completeUpscan(
+            zReference = zReference,
+            taxYear = taxYear,
+            month = month,
+            reference = uploadReference,
+            status = FileUploadStatus.UpscanSuccess,
+            fileUploadDetails = Some(fileUploadDetails)
           )
           .futureValue mustBe false
 
-        val stored = repository.get(zReference, taxYear, month).futureValue.value
-        stored.fileUploads.map(_.reference) mustBe List(uploadReference)
-        stored.fileUploads.head.status mustBe Created
+        repository.get(zReference, taxYear, month).futureValue.value.fileUploads mustBe Nil
       }
     }
   }
 
   private def buildMonthlyReturn(
+    nilReturn: Boolean = false,
     fileUploads: List[FileUpload] = Nil,
     lastUpdated: Instant = existingUpdated
   ): MonthlyReturn =
@@ -255,6 +406,8 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
       zReference = zReference,
       taxYear = taxYear,
       month = month,
+      createdOn = lastUpdated,
+      nilReturn = nilReturn,
       fileUploads = fileUploads,
       lastUpdated = lastUpdated
     )

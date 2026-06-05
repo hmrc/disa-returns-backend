@@ -19,30 +19,24 @@ package uk.gov.hmrc.disareturnsbackend.models
 import play.api.libs.json.{JsValue, Json, OFormat}
 import uk.gov.hmrc.disareturnsbackend.utils.JsonFormatSpec
 
-import java.time.Instant
-
 class UpscanDetailsSpec extends JsonFormatSpec[UpscanDetails] {
 
   override def model: UpscanDetails =
     UpscanDetails(
-      fileName = "return.csv",
-      fileMimeType = "text/csv",
-      uploadTimestamp = Instant.parse("2026-05-17T12:00:00Z"),
-      checksum = "396f101dd52e8b2ace0dcf5ed09b1d1f030e608938510ce46e7a5c7a4e775100",
-      size = 1024L
+      fileName = testFileName,
+      fileMimeType = testFileMimeType,
+      uploadTimestamp = testCreatedOn,
+      checksum = testChecksum,
+      size = testFileSize
     )
 
   override def expectedJsonFromWrites: JsValue =
-    Json.parse(
-      """
-        |{
-        |  "fileName": "return.csv",
-        |  "fileMimeType": "text/csv",
-        |  "uploadTimestamp": "2026-05-17T12:00:00Z",
-        |  "checksum": "396f101dd52e8b2ace0dcf5ed09b1d1f030e608938510ce46e7a5c7a4e775100",
-        |  "size": 1024
-        |}
-        |""".stripMargin
+    Json.obj(
+      fileNameFieldName        -> testFileName,
+      fileMimeTypeFieldName    -> testFileMimeType,
+      uploadTimestampFieldName -> testCreatedOnString,
+      checksumFieldName        -> testChecksum,
+      sizeFieldName            -> testFileSize
     )
 
   override implicit def format: OFormat[UpscanDetails] = UpscanDetails.format

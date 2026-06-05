@@ -25,17 +25,13 @@ class UpscanFailureDetailsSpec extends JsonFormatSpec[UpscanFailureDetails] {
   override def model: UpscanFailureDetails =
     UpscanFailureDetails(
       failureReason = Quarantine,
-      message = "Eicar-Test-Signature"
+      message = testEicarSignatureMessage
     )
 
   override def expectedJsonFromWrites: JsValue =
-    Json.parse(
-      """
-        |{
-        |  "failureReason": "QUARANTINE",
-        |  "message": "Eicar-Test-Signature"
-        |}
-        |""".stripMargin
+    Json.obj(
+      failureReasonFieldName -> quarantineReasonString,
+      messageFieldName       -> testEicarSignatureMessage
     )
 
   override implicit def format: OFormat[UpscanFailureDetails] = UpscanFailureDetails.format

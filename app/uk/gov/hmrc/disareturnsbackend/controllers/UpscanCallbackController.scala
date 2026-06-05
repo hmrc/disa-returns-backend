@@ -17,15 +17,16 @@
 package uk.gov.hmrc.disareturnsbackend.controllers
 
 import play.api.Logging
-import play.api.libs.json.JsValue
+import play.api.libs.json.{JsValue, Json}
 import play.api.mvc.{Action, ControllerComponents}
 import uk.gov.hmrc.disareturnsbackend.models.UpscanResult
 import uk.gov.hmrc.disareturnsbackend.services.UpscanCallbackService
+import uk.gov.hmrc.disareturnsbackend.validators.ValidationHelper
 import uk.gov.hmrc.play.bootstrap.backend.controller.BackendController
 import uk.gov.hmrc.play.bootstrap.controller.WithJsonBody
 
 import javax.inject.Inject
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
 
 class UpscanCallbackController @Inject() (
@@ -38,16 +39,25 @@ class UpscanCallbackController @Inject() (
 
   def monthlyReturnUpscanCallback(zReference: String, taxYear: String, month: String): Action[JsValue] =
     Action.async(parse.json) { implicit request =>
-      withJsonBody[UpscanResult] { upscanResult =>
-        logger.info(
-          s"[UpscanCallbackController][monthlyReturnUpscanCallback] Received upscan callback for zReference [$zReference], taxYear [$taxYear], month [$month], upload reference [${upscanResult.reference}]"
-        )
-        upscanCallbackService
-          .monthlyReturnUpscanCallback(zReference, taxYear, month, upscanResult)
-          .map(_ => Accepted)
-          .recover { case NonFatal(_) =>
-            ServiceUnavailable
+      ValidationHelper.validateParams(zReference, taxYear, month) match {
+        case Right((validZReference, validTaxYear, validMonth)) =>
+          withJsonBody[UpscanResult] { upscanResult =>
+            logger.info(
+              s"[UpscanCallbackController][monthlyReturnUpscanCallback] Upscan callback for zReference [$validZReference], taxYear [$validTaxYear], month [$validMonth], upload reference [${upscanResult.reference}]"
+            )
+            upscanCallbackService
+              .monthlyReturnUpscanCallback(validZReference, validTaxYear, validMonth, upscanResult)
+              .map(_ => Accepted)
+              .recover { case NonFatal(_) =>
+                ServiceUnavailable
+              }
           }
+
+        case Left(errorMessage) =>
+          logger.warn(
+            s"[UpscanCallbackController][monthlyReturnUpscanCallback] Invalid upscan callback parameters for zReference [$zReference], taxYear [$taxYear], month [$month]: [$errorMessage]"
+          )
+          Future.successful(BadRequest(Json.obj("message" -> errorMessage)))
       }
     }
 }
