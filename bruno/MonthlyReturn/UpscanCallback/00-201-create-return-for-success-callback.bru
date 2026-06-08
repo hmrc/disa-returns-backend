@@ -25,13 +25,6 @@ assert {
   res.headers.location: eq {{servicePath}}/monthly/{{callbackZReference}}/{{taxYear}}/{{month}}
 }
 
-script:post-response {
-  const responseBody = res.body ?? res.getBody();
-  const body = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
-
-  bru.setVar("callbackSubmissionId", body.submissionId);
-}
-
 script:pre-request {
   const clearResponse = await bru.runRequest("TestOnly/MonthlyReturns/01-204-clear-monthly-returns");
   
@@ -43,11 +36,18 @@ script:pre-request {
   bru.setVar("callbackZReference", `Z${value.toString().padStart(4, "0")}`);
 }
 
+script:post-response {
+  const responseBody = res.body ?? res.getBody();
+  const body = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
+  
+  bru.setVar("callbackSubmissionId", body.submissionId);
+}
+
 tests {
   test("response contains generated submissionId", function() {
     const responseBody = res.body ?? res.getBody();
     const body = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
-
+  
     expect(body.submissionId).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   });
 }

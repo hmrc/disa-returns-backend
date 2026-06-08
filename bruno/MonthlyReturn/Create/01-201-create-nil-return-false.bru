@@ -20,7 +20,6 @@ body:json {
   }
 }
 
-
 assert {
   res.status: eq 201
   res.headers.location: eq {{servicePath}}/monthly/{{zReference}}/{{taxYear}}/{{month}}
