@@ -25,32 +25,32 @@ class UpscanFailureReasonSpec extends SpecBase {
   "UpscanFailureReason format" - {
 
     "must serialise Quarantine" in {
-      Json.toJson[UpscanFailureReason](Quarantine) mustBe JsString("QUARANTINE")
+      Json.toJson[UpscanFailureReason](Quarantine) mustBe JsString(quarantineReasonString)
     }
 
     "must serialise Rejected" in {
-      Json.toJson[UpscanFailureReason](Rejected) mustBe JsString("REJECTED")
+      Json.toJson[UpscanFailureReason](Rejected) mustBe JsString(rejectedReasonString)
     }
 
     "must serialise Unknown" in {
-      Json.toJson[UpscanFailureReason](Unknown) mustBe JsString("UNKNOWN")
+      Json.toJson[UpscanFailureReason](Unknown) mustBe JsString(unknownReasonString)
     }
 
     "must deserialise Quarantine" in {
-      JsString("QUARANTINE").as[UpscanFailureReason] mustBe Quarantine
+      JsString(quarantineReasonString).as[UpscanFailureReason] mustBe Quarantine
     }
 
     "must deserialise Rejected" in {
-      JsString("REJECTED").as[UpscanFailureReason] mustBe Rejected
+      JsString(rejectedReasonString).as[UpscanFailureReason] mustBe Rejected
     }
 
     "must deserialise Unknown" in {
-      JsString("UNKNOWN").as[UpscanFailureReason] mustBe Unknown
+      JsString(unknownReasonString).as[UpscanFailureReason] mustBe Unknown
     }
 
     "must fail to deserialise an unknown reason" in {
-      JsString("DUPLICATE").validate[UpscanFailureReason] mustBe
-        JsError("Invalid upscan failure reason: DUPLICATE")
+      JsString(invalidFailureReasonString).validate[UpscanFailureReason] mustBe
+        JsError(s"Invalid upscan failure reason: $invalidFailureReasonString")
     }
 
     "must fail to deserialise a non-string value" in {

@@ -1,11 +1,11 @@
 meta {
-  name: 05-400-invalid-file-status
+  name: 09-400-invalid-file-status
   type: http
-  seq: 5
+  seq: 10
 }
 
 post {
-  url: {{baseUrl}}{{servicePath}}/monthly/upscan/callback/{{zReference}}/{{taxYear}}/{{month}}
+  url: {{baseUrl}}{{servicePath}}/monthly/upscan/callback/{{callbackZReference}}/{{taxYear}}/{{month}}
   body: json
   auth: none
 }

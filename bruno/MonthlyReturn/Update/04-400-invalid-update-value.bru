@@ -1,0 +1,25 @@
+meta {
+  name: 04-400-invalid-update-value
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{zReference}}/{{taxYear}}/{{month}}/nilReturn
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "value": "yes"
+  }
+}
+
+assert {
+  res.status: eq 400
+}

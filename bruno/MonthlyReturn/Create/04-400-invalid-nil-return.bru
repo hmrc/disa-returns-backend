@@ -1,0 +1,25 @@
+meta {
+  name: 04-400-invalid-nil-return
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{zReference}}/{{taxYear}}/{{month}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "nilReturn": "false"
+  }
+}
+
+assert {
+  res.status: eq 400
+}

@@ -23,13 +23,14 @@ import javax.inject.{Inject, Singleton}
 @Singleton
 class UpscanCallbackMapperImpl @Inject() () extends UpscanCallbackMapper {
 
-  override def toFileUploadDetails(uploadDetails: UpscanDetails): FileUploadDetails =
+  override def toFileUploadDetails(uploadDetails: UpscanDetails, upscanDownloadUrl: String): FileUploadDetails =
     FileUploadDetails(
       fileName = uploadDetails.fileName,
       fileMimeType = uploadDetails.fileMimeType,
       uploadTimestamp = uploadDetails.uploadTimestamp,
       checksum = uploadDetails.checksum,
-      size = uploadDetails.size
+      size = uploadDetails.size,
+      upscanDownloadUrl = upscanDownloadUrl
     )
 
   override def toFileUploadStatus(failureReason: UpscanFailureReason): FileUploadStatus =

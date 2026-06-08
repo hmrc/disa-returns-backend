@@ -1,11 +1,11 @@
 meta {
-  name: 03-202-failed-rejected-callback
+  name: 07-202-failed-rejected-callback
   type: http
-  seq: 3
+  seq: 8
 }
 
 post {
-  url: {{baseUrl}}{{servicePath}}/monthly/upscan/callback/{{zReference}}/{{taxYear}}/{{month}}
+  url: {{baseUrl}}{{servicePath}}/monthly/upscan/callback/{{callbackZReference}}/{{taxYear}}/{{month}}
   body: json
   auth: none
 }

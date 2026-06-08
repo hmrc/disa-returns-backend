@@ -1,0 +1,26 @@
+meta {
+  name: 03-400-invalid-fields
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{invalidZReference}}/{{invalidTaxYear}}/{{invalidMonth}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 400
+}
+
+tests {
+  test("response body contains invalid fields", function() {
+    const responseBody = res.body ?? res.getBody();
+    const body = typeof responseBody === "string" ? responseBody : JSON.stringify(responseBody);
+  
+    expect(body).to.include("zReference");
+    expect(body).to.include("taxYear");
+    expect(body).to.include("month");
+  });
+}

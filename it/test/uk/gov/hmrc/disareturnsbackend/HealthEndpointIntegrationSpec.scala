@@ -23,7 +23,7 @@ import uk.gov.hmrc.http.{HeaderCarrier, StringContextOps}
 
 class HealthEndpointIntegrationSpec extends BaseIntegrationSpec:
 
-  private val httpClient = app.injector.instanceOf[HttpClientV2]
+  private val httpClient = inject[HttpClientV2]
 
   "service health endpoint" should:
     "respond with 200 status" in:

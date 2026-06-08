@@ -1,0 +1,25 @@
+meta {
+  name: 03-404-update-missing
+  type: http
+  seq: 3
+}
+
+put {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{missingZReference}}/{{taxYear}}/{{month}}/nilReturn
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "value": true
+  }
+}
+
+assert {
+  res.status: eq 404
+}

@@ -20,45 +20,35 @@ import base.SpecBase
 import play.api.libs.json.{JsError, Json, OWrites}
 import uk.gov.hmrc.disareturnsbackend.models.UpscanFailureReason._
 
-import java.time.Instant
-
 class UpscanResultSpec extends SpecBase {
 
-  private val reference   = "2b4d6f3a-8c1e-4e4b-9c7a-123456789abc"
-  private val downloadUrl =
-    "https://fus-outbound-bucket.s3.eu-west-2.amazonaws.com/object-key?X-Amz-Signature=abc"
-
   private val uploadDetails = UpscanDetails(
-    fileName = "return.csv",
-    fileMimeType = "text/csv",
-    uploadTimestamp = Instant.parse("2026-05-17T12:00:00Z"),
-    checksum = "396f101dd52e8b2ace0dcf5ed09b1d1f030e608938510ce46e7a5c7a4e775100",
-    size = 1024L
+    fileName = testFileName,
+    fileMimeType = testFileMimeType,
+    uploadTimestamp = testCreatedOn,
+    checksum = testChecksum,
+    size = testFileSize
   )
 
   private val successResult: UpscanResult =
     UpscanSuccess(
-      reference = reference,
-      downloadUrl = downloadUrl,
+      reference = testUploadReference,
+      downloadUrl = testDownloadUrl,
       uploadDetails = uploadDetails
     )
 
   private val successJson =
-    Json.parse(
-      """
-        |{
-        |  "reference": "2b4d6f3a-8c1e-4e4b-9c7a-123456789abc",
-        |  "downloadUrl": "https://fus-outbound-bucket.s3.eu-west-2.amazonaws.com/object-key?X-Amz-Signature=abc",
-        |  "fileStatus": "READY",
-        |  "uploadDetails": {
-        |    "fileName": "return.csv",
-        |    "fileMimeType": "text/csv",
-        |    "uploadTimestamp": "2026-05-17T12:00:00Z",
-        |    "checksum": "396f101dd52e8b2ace0dcf5ed09b1d1f030e608938510ce46e7a5c7a4e775100",
-        |    "size": 1024
-        |  }
-        |}
-        |""".stripMargin
+    Json.obj(
+      referenceFieldName     -> testUploadReference,
+      downloadUrlFieldName   -> testDownloadUrl,
+      fileStatusFieldName    -> readyFileStatusString,
+      uploadDetailsFieldName -> Json.obj(
+        fileNameFieldName        -> testFileName,
+        fileMimeTypeFieldName    -> testFileMimeType,
+        uploadTimestampFieldName -> testCreatedOnString,
+        checksumFieldName        -> testChecksum,
+        sizeFieldName            -> testFileSize
+      )
     )
 
   "UpscanResult format" - {
@@ -72,47 +62,43 @@ class UpscanResultSpec extends SpecBase {
     }
 
     "must serialise a failed upload callback" in {
-      val result = failedUploadResult(Quarantine, "Eicar-Test-Signature")
+      val result = failedUploadResult(Quarantine, testEicarSignatureMessage)
 
-      Json.toJson(result) mustBe Json.parse(
-        """
-          |{
-          |  "reference": "2b4d6f3a-8c1e-4e4b-9c7a-123456789abc",
-          |  "fileStatus": "FAILED",
-          |  "failureDetails": {
-          |    "failureReason": "QUARANTINE",
-          |    "message": "Eicar-Test-Signature"
-          |  }
-          |}
-          |""".stripMargin
+      Json.toJson(result) mustBe Json.obj(
+        referenceFieldName      -> testUploadReference,
+        fileStatusFieldName     -> failedFileStatusString,
+        failureDetailsFieldName -> Json.obj(
+          failureReasonFieldName -> quarantineReasonString,
+          messageFieldName       -> testEicarSignatureMessage
+        )
       )
     }
 
     "must deserialise a failed upload callback for each Upscan failure reason" in
       UpscanFailureReason.values.foreach { failureReason =>
-        val result = failedUploadResult(failureReason, "Upscan failure message")
+        val result = failedUploadResult(failureReason, testUpscanFailureMessage)
 
         Json.toJson(result).as[UpscanResult] mustBe result
       }
 
     "must fail to deserialise an unknown fileStatus" in {
       Json
-        .toJson(InvalidFileStatusPayload(reference, "SCANNING"))
+        .toJson(InvalidFileStatusPayload(testUploadReference, invalidFileStatusString))
         .validate[UpscanResult] mustBe
         JsError("Invalid upscan fileStatus")
     }
 
     "must fail to deserialise a missing fileStatus" in {
-      Json.toJson(MissingFileStatusPayload(reference)).validate[UpscanResult].isError mustBe true
+      Json.toJson(MissingFileStatusPayload(testUploadReference)).validate[UpscanResult].isError mustBe true
     }
 
     "must fail to deserialise an invalid failureReason" in {
       Json
         .toJson(
           InvalidFailureReasonPayload(
-            reference,
-            "FAILED",
-            InvalidFailureDetails("DUPLICATE", "Duplicate file")
+            testUploadReference,
+            failedFileStatusString,
+            InvalidFailureDetails(invalidFailureReasonString, testDuplicateFileMessage)
           )
         )
         .validate[UpscanResult]
@@ -121,7 +107,7 @@ class UpscanResultSpec extends SpecBase {
 
     "must fail to deserialise a successful upload without uploadDetails" in {
       Json
-        .toJson(SuccessWithoutUploadDetailsPayload(reference, downloadUrl, "READY"))
+        .toJson(SuccessWithoutUploadDetailsPayload(testUploadReference, testDownloadUrl, readyFileStatusString))
         .validate[UpscanResult]
         .isError mustBe true
     }
@@ -129,7 +115,7 @@ class UpscanResultSpec extends SpecBase {
 
   private def failedUploadResult(failureReason: UpscanFailureReason, message: String): UpscanResult =
     UpscanFailure(
-      reference = reference,
+      reference = testUploadReference,
       failureDetails = UpscanFailureDetails(
         failureReason = failureReason,
         message = message

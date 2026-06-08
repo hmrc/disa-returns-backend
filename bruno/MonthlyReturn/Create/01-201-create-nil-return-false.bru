@@ -1,0 +1,39 @@
+meta {
+  name: 01-201-create-nil-return-false
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{zReference}}/{{taxYear}}/{{month}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "nilReturn": false
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.headers.location: eq {{servicePath}}/monthly/{{zReference}}/{{taxYear}}/{{month}}
+}
+
+script:pre-request {
+  const base = (Date.now() + Math.floor(Math.random() * 1000)) % 10000;
+  
+  function zRef(offset) {
+    const value = (base + offset) % 10000;
+    return `Z${value.toString().padStart(4, "0")}`;
+  }
+  
+  bru.setVar("zReference", zRef(0));
+  bru.setVar("nilZReference", zRef(1));
+  bru.setVar("missingZReference", zRef(2));
+}

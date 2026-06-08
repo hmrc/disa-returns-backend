@@ -1,11 +1,11 @@
 meta {
-  name: 01-202-ready-callback
+  name: 13-404-missing-service-prefix
   type: http
-  seq: 1
+  seq: 14
 }
 
 post {
-  url: {{baseUrl}}{{servicePath}}/monthly/upscan/callback/{{zReference}}/{{taxYear}}/{{month}}
+  url: {{baseUrl}}/monthly/upscan/callback/{{callbackZReference}}/{{taxYear}}/{{month}}
   body: json
   auth: none
 }
@@ -30,5 +30,5 @@ body:json {
 }
 
 assert {
-  res.status: eq 202
+  res.status: eq 404
 }

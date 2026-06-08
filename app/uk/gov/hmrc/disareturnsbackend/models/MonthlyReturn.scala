@@ -22,20 +22,29 @@ import uk.gov.hmrc.mongo.play.json.formats.MongoJavatimeFormats
 import java.time.Instant
 
 private object MonthlyReturnFormats {
-  implicit val instantFormat: Format[Instant] =
+  implicit val mongoInstantFormat: Format[Instant] =
     Format(MongoJavatimeFormats.instantReads, MongoJavatimeFormats.instantWrites)
+
+  def withCreatedOnDefault(json: JsValue): JsValue =
+    json match {
+      case jsonObject: JsObject if (jsonObject \ "createdOn").isEmpty =>
+        (jsonObject \ "lastUpdated").toOption.fold(jsonObject)(lastUpdated => jsonObject + ("createdOn" -> lastUpdated))
+      case _                                                          => json
+    }
 }
 
 final case class MonthlyReturn(
   zReference: String,
   taxYear: String,
-  month: String,
+  month: Int,
+  createdOn: Instant,
+  nilReturn: Boolean = false,
   fileUploads: List[FileUpload],
   lastUpdated: Instant
 ) {
 
   def createFileUpload(reference: String, createdOn: Instant): MonthlyReturn =
-    if (fileUploads.exists(_.reference == reference)) {
+    if (nilReturn || fileUploads.exists(_.reference == reference)) {
       this
     } else {
       copy(
@@ -48,60 +57,113 @@ final case class MonthlyReturn(
       )
     }
 
-  def completeFileUpload(
+  def completeUpscan(
     reference: String,
     status: FileUploadStatus,
-    completedOn: Instant,
+    upscanCompletedOn: Instant,
     fileUploadDetails: Option[FileUploadDetails],
-    downloadUrl: Option[String] = None,
     failureReason: Option[FileUploadFailureReason] = None,
     failureMessage: Option[String] = None
-  ): MonthlyReturn = {
-    val updatedUploads = fileUploads.map {
-      case fileUpload if fileUpload.reference == reference =>
-        fileUpload.copy(
-          status = status,
-          completedOn = Some(completedOn),
-          fileUploadDetails = fileUploadDetails,
-          downloadUrl = downloadUrl,
-          failureReason = failureReason,
-          failureMessage = failureMessage
-        )
-      case fileUpload                                      => fileUpload
-    }
-
-    if (updatedUploads == fileUploads) {
+  ): MonthlyReturn =
+    if (nilReturn) {
       this
     } else {
-      copy(
-        fileUploads = updatedUploads,
-        lastUpdated = completedOn
+      val completedFileUpload = FileUpload(
+        reference = reference,
+        status = status,
+        createdOn = upscanCompletedOn,
+        upscanCompletedOn = Some(upscanCompletedOn),
+        fileUploadDetails = fileUploadDetails,
+        failureReason = failureReason,
+        failureMessage = failureMessage
       )
+
+      val updatedUploads =
+        if (fileUploads.exists(_.reference == reference)) {
+          fileUploads.map {
+            case fileUpload if fileUpload.reference == reference =>
+              completedFileUpload.copy(createdOn = fileUpload.createdOn)
+            case fileUpload                                      => fileUpload
+          }
+        } else {
+          fileUploads :+ completedFileUpload
+        }
+
+      if (updatedUploads == fileUploads) {
+        this
+      } else {
+        copy(
+          fileUploads = updatedUploads,
+          lastUpdated = upscanCompletedOn
+        )
+      }
     }
-  }
+
+  def updateNilReturn(nilReturn: Boolean, updatedOn: Instant): MonthlyReturn =
+    if (nilReturn) {
+      val updatedReturn = copy(
+        nilReturn = true,
+        fileUploads = Nil,
+        lastUpdated = updatedOn
+      )
+
+      if (updatedReturn == this) this else updatedReturn
+    } else if (this.nilReturn) {
+      copy(
+        nilReturn = false,
+        lastUpdated = updatedOn
+      )
+    } else {
+      this
+    }
 }
 
 object MonthlyReturn {
-  import MonthlyReturnFormats.instantFormat
+  import MonthlyReturnFormats.withCreatedOnDefault
 
-  implicit val format: OFormat[MonthlyReturn] = Json.format[MonthlyReturn]
+  private val derivedFormat: OFormat[MonthlyReturn] =
+    Json.using[Json.WithDefaultValues].format[MonthlyReturn]
+
+  implicit val format: OFormat[MonthlyReturn] = OFormat(
+    Reads(json => derivedFormat.reads(withCreatedOnDefault(json))),
+    derivedFormat
+  )
+
+  val mongoFormat: OFormat[MonthlyReturn] = {
+    import MonthlyReturnFormats.mongoInstantFormat
+
+    implicit val fileUploadFormat: OFormat[FileUpload] = FileUpload.mongoFormat
+
+    val derivedMongoFormat: OFormat[MonthlyReturn] =
+      Json.using[Json.WithDefaultValues].format[MonthlyReturn]
+
+    OFormat(
+      Reads(json => derivedMongoFormat.reads(withCreatedOnDefault(json))),
+      derivedMongoFormat
+    )
+  }
 }
 
 final case class FileUpload(
   reference: String,
   status: FileUploadStatus,
   createdOn: Instant,
-  completedOn: Option[Instant] = None,
+  upscanCompletedOn: Option[Instant] = None,
   fileUploadDetails: Option[FileUploadDetails] = None,
-  downloadUrl: Option[String] = None,
   failureReason: Option[FileUploadFailureReason] = None,
   failureMessage: Option[String] = None
 )
 
 object FileUpload {
-  import MonthlyReturnFormats.instantFormat
-
   implicit val format: OFormat[FileUpload] = Json.format[FileUpload]
+
+  val mongoFormat: OFormat[FileUpload] = {
+    import MonthlyReturnFormats.mongoInstantFormat
+
+    implicit val fileUploadDetailsFormat: OFormat[FileUploadDetails] = FileUploadDetails.mongoFormat
+
+    Json.format[FileUpload]
+  }
 }
 
 final case class FileUploadDetails(
@@ -109,13 +171,18 @@ final case class FileUploadDetails(
   fileMimeType: String,
   uploadTimestamp: Instant,
   checksum: String,
-  size: Long
+  size: Long,
+  upscanDownloadUrl: String
 )
 
 object FileUploadDetails {
-  import MonthlyReturnFormats.instantFormat
-
   implicit val format: OFormat[FileUploadDetails] = Json.format[FileUploadDetails]
+
+  val mongoFormat: OFormat[FileUploadDetails] = {
+    import MonthlyReturnFormats.mongoInstantFormat
+
+    Json.format[FileUploadDetails]
+  }
 }
 
 sealed trait FileUploadFailureReason {

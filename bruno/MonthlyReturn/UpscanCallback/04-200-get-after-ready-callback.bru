@@ -1,0 +1,43 @@
+meta {
+  name: 04-200-get-after-ready-callback
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{callbackZReference}}/{{taxYear}}/{{month}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.zReference: eq {{callbackZReference}}
+  res.body.taxYear: eq {{taxYear}}
+  res.body.month: eq {{month}}
+  res.body.nilReturn: eq false
+}
+
+script:pre-request {
+  if (bru.getVar("readyCallbackRecorded") !== "true") {
+    const response = await bru.runRequest("MonthlyReturn/UpscanCallback/03-202-ready-callback");
+  
+    if (response.status !== 202) {
+      throw new Error(`Expected READY callback to respond with 202, got ${response.status}`);
+    }
+  }
+}
+
+tests {
+  test("ready callback file upload is recorded", function() {
+    const responseBody = res.body ?? res.getBody();
+    const body = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
+    const expectedReference = bru.getEnvVar("upscanReference");
+    const expectedFileName = bru.getEnvVar("fileName");
+  
+    expect(body.fileUploads).to.have.lengthOf(1);
+    expect(body.fileUploads[0].reference).to.equal(expectedReference);
+    expect(body.fileUploads[0].status).to.equal("UPSCAN_SUCCESS");
+    expect(body.fileUploads[0].fileUploadDetails.fileName).to.equal(expectedFileName);
+  });
+}

@@ -1,0 +1,25 @@
+meta {
+  name: 03-409-create-duplicate
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{zReference}}/{{taxYear}}/{{month}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "nilReturn": false
+  }
+}
+
+assert {
+  res.status: eq 409
+}

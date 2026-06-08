@@ -29,6 +29,7 @@ import uk.gov.hmrc.play.audit.http.connector.DatastreamMetrics
 import uk.gov.hmrc.disareturnsbackend.config.{InternalAuthTokenInitialiser, NoOpInternalAuthTokenInitialiser}
 
 import scala.concurrent.ExecutionContext
+import scala.reflect.ClassTag
 
 trait SpecBase
     extends AnyFreeSpec
@@ -38,12 +39,16 @@ trait SpecBase
     with ScalaFutures
     with IntegrationPatience
     with GuiceOneAppPerSuite
+    with TestConstants
     with MockitoSugar {
 
   implicit val ec: ExecutionContext =
     scala.concurrent.ExecutionContext.Implicits.global
 
   override lazy val app: Application = applicationBuilder().build()
+
+  protected def inject[T: ClassTag]: T =
+    app.injector.instanceOf[T]
 
   protected def applicationBuilder(
     additionalOverrides: Seq[GuiceableModule] = Nil

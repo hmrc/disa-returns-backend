@@ -1,0 +1,50 @@
+meta {
+  name: 03-202-ready-callback
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}{{servicePath}}/monthly/upscan/callback/{{callbackZReference}}/{{taxYear}}/{{month}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "reference": "{{upscanReference}}",
+    "fileStatus": "READY",
+    "downloadUrl": "{{downloadUrl}}",
+    "uploadDetails": {
+      "fileName": "{{fileName}}",
+      "fileMimeType": "{{csvMimeType}}",
+      "uploadTimestamp": "{{uploadTimestamp}}",
+      "checksum": "{{checksum}}",
+      "size": {{fileSize}}
+    }
+  }
+}
+
+assert {
+  res.status: eq 202
+}
+
+script:pre-request {
+  if (bru.getVar("fileUploadCreated") !== "true") {
+    const response = await bru.runRequest("MonthlyReturn/UpscanCallback/01-201-create-file-upload");
+  
+    if (response.status !== 201) {
+      throw new Error(`Expected file upload setup to respond with 201, got ${response.status}`);
+    }
+  }
+}
+
+script:post-response {
+  if (res.status === 202) {
+    bru.setVar("readyCallbackRecorded", "true");
+  }
+}

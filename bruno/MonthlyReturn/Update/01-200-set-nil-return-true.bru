@@ -1,0 +1,26 @@
+meta {
+  name: 01-200-set-nil-return-true
+  type: http
+  seq: 1
+}
+
+put {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{zReference}}/{{taxYear}}/{{month}}/nilReturn
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "value": true
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.nilReturn: eq true
+}

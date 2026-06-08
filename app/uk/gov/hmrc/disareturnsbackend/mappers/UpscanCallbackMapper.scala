@@ -20,7 +20,7 @@ import uk.gov.hmrc.disareturnsbackend.models.*
 
 trait UpscanCallbackMapper {
 
-  def toFileUploadDetails(uploadDetails: UpscanDetails): FileUploadDetails
+  def toFileUploadDetails(uploadDetails: UpscanDetails, upscanDownloadUrl: String): FileUploadDetails
 
   def toFileUploadStatus(failureReason: UpscanFailureReason): FileUploadStatus
 

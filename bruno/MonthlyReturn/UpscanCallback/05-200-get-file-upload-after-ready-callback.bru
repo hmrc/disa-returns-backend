@@ -1,0 +1,41 @@
+meta {
+  name: 05-200-get-file-upload-after-ready-callback
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{callbackZReference}}/{{taxYear}}/{{month}}/files/{{upscanReference}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.reference: eq {{upscanReference}}
+  res.body.status: eq UPSCAN_SUCCESS
+  res.body.fileUploadDetails.fileName: eq {{fileName}}
+  res.body.fileUploadDetails.upscanDownloadUrl: eq {{downloadUrl}}
+}
+
+script:pre-request {
+  if (bru.getVar("readyCallbackRecorded") !== "true") {
+    const response = await bru.runRequest("MonthlyReturn/UpscanCallback/03-202-ready-callback");
+  
+    if (response.status !== 202) {
+      throw new Error(`Expected READY callback to respond with 202, got ${response.status}`);
+    }
+  }
+}
+
+tests {
+  test("file upload resource is completed after ready callback", function() {
+    const responseBody = res.body ?? res.getBody();
+    const body = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
+  
+    expect(body.upscanCompletedOn).to.match(/^\d{4}-\d{2}-\d{2}T.*Z$/);
+    expect(body.fileUploadDetails.fileMimeType).to.equal(bru.getEnvVar("csvMimeType"));
+    expect(body.fileUploadDetails.checksum).to.equal(bru.getEnvVar("checksum"));
+    expect(body.fileUploadDetails.size).to.equal(Number(bru.getEnvVar("fileSize")));
+  });
+}

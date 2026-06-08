@@ -1,0 +1,42 @@
+meta {
+  name: 01-201-create-file-upload
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{callbackZReference}}/{{taxYear}}/{{month}}/files
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "reference": "{{upscanReference}}"
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.headers.location: eq {{servicePath}}/monthly/{{callbackZReference}}/{{taxYear}}/{{month}}/files/{{upscanReference}}
+}
+
+script:pre-request {
+  if (!bru.getVar("callbackZReference")) {
+    const response = await bru.runRequest("MonthlyReturn/UpscanCallback/00-201-create-return-for-success-callback");
+  
+    if (response.status !== 201) {
+      throw new Error(`Expected callback return setup to respond with 201, got ${response.status}`);
+    }
+  }
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setVar("fileUploadCreated", "true");
+  }
+}

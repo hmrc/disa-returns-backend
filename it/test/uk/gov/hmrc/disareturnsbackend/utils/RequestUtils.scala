@@ -28,10 +28,28 @@ trait RequestUtils extends DefaultAwaitTimeout {
 
   protected def serviceUrl(path: String): String
 
+  protected def get(path: String): WSResponse =
+    await(
+      ws.url(serviceUrl(path))
+        .get()
+    )
+
   protected def postJson(path: String, body: JsValue): WSResponse =
     await(
       ws.url(serviceUrl(path))
         .post(body)
+    )
+
+  protected def putString(path: String, body: String = ""): WSResponse =
+    await(
+      ws.url(serviceUrl(path))
+        .put(body)
+    )
+
+  protected def putJson(path: String, body: JsValue): WSResponse =
+    await(
+      ws.url(serviceUrl(path))
+        .put(body)
     )
 
   protected def postString(path: String, body: String, contentType: String): WSResponse =

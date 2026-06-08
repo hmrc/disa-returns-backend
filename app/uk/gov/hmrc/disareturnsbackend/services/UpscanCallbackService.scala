@@ -35,57 +35,82 @@ class UpscanCallbackService @Inject() (
   def monthlyReturnUpscanCallback(
     zReference: String,
     taxYear: String,
-    month: String,
+    month: Int,
     upscanResult: UpscanResult
   ): Future[Unit] =
     upscanResult match {
       case success: UpscanSuccess =>
         val status = FileUploadStatus.UpscanSuccess
 
-        monthlyReturnRepository
-          .completeFileUpload(
-            zReference = zReference,
-            taxYear = taxYear,
-            month = month,
-            reference = success.reference,
-            status = status,
-            fileUploadDetails = Some(upscanCallbackMapper.toFileUploadDetails(success.uploadDetails)),
-            downloadUrl = Some(success.downloadUrl),
-            failureReason = None,
-            failureMessage = None
-          )
-          .map(logCallbackResult(zReference, taxYear, month, success.reference, status))
-          .recoverWith { case NonFatal(exception) =>
-            logCallbackFailure(zReference, taxYear, month, success.reference, status, exception)
-            Future.failed(exception)
-          }
+        completeUpscanUnlessNilReturn(
+          zReference = zReference,
+          taxYear = taxYear,
+          month = month,
+          reference = success.reference,
+          status = status,
+          fileUploadDetails =
+            Some(upscanCallbackMapper.toFileUploadDetails(success.uploadDetails, success.downloadUrl)),
+          failureReason = None,
+          failureMessage = None
+        ).recoverWith { case NonFatal(exception) =>
+          logCallbackFailure(zReference, taxYear, month, success.reference, status, exception)
+          Future.failed(exception)
+        }
 
       case failure: UpscanFailure =>
         val status = upscanCallbackMapper.toFileUploadStatus(failure.failureDetails.failureReason)
 
+        completeUpscanUnlessNilReturn(
+          zReference = zReference,
+          taxYear = taxYear,
+          month = month,
+          reference = failure.reference,
+          status = status,
+          fileUploadDetails = None,
+          failureReason = Some(upscanCallbackMapper.toFileUploadFailureReason(failure.failureDetails.failureReason)),
+          failureMessage = Some(failure.failureDetails.message)
+        ).recoverWith { case NonFatal(exception) =>
+          logCallbackFailure(zReference, taxYear, month, failure.reference, status, exception)
+          Future.failed(exception)
+        }
+    }
+
+  private def completeUpscanUnlessNilReturn(
+    zReference: String,
+    taxYear: String,
+    month: Int,
+    reference: String,
+    status: FileUploadStatus,
+    fileUploadDetails: Option[FileUploadDetails],
+    failureReason: Option[FileUploadFailureReason] = None,
+    failureMessage: Option[String] = None
+  ): Future[Unit] =
+    monthlyReturnRepository.get(zReference, taxYear, month).flatMap {
+      case Some(monthlyReturn) if monthlyReturn.nilReturn =>
+        logger.warn(
+          s"[UpscanCallbackService][completeUpscanUnlessNilReturn] Ignoring upscan callback for zReference [$zReference], taxYear [$taxYear], month [$month], upload reference [$reference] because nilReturn is [true] and file uploads cannot be processed"
+        )
+        Future.successful(())
+
+      case _ =>
         monthlyReturnRepository
-          .completeFileUpload(
+          .completeUpscan(
             zReference = zReference,
             taxYear = taxYear,
             month = month,
-            reference = failure.reference,
+            reference = reference,
             status = status,
-            fileUploadDetails = None,
-            downloadUrl = None,
-            failureReason = Some(upscanCallbackMapper.toFileUploadFailureReason(failure.failureDetails.failureReason)),
-            failureMessage = Some(failure.failureDetails.message)
+            fileUploadDetails = fileUploadDetails,
+            failureReason = failureReason,
+            failureMessage = failureMessage
           )
-          .map(logCallbackResult(zReference, taxYear, month, failure.reference, status))
-          .recoverWith { case NonFatal(exception) =>
-            logCallbackFailure(zReference, taxYear, month, failure.reference, status, exception)
-            Future.failed(exception)
-          }
+          .map(logCallbackResult(zReference, taxYear, month, reference, status))
     }
 
   private def logCallbackResult(
     zReference: String,
     taxYear: String,
-    month: String,
+    month: Int,
     reference: String,
     status: FileUploadStatus
   )(updated: Boolean): Unit =
@@ -95,14 +120,14 @@ class UpscanCallbackService @Inject() (
       )
     } else {
       logger.warn(
-        s"[UpscanCallbackService][logCallbackResult] Unable to complete upscan callback for zReference [$zReference], taxYear [$taxYear], month [$month], upload reference [$reference], status [${status.value}]. No matching file upload found"
+        s"[UpscanCallbackService][logCallbackResult] Unable to record upscan callback for zReference [$zReference], taxYear [$taxYear], month [$month], upload reference [$reference], status [${status.value}]. No writable monthly return found"
       )
     }
 
   private def logCallbackFailure(
     zReference: String,
     taxYear: String,
-    month: String,
+    month: Int,
     reference: String,
     status: FileUploadStatus,
     exception: Throwable
