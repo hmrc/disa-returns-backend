@@ -188,7 +188,7 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
         val result = repository.declare(zReference, taxYear, month).futureValue
 
         val stored = repository.get(zReference, taxYear, month).futureValue.value
-        result mustBe DeclareMonthlyReturnRepositoryResult.MonthlyReturnDeclared(stored)
+        result mustBe DeclareMonthlyReturnRepositoryResult.MonthlyReturnDeclared
         stored.declaredOn mustBe Some(fixedNow)
         stored.createdOn mustBe existingUpdated
         stored.lastUpdated mustBe fixedNow

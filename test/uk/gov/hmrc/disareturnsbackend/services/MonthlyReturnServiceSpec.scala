@@ -101,16 +101,12 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
     "declare" - {
 
       "must return Declared when the repository declares the MonthlyReturn" in {
-        val declaredReturn = monthlyReturn.copy(declaredOn = Some(testCreatedOn), lastUpdated = testCreatedOn)
-
         when(mockMonthlyReturnRepository.declare(eqTo(zReference), eqTo(taxYear), eqTo(month)))
           .thenReturn(
-            Future.successful(DeclareMonthlyReturnRepositoryResult.MonthlyReturnDeclared(declaredReturn))
+            Future.successful(DeclareMonthlyReturnRepositoryResult.MonthlyReturnDeclared)
           )
 
-        service.declare(zReference, taxYear, month).futureValue mustBe DeclareMonthlyReturnResult.Declared(
-          declaredReturn
-        )
+        service.declare(zReference, taxYear, month).futureValue mustBe DeclareMonthlyReturnResult.Declared
 
         verify(mockMonthlyReturnRepository).declare(eqTo(zReference), eqTo(taxYear), eqTo(month))
       }
@@ -132,15 +128,13 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
       "must allow declarations from the configured start day" in {
         val startOfDeclarationPeriod = Instant.parse("2026-05-06T00:00:00Z")
         val startDayService          = buildService(startOfDeclarationPeriod)
-        val declaredReturn           = monthlyReturn.copy(declaredOn = Some(startOfDeclarationPeriod))
-
         when(mockMonthlyReturnRepository.declare(eqTo(zReference), eqTo(taxYear), eqTo(month)))
           .thenReturn(
-            Future.successful(DeclareMonthlyReturnRepositoryResult.MonthlyReturnDeclared(declaredReturn))
+            Future.successful(DeclareMonthlyReturnRepositoryResult.MonthlyReturnDeclared)
           )
 
         startDayService.declare(zReference, taxYear, month).futureValue mustBe
-          DeclareMonthlyReturnResult.Declared(declaredReturn)
+          DeclareMonthlyReturnResult.Declared
       }
 
       "must return OutsideDeclarationPeriod and not call the repository before the configured start day" in {
@@ -155,15 +149,13 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
       "must allow declarations until the end of the configured end day" in {
         val endOfDeclarationPeriod = Instant.parse("2026-05-19T23:59:59Z")
         val endDayService          = buildService(endOfDeclarationPeriod)
-        val declaredReturn         = monthlyReturn.copy(declaredOn = Some(endOfDeclarationPeriod))
-
         when(mockMonthlyReturnRepository.declare(eqTo(zReference), eqTo(taxYear), eqTo(month)))
           .thenReturn(
-            Future.successful(DeclareMonthlyReturnRepositoryResult.MonthlyReturnDeclared(declaredReturn))
+            Future.successful(DeclareMonthlyReturnRepositoryResult.MonthlyReturnDeclared)
           )
 
         endDayService.declare(zReference, taxYear, month).futureValue mustBe
-          DeclareMonthlyReturnResult.Declared(declaredReturn)
+          DeclareMonthlyReturnResult.Declared
       }
 
       "must return OutsideDeclarationPeriod and not call the repository after the configured end day" in {

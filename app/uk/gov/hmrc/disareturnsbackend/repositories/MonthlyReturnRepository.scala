@@ -129,9 +129,7 @@ class MonthlyReturnRepository @Inject() (
       case Some(monthlyReturn) =>
         val updatedMonthlyReturn = monthlyReturn.declare(declaredOn)
 
-        replace(updatedMonthlyReturn).map(_ =>
-          DeclareMonthlyReturnRepositoryResult.MonthlyReturnDeclared(updatedMonthlyReturn)
-        )
+        replace(updatedMonthlyReturn).map(_ => DeclareMonthlyReturnRepositoryResult.MonthlyReturnDeclared)
 
       case None =>
         Future.successful(DeclareMonthlyReturnRepositoryResult.MonthlyReturnNotFound)
@@ -271,7 +269,7 @@ object MonthlyReturnRepository {
   sealed trait DeclareMonthlyReturnRepositoryResult
 
   object DeclareMonthlyReturnRepositoryResult {
-    final case class MonthlyReturnDeclared(monthlyReturn: MonthlyReturn) extends DeclareMonthlyReturnRepositoryResult
+    case object MonthlyReturnDeclared extends DeclareMonthlyReturnRepositoryResult
     case object MonthlyReturnAlreadyDeclared extends DeclareMonthlyReturnRepositoryResult
     case object MonthlyReturnNotFound extends DeclareMonthlyReturnRepositoryResult
   }

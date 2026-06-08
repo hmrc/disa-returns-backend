@@ -103,7 +103,7 @@ class MonthlyReturnController @Inject() (
         monthlyReturnService
           .declare(validZReference, validTaxYear, validMonth)
           .map {
-            case DeclareMonthlyReturnResult.Declared(monthlyReturn)  => Ok(Json.toJson(monthlyReturn))
+            case DeclareMonthlyReturnResult.Declared                 => NoContent
             case DeclareMonthlyReturnResult.AlreadyDeclared          => Conflict
             case DeclareMonthlyReturnResult.MonthlyReturnNotFound    => NotFound
             case DeclareMonthlyReturnResult.OutsideDeclarationPeriod => UnprocessableEntity

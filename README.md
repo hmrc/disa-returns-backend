@@ -43,27 +43,12 @@ Request body:
 
 `POST /disa-returns-backend/monthly/:zReference/:taxYear/:month/declarations`
 
-- Returns `200 OK` with the declared monthly return when the record exists and has not already been declared.
+- Returns `204 No Content` when the record exists and has not already been declared.
 - Returns `409 Conflict` when the monthly return has already been declared.
 - Returns `404 Not Found` when the monthly return does not exist.
 - Returns `422 Unprocessable Entity` when the request is outside the declaration period.
 - Returns `503 Service Unavailable` when MongoDB is unavailable.
 - The declaration period is from 00:00 on the configured start day to the end of the configured end day, inclusive.
-
-Example response:
-
-```json
-{
-  "zReference": "Z1234",
-  "taxYear": "2026-27",
-  "month": 5,
-  "nilReturn": false,
-  "fileUploads": [],
-  "createdOn": "2026-05-17T12:00:00Z",
-  "declaredOn": "2026-05-17T12:00:00Z",
-  "lastUpdated": "2026-05-17T12:00:00Z"
-}
-```
 
 ### Create File Upload
 

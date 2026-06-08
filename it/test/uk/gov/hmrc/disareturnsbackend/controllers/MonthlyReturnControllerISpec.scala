@@ -141,19 +141,21 @@ class MonthlyReturnControllerISpec extends BaseIntegrationSpec {
 
   "POST to monthly return declarations" should {
 
-    "return 200 OK with declaredOn when the MonthlyReturn exists" in {
+    "return 204 No Content when the MonthlyReturn exists" in {
       postJson(monthlyPath, nilReturnFalseRequest)
 
       val result = postJson(declarationsPath, Json.obj())
 
-      result.status shouldBe OK
-      (result.json \ declaredOnFieldName).as[String] shouldBe testCreatedOnString
-      (result.json \ lastUpdatedFieldName).as[String] shouldBe testCreatedOnString
+      result.status shouldBe NO_CONTENT
+
+      val getResult = get(monthlyPath)
+      (getResult.json \ declaredOnFieldName).as[String]   shouldBe testCreatedOnString
+      (getResult.json \ lastUpdatedFieldName).as[String] shouldBe testCreatedOnString
     }
 
     "return 409 Conflict when the MonthlyReturn has already been declared" in {
       postJson(monthlyPath, nilReturnFalseRequest)
-      postJson(declarationsPath, Json.obj()).status shouldBe OK
+      postJson(declarationsPath, Json.obj()).status shouldBe NO_CONTENT
 
       val result = postJson(declarationsPath, Json.obj())
 
@@ -203,7 +205,7 @@ class MonthlyReturnControllerISpec extends BaseIntegrationSpec {
 
     "return 422 Unprocessable Entity when the MonthlyReturn has already been declared" in {
       postJson(monthlyPath, nilReturnFalseRequest)
-      postJson(declarationsPath, Json.obj()).status shouldBe OK
+      postJson(declarationsPath, Json.obj()).status shouldBe NO_CONTENT
 
       val result = postJson(filesPath, createFileUploadRequest)
 

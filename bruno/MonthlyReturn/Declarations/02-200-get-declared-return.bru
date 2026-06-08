@@ -15,13 +15,21 @@ assert {
   res.body.zReference: eq {{declarationZReference}}
   res.body.taxYear: eq {{taxYear}}
   res.body.month: eq {{month}}
-  res.body.declaredOn: eq {{declaredOn}}
 }
 
 script:pre-request {
-  const response = await bru.runRequest("MonthlyReturn/Declarations/01-200-declare-return");
+  const response = await bru.runRequest("MonthlyReturn/Declarations/01-204-declare-return");
   
-  if (response.status !== 200) {
-    throw new Error(`Expected declaration request to respond with 200, got ${response.status}`);
+  if (response.status !== 204) {
+    throw new Error(`Expected declaration request to respond with 204, got ${response.status}`);
   }
+}
+
+tests {
+  test("declaredOn is returned", function() {
+    const responseBody = res.body ?? res.getBody();
+    const body = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
+  
+    expect(body.declaredOn).to.be.a("string").and.not.be.empty;
+  });
 }

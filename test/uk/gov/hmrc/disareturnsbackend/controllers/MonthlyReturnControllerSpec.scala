@@ -216,18 +216,15 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
 
   "MonthlyReturnController.declareMonthlyReturn" - {
 
-    "must return OK with the declared MonthlyReturn" in {
-      val declaredReturn = monthlyReturn.copy(declaredOn = Some(testCreatedOn), lastUpdated = testCreatedOn)
-
+    "must return NO_CONTENT when the MonthlyReturn is declared" in {
       when(mockMonthlyReturnService.declare(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth)))
-        .thenReturn(Future.successful(DeclareMonthlyReturnResult.Declared(declaredReturn)))
+        .thenReturn(Future.successful(DeclareMonthlyReturnResult.Declared))
 
       val result = controller.declareMonthlyReturn(lowercaseTestZReference, testTaxYear, testRouteMonth)(
         FakeRequest("POST", declarationsPath)
       )
 
-      status(result) mustBe OK
-      contentAsJson(result) mustBe Json.toJson(declaredReturn)
+      status(result) mustBe NO_CONTENT
       verify(mockMonthlyReturnService).declare(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth))
     }
 

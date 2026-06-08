@@ -126,11 +126,11 @@ class MonthlyReturnService @Inject() (
       monthlyReturnRepository
         .declare(zReference, taxYear, month)
         .map {
-          case DeclareMonthlyReturnRepositoryResult.MonthlyReturnDeclared(monthlyReturn) =>
+          case DeclareMonthlyReturnRepositoryResult.MonthlyReturnDeclared =>
             logger.info(
               s"[MonthlyReturnService][declare] Declared monthly return for zReference [$zReference], taxYear [$taxYear], month [$month]"
             )
-            DeclareMonthlyReturnResult.Declared(monthlyReturn)
+            DeclareMonthlyReturnResult.Declared
 
           case DeclareMonthlyReturnRepositoryResult.MonthlyReturnAlreadyDeclared =>
             logger.warn(
@@ -279,7 +279,7 @@ object CreateFileUploadResult {
 sealed trait DeclareMonthlyReturnResult
 
 object DeclareMonthlyReturnResult {
-  final case class Declared(monthlyReturn: MonthlyReturn) extends DeclareMonthlyReturnResult
+  case object Declared extends DeclareMonthlyReturnResult
   case object AlreadyDeclared extends DeclareMonthlyReturnResult
   case object MonthlyReturnNotFound extends DeclareMonthlyReturnResult
   case object OutsideDeclarationPeriod extends DeclareMonthlyReturnResult
