@@ -33,6 +33,7 @@ class MonthlyReturnSpec extends SpecBase {
   )
   private val emptyMonthlyReturn = MonthlyReturn(
     zReference = testZReference,
+    submissionId = testSubmissionId,
     taxYear = yearOnlyTestTaxYear,
     month = testMonth,
     createdOn = testExistingUpdatedOn,

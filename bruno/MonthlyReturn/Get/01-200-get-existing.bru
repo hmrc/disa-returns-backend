@@ -13,6 +13,7 @@ get {
 assert {
   res.status: eq 200
   res.body.zReference: eq {{zReference}}
+  res.body.submissionId: eq {{monthlySubmissionId}}
   res.body.taxYear: eq {{taxYear}}
   res.body.month: eq {{month}}
 }

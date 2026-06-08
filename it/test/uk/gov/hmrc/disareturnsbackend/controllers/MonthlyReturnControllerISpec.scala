@@ -43,12 +43,14 @@ class MonthlyReturnControllerISpec extends BaseIntegrationSpec {
   "GET to monthly return" should {
 
     "return 200 OK when the MonthlyReturn exists" in {
-      postJson(monthlyPath, nilReturnFalseRequest)
+      val createResult = postJson(monthlyPath, nilReturnFalseRequest)
+      val submissionId = (createResult.json \ submissionIdFieldName).as[String]
 
       val result = get(monthlyPath)
 
       result.status                 shouldBe OK
       (result.json \ zReferenceFieldName).as[String] shouldBe testZReference
+      (result.json \ submissionIdFieldName).as[String] shouldBe submissionId
       (result.json \ taxYearFieldName).as[String]    shouldBe testTaxYear
       (result.json \ monthFieldName).as[Int]         shouldBe testMonth
       (result.json \ nilReturnFieldName).as[Boolean] shouldBe false
@@ -78,6 +80,7 @@ class MonthlyReturnControllerISpec extends BaseIntegrationSpec {
 
       result.status        shouldBe CREATED
       result.header(LOCATION) shouldBe Some(monthlyPath)
+      (result.json \ submissionIdFieldName).as[String] should not be empty
     }
 
     "return 409 Conflict when the MonthlyReturn already exists" in {
@@ -93,28 +96,33 @@ class MonthlyReturnControllerISpec extends BaseIntegrationSpec {
 
       result.status shouldBe BAD_REQUEST
     }
+
   }
 
   "PUT to monthly return nilReturn" should {
 
     "return 200 OK and remove file uploads when setting nilReturn to true" in {
-      postJson(monthlyPath, nilReturnFalseRequest)
+      val createResult = postJson(monthlyPath, nilReturnFalseRequest)
+      val submissionId = (createResult.json \ submissionIdFieldName).as[String]
       postJson(filesPath, createFileUploadRequest).status shouldBe CREATED
 
       val result = putJson(nilReturnPath, nilReturnValueTrueRequest)
 
       result.status                 shouldBe OK
+      (result.json \ submissionIdFieldName).as[String] shouldBe submissionId
       (result.json \ nilReturnFieldName).as[Boolean] shouldBe true
       (result.json \ fileUploadsFieldName).as[Seq[JsValue]] shouldBe empty
       (result.json \ createdOnFieldName).as[String] should fullyMatch regex isoInstantPattern
     }
 
     "return 200 OK when setting nilReturn to false" in {
-      postJson(monthlyPath, nilReturnTrueRequest)
+      val createResult = postJson(monthlyPath, nilReturnTrueRequest)
+      val submissionId = (createResult.json \ submissionIdFieldName).as[String]
 
       val result = putJson(nilReturnPath, nilReturnValueFalseRequest)
 
       result.status                 shouldBe OK
+      (result.json \ submissionIdFieldName).as[String] shouldBe submissionId
       (result.json \ nilReturnFieldName).as[Boolean] shouldBe false
       (result.json \ fileUploadsFieldName).as[Seq[JsValue]] shouldBe empty
       (result.json \ createdOnFieldName).as[String] should fullyMatch regex isoInstantPattern

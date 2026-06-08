@@ -27,6 +27,7 @@ import uk.gov.hmrc.mongo.MongoUtils.DuplicateKey
 import uk.gov.hmrc.mongo.play.json.{Codecs, PlayMongoRepository}
 
 import java.time.{Clock, Instant}
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 import javax.inject.{Inject, Singleton}
 import scala.concurrent.{ExecutionContext, Future}
@@ -65,24 +66,30 @@ class MonthlyReturnRepository @Inject() (
       .find(byKey(zReference, taxYear, month))
       .headOption()
 
-  def create(zReference: String, taxYear: String, month: Int, nilReturn: Boolean): Future[Boolean] = {
-    val createdOn = now()
+  def create(
+    zReference: String,
+    taxYear: String,
+    month: Int,
+    submissionId: UUID,
+    nilReturn: Boolean
+  ): Future[Option[MonthlyReturn]] = {
+    val createdOn     = now()
+    val monthlyReturn = MonthlyReturn(
+      zReference = zReference,
+      submissionId = submissionId,
+      taxYear = taxYear,
+      month = month,
+      createdOn = createdOn,
+      nilReturn = nilReturn,
+      fileUploads = Nil,
+      lastUpdated = createdOn
+    )
 
     collection
-      .insertOne(
-        MonthlyReturn(
-          zReference = zReference,
-          taxYear = taxYear,
-          month = month,
-          createdOn = createdOn,
-          nilReturn = nilReturn,
-          fileUploads = Nil,
-          lastUpdated = createdOn
-        )
-      )
+      .insertOne(monthlyReturn)
       .toFuture()
-      .map(_.wasAcknowledged())
-      .recover { case DuplicateKey(_) => false }
+      .map(result => Option.when(result.wasAcknowledged())(monthlyReturn))
+      .recover { case DuplicateKey(_) => None }
   }
 
   def upsert(monthlyReturn: MonthlyReturn): Future[Boolean] =

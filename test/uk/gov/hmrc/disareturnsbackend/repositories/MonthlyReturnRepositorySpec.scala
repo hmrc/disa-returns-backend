@@ -83,10 +83,22 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
     "create" - {
 
       "must create a MonthlyReturn with nilReturn set to false" in {
-        repository.create(zReference, taxYear, month, nilReturn = false).futureValue mustBe true
+        repository.create(zReference, taxYear, month, testSubmissionId, nilReturn = false).futureValue mustBe Some(
+          MonthlyReturn(
+            zReference = zReference,
+            submissionId = testSubmissionId,
+            taxYear = taxYear,
+            month = month,
+            createdOn = fixedNow,
+            nilReturn = false,
+            fileUploads = Nil,
+            lastUpdated = fixedNow
+          )
+        )
 
         repository.get(zReference, taxYear, month).futureValue.value mustBe MonthlyReturn(
           zReference = zReference,
+          submissionId = testSubmissionId,
           taxYear = taxYear,
           month = month,
           createdOn = fixedNow,
@@ -97,10 +109,22 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
       }
 
       "must create a MonthlyReturn with nilReturn set to true and no file uploads" in {
-        repository.create(zReference, taxYear, month, nilReturn = true).futureValue mustBe true
+        repository.create(zReference, taxYear, month, testSubmissionId, nilReturn = true).futureValue mustBe Some(
+          MonthlyReturn(
+            zReference = zReference,
+            submissionId = testSubmissionId,
+            taxYear = taxYear,
+            month = month,
+            createdOn = fixedNow,
+            nilReturn = true,
+            fileUploads = Nil,
+            lastUpdated = fixedNow
+          )
+        )
 
         repository.get(zReference, taxYear, month).futureValue.value mustBe MonthlyReturn(
           zReference = zReference,
+          submissionId = testSubmissionId,
           taxYear = taxYear,
           month = month,
           createdOn = fixedNow,
@@ -110,10 +134,14 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
         )
       }
 
-      "must return false when a MonthlyReturn already exists for the same key" in {
-        repository.create(zReference, taxYear, month, nilReturn = true).futureValue mustBe true
+      "must return None when a MonthlyReturn already exists for the same key" in {
+        repository
+          .create(zReference, taxYear, month, testSubmissionId, nilReturn = true)
+          .futureValue
+          .value
+          .nilReturn mustBe true
 
-        repository.create(zReference, taxYear, month, nilReturn = false).futureValue mustBe false
+        repository.create(zReference, taxYear, month, testSubmissionId, nilReturn = false).futureValue mustBe None
 
         repository.get(zReference, taxYear, month).futureValue.value.nilReturn mustBe true
       }
@@ -404,6 +432,7 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
   ): MonthlyReturn =
     MonthlyReturn(
       zReference = zReference,
+      submissionId = testSubmissionId,
       taxYear = taxYear,
       month = month,
       createdOn = lastUpdated,

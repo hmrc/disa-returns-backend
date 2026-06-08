@@ -20,6 +20,7 @@ import play.api.libs.json.*
 import uk.gov.hmrc.mongo.play.json.formats.MongoJavatimeFormats
 
 import java.time.Instant
+import java.util.UUID
 
 private object MonthlyReturnFormats {
   implicit val mongoInstantFormat: Format[Instant] =
@@ -35,6 +36,7 @@ private object MonthlyReturnFormats {
 
 final case class MonthlyReturn(
   zReference: String,
+  submissionId: UUID,
   taxYear: String,
   month: Int,
   createdOn: Instant,
@@ -120,6 +122,8 @@ final case class MonthlyReturn(
 
 object MonthlyReturn {
   import MonthlyReturnFormats.withCreatedOnDefault
+
+  implicit val uuidFormat: Format[UUID] = UuidFormat.format
 
   private val derivedFormat: OFormat[MonthlyReturn] =
     Json.using[Json.WithDefaultValues].format[MonthlyReturn]

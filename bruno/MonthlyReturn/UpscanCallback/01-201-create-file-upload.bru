@@ -26,7 +26,7 @@ assert {
 }
 
 script:pre-request {
-  if (!bru.getVar("callbackZReference")) {
+  if (!bru.getVar("callbackZReference") || !bru.getVar("callbackSubmissionId")) {
     const response = await bru.runRequest("MonthlyReturn/UpscanCallback/00-201-create-return-for-success-callback");
   
     if (response.status !== 201) {
