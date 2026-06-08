@@ -152,7 +152,8 @@ Request body:
 
 - The endpoint accepts Upscan `READY` and `FAILED` callback payloads and returns `202 Accepted` when the payload is valid.
 - If the monthly return is a nil return, the callback still returns `202 Accepted` but the file result is not stored.
-- If the monthly return is not a nil return, the callback stores the file result. Existing upload references are completed in place; new callback references are added as completed file uploads.
+- If the monthly return is not a nil return, the callback only completes an existing file upload with the same reference in `CREATED` state. Callbacks for missing, deleted, or already-completed references return `202 Accepted` but are not stored.
+- If the monthly return has been declared, a callback can still complete an existing `CREATED` file upload when that upload was created before the declaration time.
 - Completed file uploads include `fileUploadDetails.upscanCompletedOn`, which records when Upscan processing completed, and `fileUploadDetails.upscanDownloadUrl` for the Upscan download URL.
 - Invalid JSON, unknown `fileStatus` values, or unknown `failureReason` values return `400 Bad Request`.
 - Non-JSON requests return `415 Unsupported Media Type`.

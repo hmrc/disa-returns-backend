@@ -273,11 +273,25 @@ class MonthlyReturnSpec extends SpecBase {
       result.lastUpdated mustBe testUpscanCompletedOn
     }
 
-    "must add a completed file upload when the reference does not exist" in {
+    "must not add a completed file upload when the reference does not exist" in {
       val monthlyReturn = emptyMonthlyReturn.createFileUpload(testUploadReference, testCreatedOn)
 
-      val result = monthlyReturn.completeUpscan(
+      monthlyReturn.completeUpscan(
         reference = missingUploadReference,
+        status = FileUploadStatus.UpscanSuccess,
+        upscanCompletedOn = testUpscanCompletedOn,
+        fileUploadDetails = Some(fileUploadDetails)
+      ) mustBe monthlyReturn
+    }
+
+    "must complete an existing CREATED file upload after declaration when it was created before declaration" in {
+      val declaredOn    = testCreatedOn.plusSeconds(1)
+      val monthlyReturn = emptyMonthlyReturn
+        .createFileUpload(testUploadReference, testCreatedOn)
+        .copy(declaredOn = Some(declaredOn), lastUpdated = declaredOn)
+
+      val result = monthlyReturn.completeUpscan(
+        reference = testUploadReference,
         status = FileUploadStatus.UpscanSuccess,
         upscanCompletedOn = testUpscanCompletedOn,
         fileUploadDetails = Some(fileUploadDetails)
@@ -286,17 +300,59 @@ class MonthlyReturnSpec extends SpecBase {
       result.fileUploads mustBe List(
         FileUpload(
           reference = testUploadReference,
-          status = Created,
-          createdOn = testCreatedOn
-        ),
-        FileUpload(
-          reference = missingUploadReference,
           status = FileUploadStatus.UpscanSuccess,
-          createdOn = testUpscanCompletedOn,
+          createdOn = testCreatedOn,
           fileUploadDetails = Some(fileUploadDetails.copy(upscanCompletedOn = Some(testUpscanCompletedOn)))
         )
       )
+      result.declaredOn mustBe Some(declaredOn)
       result.lastUpdated mustBe testUpscanCompletedOn
+    }
+
+    "must not complete an existing CREATED file upload after declaration when it was created at declaration time" in {
+      val monthlyReturn = emptyMonthlyReturn
+        .createFileUpload(testUploadReference, testCreatedOn)
+        .copy(declaredOn = Some(testCreatedOn), lastUpdated = testCreatedOn)
+
+      monthlyReturn.completeUpscan(
+        reference = testUploadReference,
+        status = FileUploadStatus.UpscanSuccess,
+        upscanCompletedOn = testUpscanCompletedOn,
+        fileUploadDetails = Some(fileUploadDetails)
+      ) mustBe monthlyReturn
+    }
+
+    "must not add a completed file upload after declaration when the reference does not exist" in {
+      val declaredOn    = testCreatedOn.plusSeconds(1)
+      val monthlyReturn = emptyMonthlyReturn.copy(declaredOn = Some(declaredOn), lastUpdated = declaredOn)
+
+      monthlyReturn.completeUpscan(
+        reference = missingUploadReference,
+        status = FileUploadStatus.UpscanSuccess,
+        upscanCompletedOn = testUpscanCompletedOn,
+        fileUploadDetails = Some(fileUploadDetails)
+      ) mustBe monthlyReturn
+    }
+
+    "must not complete a file upload after declaration when it is not in CREATED state" in {
+      val declaredOn    = testCreatedOn.plusSeconds(1)
+      val monthlyReturn = emptyMonthlyReturn
+        .completeUpscan(
+          reference = testUploadReference,
+          status = FileUploadStatus.UpscanSuccess,
+          upscanCompletedOn = testCreatedOn,
+          fileUploadDetails = Some(fileUploadDetails)
+        )
+        .copy(declaredOn = Some(declaredOn), lastUpdated = declaredOn)
+
+      monthlyReturn.completeUpscan(
+        reference = testUploadReference,
+        status = UpscanRejected,
+        upscanCompletedOn = testUpscanCompletedOn,
+        fileUploadDetails = None,
+        failureReason = Some(Rejected),
+        failureMessage = Some(testDuplicateFileMessage)
+      ) mustBe monthlyReturn
     }
 
     "must leave the return unchanged when it is a nil return" in {

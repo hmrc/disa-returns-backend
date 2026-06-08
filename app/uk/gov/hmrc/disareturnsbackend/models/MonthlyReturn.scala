@@ -96,7 +96,7 @@ final case class MonthlyReturn(
     failureReason: Option[FileUploadFailureReason] = None,
     failureMessage: Option[String] = None
   ): MonthlyReturn =
-    if (nilReturn) {
+    if (!canCompleteUpscan(reference)) {
       this
     } else {
       val completedFileUpload = FileUpload(
@@ -109,14 +109,10 @@ final case class MonthlyReturn(
       )
 
       val updatedUploads =
-        if (fileUploads.exists(_.reference == reference)) {
-          fileUploads.map {
-            case fileUpload if fileUpload.reference == reference =>
-              completedFileUpload.copy(createdOn = fileUpload.createdOn)
-            case fileUpload                                      => fileUpload
-          }
-        } else {
-          fileUploads :+ completedFileUpload
+        fileUploads.map {
+          case fileUpload if fileUpload.reference == reference =>
+            completedFileUpload.copy(createdOn = fileUpload.createdOn)
+          case fileUpload                                      => fileUpload
         }
 
       if (updatedUploads == fileUploads) {
@@ -126,6 +122,20 @@ final case class MonthlyReturn(
           fileUploads = updatedUploads,
           lastUpdated = upscanCompletedOn
         )
+      }
+    }
+
+  def canCompleteUpscan(reference: String): Boolean =
+    if (nilReturn) {
+      false
+    } else {
+      fileUploads.exists { fileUpload =>
+        val hasMatchingReference        = fileUpload.reference == reference
+        val hasCreatedStatus            = fileUpload.status == FileUploadStatus.Created
+        val wasCreatedBeforeDeclaration =
+          declaredOn.forall(d => fileUpload.createdOn.isBefore(d))
+
+        hasMatchingReference && hasCreatedStatus && wasCreatedBeforeDeclaration
       }
     }
 
