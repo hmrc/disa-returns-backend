@@ -23,6 +23,7 @@ import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository.CreateFileUploadRepositoryResult
 import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository.CreateFileUploadRepositoryResult.*
 import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository.DeclareMonthlyReturnRepositoryResult
+import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository.UpdateNilReturnRepositoryResult
 import uk.gov.hmrc.mongo.MongoComponent
 import uk.gov.hmrc.mongo.MongoUtils.DuplicateKey
 import uk.gov.hmrc.mongo.play.json.{Codecs, PlayMongoRepository}
@@ -108,21 +109,24 @@ class MonthlyReturnRepository @Inject() (
     taxYear: String,
     month: Int,
     nilReturn: Boolean
-  ): Future[Option[MonthlyReturn]] = {
+  ): Future[UpdateNilReturnRepositoryResult] = {
     val updatedOn = now()
 
     get(zReference, taxYear, month).flatMap {
+      case Some(monthlyReturn) if monthlyReturn.hasDeclaration =>
+        Future.successful(UpdateNilReturnRepositoryResult.MonthlyReturnAlreadyDeclared)
+
       case Some(monthlyReturn) =>
         val updatedMonthlyReturn = monthlyReturn.updateNilReturn(nilReturn, updatedOn)
 
         if (updatedMonthlyReturn == monthlyReturn) {
-          Future.successful(Some(monthlyReturn))
+          Future.successful(UpdateNilReturnRepositoryResult.NilReturnUpdated(monthlyReturn))
         } else {
-          replace(updatedMonthlyReturn).map(_ => Some(updatedMonthlyReturn))
+          replace(updatedMonthlyReturn).map(_ => UpdateNilReturnRepositoryResult.NilReturnUpdated(updatedMonthlyReturn))
         }
 
       case None =>
-        Future.successful(None)
+        Future.successful(UpdateNilReturnRepositoryResult.MonthlyReturnNotFound)
     }
   }
 
@@ -271,6 +275,14 @@ object MonthlyReturnRepository {
     case object FileUploadAlreadyExists extends CreateFileUploadRepositoryResult
     case object MonthlyReturnAlreadyDeclared extends CreateFileUploadRepositoryResult
     case object MonthlyReturnNotFound extends CreateFileUploadRepositoryResult
+  }
+
+  sealed trait UpdateNilReturnRepositoryResult
+
+  object UpdateNilReturnRepositoryResult {
+    final case class NilReturnUpdated(monthlyReturn: MonthlyReturn) extends UpdateNilReturnRepositoryResult
+    case object MonthlyReturnAlreadyDeclared extends UpdateNilReturnRepositoryResult
+    case object MonthlyReturnNotFound extends UpdateNilReturnRepositoryResult
   }
 
   sealed trait DeclareMonthlyReturnRepositoryResult

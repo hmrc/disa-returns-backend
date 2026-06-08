@@ -145,6 +145,7 @@ Request body:
 - Setting `value` to `false` updates `nilReturn` to `false` and leaves file uploads empty.
 - Missing or non-boolean `value` fields return `400 Bad Request`.
 - Returns `404 Not Found` when the monthly return does not exist.
+- Returns `422 Unprocessable Entity` when the monthly return has already been declared for the period.
 - Returns `503 Service Unavailable` when MongoDB is unavailable.
 
 ### Monthly Upscan Callback

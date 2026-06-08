@@ -134,6 +134,15 @@ class MonthlyReturnControllerISpec extends BaseIntegrationSpec {
       result.status shouldBe NOT_FOUND
     }
 
+    "return 422 Unprocessable Entity when the MonthlyReturn has already been declared" in {
+      postJson(monthlyPath, nilReturnFalseRequest).status shouldBe CREATED
+      postJson(declarationsPath, Json.obj()).status shouldBe NO_CONTENT
+
+      val result = putJson(nilReturnPath, nilReturnValueTrueRequest)
+
+      result.status shouldBe UNPROCESSABLE_ENTITY
+    }
+
     "return 400 Bad Request when the nilReturn update value is invalid" in {
       val result = putJson(nilReturnPath, invalidNilReturnValueRequest)
 

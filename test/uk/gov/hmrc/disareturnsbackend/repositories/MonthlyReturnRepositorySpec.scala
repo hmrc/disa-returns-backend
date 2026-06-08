@@ -23,6 +23,7 @@ import uk.gov.hmrc.disareturnsbackend.models.FileUploadStatus.*
 import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository.CreateFileUploadRepositoryResult.*
 import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository.DeclareMonthlyReturnRepositoryResult
+import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository.UpdateNilReturnRepositoryResult
 import uk.gov.hmrc.mongo.test.DefaultPlayMongoRepositorySupport
 
 import java.time.{Clock, Instant, ZoneOffset}
@@ -182,29 +183,49 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
           .upsert(buildMonthlyReturn(fileUploads = List(createdFileUpload(reference = "existing-reference"))))
           .futureValue
 
-        val result = repository.updateNilReturn(zReference, taxYear, month, nilReturn = true).futureValue.value
+        val result = repository.updateNilReturn(zReference, taxYear, month, nilReturn = true).futureValue
 
-        result.nilReturn mustBe true
-        result.fileUploads mustBe Nil
-        result.createdOn mustBe existingUpdated
-        result.lastUpdated mustBe fixedNow
+        result match {
+          case UpdateNilReturnRepositoryResult.NilReturnUpdated(monthlyReturn) =>
+            monthlyReturn.nilReturn mustBe true
+            monthlyReturn.fileUploads mustBe Nil
+            monthlyReturn.createdOn mustBe existingUpdated
+            monthlyReturn.lastUpdated mustBe fixedNow
 
-        repository.get(zReference, taxYear, month).futureValue.value mustBe result
+            repository.get(zReference, taxYear, month).futureValue.value mustBe monthlyReturn
+          case other                                                           =>
+            fail(s"Expected NilReturnUpdated, got $other")
+        }
       }
 
       "must set nilReturn to false" in {
         repository.upsert(buildMonthlyReturn(nilReturn = true)).futureValue
 
-        val result = repository.updateNilReturn(zReference, taxYear, month, nilReturn = false).futureValue.value
+        val result = repository.updateNilReturn(zReference, taxYear, month, nilReturn = false).futureValue
 
-        result.nilReturn mustBe false
-        result.fileUploads mustBe Nil
-        result.createdOn mustBe existingUpdated
-        result.lastUpdated mustBe fixedNow
+        result match {
+          case UpdateNilReturnRepositoryResult.NilReturnUpdated(monthlyReturn) =>
+            monthlyReturn.nilReturn mustBe false
+            monthlyReturn.fileUploads mustBe Nil
+            monthlyReturn.createdOn mustBe existingUpdated
+            monthlyReturn.lastUpdated mustBe fixedNow
+          case other                                                           =>
+            fail(s"Expected NilReturnUpdated, got $other")
+        }
       }
 
-      "must return None when the MonthlyReturn does not exist" in {
-        repository.updateNilReturn(zReference, taxYear, month, nilReturn = true).futureValue mustBe None
+      "must return MonthlyReturnAlreadyDeclared when the MonthlyReturn has already been declared" in {
+        repository.upsert(buildMonthlyReturn(declaredOn = Some(existingUpdated))).futureValue
+
+        repository.updateNilReturn(zReference, taxYear, month, nilReturn = true).futureValue mustBe
+          UpdateNilReturnRepositoryResult.MonthlyReturnAlreadyDeclared
+
+        repository.get(zReference, taxYear, month).futureValue.value.declaredOn mustBe Some(existingUpdated)
+      }
+
+      "must return MonthlyReturnNotFound when the MonthlyReturn does not exist" in {
+        repository.updateNilReturn(zReference, taxYear, month, nilReturn = true).futureValue mustBe
+          UpdateNilReturnRepositoryResult.MonthlyReturnNotFound
       }
     }
 

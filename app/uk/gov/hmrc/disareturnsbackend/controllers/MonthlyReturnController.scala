@@ -21,7 +21,7 @@ import play.api.Logging
 import play.api.libs.json.{JsValue, Json}
 import play.api.mvc.{Action, AnyContent, ControllerComponents, Result}
 import uk.gov.hmrc.disareturnsbackend.models.{CreateFileUploadRequest, CreateMonthlyReturnRequest, CreateMonthlyReturnResponse, UpdateNilReturnRequest}
-import uk.gov.hmrc.disareturnsbackend.services.{CreateFileUploadResult, CreateMonthlyReturnResult, DeclareMonthlyReturnResult, MonthlyReturnService}
+import uk.gov.hmrc.disareturnsbackend.services.{CreateFileUploadResult, CreateMonthlyReturnResult, DeclareMonthlyReturnResult, MonthlyReturnService, UpdateNilReturnResult}
 import uk.gov.hmrc.disareturnsbackend.validators.ValidationHelper
 import uk.gov.hmrc.play.bootstrap.backend.controller.BackendController
 import uk.gov.hmrc.play.bootstrap.controller.WithJsonBody
@@ -86,8 +86,9 @@ class MonthlyReturnController @Inject() (
           monthlyReturnService
             .updateNilReturn(validZReference, validTaxYear, validMonth, updateRequest.value)
             .map {
-              case Some(monthlyReturn) => Ok(Json.toJson(monthlyReturn))
-              case None                => NotFound
+              case UpdateNilReturnResult.NilReturnUpdated(monthlyReturn) => Ok(Json.toJson(monthlyReturn))
+              case UpdateNilReturnResult.MonthlyReturnAlreadyDeclared    => UnprocessableEntity
+              case UpdateNilReturnResult.MonthlyReturnNotFound           => NotFound
             }
             .recover { case NonFatal(_) => ServiceUnavailable }
         }

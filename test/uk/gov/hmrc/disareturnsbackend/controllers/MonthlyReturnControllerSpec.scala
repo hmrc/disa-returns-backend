@@ -31,6 +31,7 @@ import uk.gov.hmrc.disareturnsbackend.services.CreateFileUploadResult
 import uk.gov.hmrc.disareturnsbackend.services.DeclareMonthlyReturnResult
 import uk.gov.hmrc.disareturnsbackend.services.CreateMonthlyReturnResult.{AlreadyExists, Created}
 import uk.gov.hmrc.disareturnsbackend.services.MonthlyReturnService
+import uk.gov.hmrc.disareturnsbackend.services.UpdateNilReturnResult
 
 import scala.concurrent.Future
 
@@ -192,7 +193,7 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
       when(
         mockMonthlyReturnService.updateNilReturn(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth), eqTo(true))
       )
-        .thenReturn(Future.successful(Some(updatedReturn)))
+        .thenReturn(Future.successful(UpdateNilReturnResult.NilReturnUpdated(updatedReturn)))
 
       val result = controller.updateNilReturn(testZReference, testTaxYear, testRouteMonth)(
         FakeRequest("PUT", nilReturnPath).withBody(Json.obj(valueFieldName -> true))
@@ -206,13 +207,26 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
       when(
         mockMonthlyReturnService.updateNilReturn(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth), eqTo(true))
       )
-        .thenReturn(Future.successful(None))
+        .thenReturn(Future.successful(UpdateNilReturnResult.MonthlyReturnNotFound))
 
       val result = controller.updateNilReturn(testZReference, testTaxYear, testRouteMonth)(
         FakeRequest("PUT", nilReturnPath).withBody(Json.obj(valueFieldName -> true))
       )
 
       status(result) mustBe NOT_FOUND
+    }
+
+    "must return UNPROCESSABLE_ENTITY when the MonthlyReturn has already been declared" in {
+      when(
+        mockMonthlyReturnService.updateNilReturn(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth), eqTo(true))
+      )
+        .thenReturn(Future.successful(UpdateNilReturnResult.MonthlyReturnAlreadyDeclared))
+
+      val result = controller.updateNilReturn(testZReference, testTaxYear, testRouteMonth)(
+        FakeRequest("PUT", nilReturnPath).withBody(Json.obj(valueFieldName -> true))
+      )
+
+      status(result) mustBe UNPROCESSABLE_ENTITY
     }
 
     "must return SERVICE_UNAVAILABLE when the service fails" in {

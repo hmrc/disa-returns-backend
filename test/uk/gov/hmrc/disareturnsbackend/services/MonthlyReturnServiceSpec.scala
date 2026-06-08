@@ -23,7 +23,7 @@ import org.scalatest.BeforeAndAfterEach
 import uk.gov.hmrc.disareturnsbackend.config.AppConfig
 import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository
-import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository.{CreateFileUploadRepositoryResult, DeclareMonthlyReturnRepositoryResult}
+import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository.{CreateFileUploadRepositoryResult, DeclareMonthlyReturnRepositoryResult, UpdateNilReturnRepositoryResult}
 import uk.gov.hmrc.disareturnsbackend.services.CreateMonthlyReturnResult.{AlreadyExists, Created}
 
 import java.time.{Clock, Instant, ZoneOffset}
@@ -111,11 +111,28 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
         val updatedReturn = monthlyReturn.copy(nilReturn = true)
 
         when(mockMonthlyReturnRepository.updateNilReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(true)))
-          .thenReturn(Future.successful(Some(updatedReturn)))
+          .thenReturn(Future.successful(UpdateNilReturnRepositoryResult.NilReturnUpdated(updatedReturn)))
 
-        service.updateNilReturn(zReference, taxYear, month, nilReturn = true).futureValue mustBe Some(updatedReturn)
+        service.updateNilReturn(zReference, taxYear, month, nilReturn = true).futureValue mustBe
+          UpdateNilReturnResult.NilReturnUpdated(updatedReturn)
 
         verify(mockMonthlyReturnRepository).updateNilReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(true))
+      }
+
+      "must return MonthlyReturnAlreadyDeclared when the repository rejects a declared return" in {
+        when(mockMonthlyReturnRepository.updateNilReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(true)))
+          .thenReturn(Future.successful(UpdateNilReturnRepositoryResult.MonthlyReturnAlreadyDeclared))
+
+        service.updateNilReturn(zReference, taxYear, month, nilReturn = true).futureValue mustBe
+          UpdateNilReturnResult.MonthlyReturnAlreadyDeclared
+      }
+
+      "must return MonthlyReturnNotFound when the repository cannot find the MonthlyReturn" in {
+        when(mockMonthlyReturnRepository.updateNilReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(true)))
+          .thenReturn(Future.successful(UpdateNilReturnRepositoryResult.MonthlyReturnNotFound))
+
+        service.updateNilReturn(zReference, taxYear, month, nilReturn = true).futureValue mustBe
+          UpdateNilReturnResult.MonthlyReturnNotFound
       }
     }
 

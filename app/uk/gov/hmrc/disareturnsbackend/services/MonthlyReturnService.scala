@@ -20,7 +20,7 @@ import play.api.Logging
 import uk.gov.hmrc.disareturnsbackend.config.AppConfig
 import uk.gov.hmrc.disareturnsbackend.models.{FileUpload, MonthlyReturn}
 import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository
-import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository.{CreateFileUploadRepositoryResult, DeclareMonthlyReturnRepositoryResult}
+import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository.{CreateFileUploadRepositoryResult, DeclareMonthlyReturnRepositoryResult, UpdateNilReturnRepositoryResult}
 import uk.gov.hmrc.disareturnsbackend.services.CreateFileUploadResult.*
 import uk.gov.hmrc.disareturnsbackend.services.CreateMonthlyReturnResult.{AlreadyExists, Created}
 
@@ -101,22 +101,27 @@ class MonthlyReturnService @Inject() (
     taxYear: String,
     month: Int,
     nilReturn: Boolean
-  ): Future[Option[MonthlyReturn]] =
+  ): Future[UpdateNilReturnResult] =
     monthlyReturnRepository
       .updateNilReturn(zReference, taxYear, month, nilReturn)
-      .map { maybeMonthlyReturn =>
-        maybeMonthlyReturn match {
-          case Some(_) =>
-            logger.info(
-              s"[MonthlyReturnService][updateNilReturn] Updated nilReturn to [$nilReturn] for zReference [$zReference], taxYear [$taxYear], month [$month]"
-            )
-          case None    =>
-            logger.warn(
-              s"[MonthlyReturnService][updateNilReturn] No monthly return found for zReference [$zReference], taxYear [$taxYear], month [$month]"
-            )
-        }
+      .map {
+        case UpdateNilReturnRepositoryResult.NilReturnUpdated(monthlyReturn) =>
+          logger.info(
+            s"[MonthlyReturnService][updateNilReturn] Updated nilReturn to [$nilReturn] for zReference [$zReference], taxYear [$taxYear], month [$month]"
+          )
+          UpdateNilReturnResult.NilReturnUpdated(monthlyReturn)
 
-        maybeMonthlyReturn
+        case UpdateNilReturnRepositoryResult.MonthlyReturnAlreadyDeclared =>
+          logger.warn(
+            s"[MonthlyReturnService][updateNilReturn] Monthly return already declared for zReference [$zReference], taxYear [$taxYear], month [$month]"
+          )
+          UpdateNilReturnResult.MonthlyReturnAlreadyDeclared
+
+        case UpdateNilReturnRepositoryResult.MonthlyReturnNotFound =>
+          logger.warn(
+            s"[MonthlyReturnService][updateNilReturn] No monthly return found for zReference [$zReference], taxYear [$taxYear], month [$month]"
+          )
+          UpdateNilReturnResult.MonthlyReturnNotFound
       }
       .recoverWith { case NonFatal(exception) =>
         logger.error(
@@ -284,6 +289,14 @@ object CreateFileUploadResult {
   case object FileUploadAlreadyExists extends CreateFileUploadResult
   case object MonthlyReturnAlreadyDeclared extends CreateFileUploadResult
   case object MonthlyReturnNotFound extends CreateFileUploadResult
+}
+
+sealed trait UpdateNilReturnResult
+
+object UpdateNilReturnResult {
+  final case class NilReturnUpdated(monthlyReturn: MonthlyReturn) extends UpdateNilReturnResult
+  case object MonthlyReturnAlreadyDeclared extends UpdateNilReturnResult
+  case object MonthlyReturnNotFound extends UpdateNilReturnResult
 }
 
 sealed trait DeclareMonthlyReturnResult
