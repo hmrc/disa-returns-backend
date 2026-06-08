@@ -22,11 +22,13 @@ import uk.gov.hmrc.disareturnsbackend.config.AppConfig
 import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository.CreateFileUploadRepositoryResult
 import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository.CreateFileUploadRepositoryResult.*
+import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository.DeclareMonthlyReturnRepositoryResult
 import uk.gov.hmrc.mongo.MongoComponent
 import uk.gov.hmrc.mongo.MongoUtils.DuplicateKey
 import uk.gov.hmrc.mongo.play.json.{Codecs, PlayMongoRepository}
 
 import java.time.{Clock, Instant}
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
 import javax.inject.{Inject, Singleton}
 import scala.concurrent.{ExecutionContext, Future}
@@ -111,6 +113,25 @@ class MonthlyReturnRepository @Inject() (
     }
   }
 
+  def declare(zReference: String, taxYear: String, month: Int): Future[DeclareMonthlyReturnRepositoryResult] = {
+    val declaredOn = now()
+
+    get(zReference, taxYear, month).flatMap {
+      case Some(monthlyReturn) if monthlyReturn.hasDeclaration =>
+        Future.successful(DeclareMonthlyReturnRepositoryResult.MonthlyReturnAlreadyDeclared)
+
+      case Some(monthlyReturn) =>
+        val updatedMonthlyReturn = monthlyReturn.declare(declaredOn)
+
+        replace(updatedMonthlyReturn).map(_ =>
+          DeclareMonthlyReturnRepositoryResult.MonthlyReturnDeclared(updatedMonthlyReturn)
+        )
+
+      case None =>
+        Future.successful(DeclareMonthlyReturnRepositoryResult.MonthlyReturnNotFound)
+    }
+  }
+
   def createFileUpload(
     zReference: String,
     taxYear: String,
@@ -122,6 +143,9 @@ class MonthlyReturnRepository @Inject() (
     get(zReference, taxYear, month).flatMap {
       case Some(monthlyReturn) if monthlyReturn.nilReturn =>
         Future.successful(MonthlyReturnNotFound)
+
+      case Some(monthlyReturn) if monthlyReturn.hasDeclaration =>
+        Future.successful(MonthlyReturnAlreadyDeclared)
 
       case Some(monthlyReturn) if monthlyReturn.fileUploads.exists(_.reference == reference) =>
         Future.successful(FileUploadAlreadyExists)
@@ -146,6 +170,29 @@ class MonthlyReturnRepository @Inject() (
     reference: String
   ): Future[Option[FileUpload]] =
     get(zReference, taxYear, month).map(_.flatMap(_.fileUploads.find(_.reference == reference)))
+
+  def deleteFileUpload(
+    zReference: String,
+    taxYear: String,
+    month: Int,
+    reference: String
+  ): Future[Boolean] = {
+    val updatedOn = now()
+
+    get(zReference, taxYear, month).flatMap {
+      case Some(monthlyReturn) =>
+        val updatedMonthlyReturn = monthlyReturn.deleteFileUpload(reference, updatedOn)
+
+        if (updatedMonthlyReturn == monthlyReturn) {
+          Future.successful(false)
+        } else {
+          replace(updatedMonthlyReturn)
+        }
+
+      case None =>
+        Future.successful(false)
+    }
+  }
 
   def completeUpscan(
     zReference: String,
@@ -201,7 +248,7 @@ class MonthlyReturnRepository @Inject() (
       Filters.equal("month", month)
     )
 
-  private def now(): Instant = Instant.now(clock)
+  private def now(): Instant = Instant.now(clock).truncatedTo(ChronoUnit.MILLIS)
 }
 
 object MonthlyReturnRepository {
@@ -211,6 +258,15 @@ object MonthlyReturnRepository {
   object CreateFileUploadRepositoryResult {
     final case class FileUploadCreated(monthlyReturn: MonthlyReturn) extends CreateFileUploadRepositoryResult
     case object FileUploadAlreadyExists extends CreateFileUploadRepositoryResult
+    case object MonthlyReturnAlreadyDeclared extends CreateFileUploadRepositoryResult
     case object MonthlyReturnNotFound extends CreateFileUploadRepositoryResult
+  }
+
+  sealed trait DeclareMonthlyReturnRepositoryResult
+
+  object DeclareMonthlyReturnRepositoryResult {
+    final case class MonthlyReturnDeclared(monthlyReturn: MonthlyReturn) extends DeclareMonthlyReturnRepositoryResult
+    case object MonthlyReturnAlreadyDeclared extends DeclareMonthlyReturnRepositoryResult
+    case object MonthlyReturnNotFound extends DeclareMonthlyReturnRepositoryResult
   }
 }

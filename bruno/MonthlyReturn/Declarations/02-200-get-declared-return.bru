@@ -1,0 +1,29 @@
+meta {
+  name: 02-200-get-declared-return
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{declarationZReference}}/{{taxYear}}/{{month}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.zReference: eq {{declarationZReference}}
+  res.body.taxYear: eq {{taxYear}}
+  res.body.month: eq {{month}}
+  res.body.declaredOn: eq {{declaredOn}}
+}
+
+script:pre-request {
+  if (bru.getVar("monthlyReturnDeclared") !== "true") {
+    const response = await bru.runRequest("MonthlyReturn/Declarations/01-200-declare-return");
+  
+    if (response.status !== 200) {
+      throw new Error(`Expected declaration request to respond with 200, got ${response.status}`);
+    }
+  }
+}

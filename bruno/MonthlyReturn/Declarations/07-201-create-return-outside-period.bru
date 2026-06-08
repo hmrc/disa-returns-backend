@@ -1,0 +1,41 @@
+meta {
+  name: 07-201-create-return-outside-period
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{outsidePeriodZReference}}/{{taxYear}}/{{month}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "nilReturn": false
+  }
+}
+
+assert {
+  res.status: eq 201
+}
+
+script:pre-request {
+  if (!bru.getVar("outsidePeriodZReference")) {
+    const response = await bru.runRequest("MonthlyReturn/Declarations/06-200-set-clock-outside-period");
+  
+    if (response.status !== 200) {
+      throw new Error(`Expected clock setup to respond with 200, got ${response.status}`);
+    }
+  }
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setVar("outsidePeriodReturnCreated", "true");
+  }
+}

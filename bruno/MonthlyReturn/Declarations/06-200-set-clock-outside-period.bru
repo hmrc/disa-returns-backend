@@ -1,0 +1,23 @@
+meta {
+  name: 06-200-set-clock-outside-period
+  type: http
+  seq: 7
+}
+
+put {
+  url: {{baseUrl}}{{servicePath}}/test-only/clock/2026-05-20
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.date: eq 2026-05-20
+}
+
+script:pre-request {
+  const value = (Date.now() + Math.floor(Math.random() * 1000)) % 10000;
+  bru.setVar("outsidePeriodZReference", `Z${value.toString().padStart(4, "0")}`);
+  bru.setVar("outsidePeriodReturnCreated", "false");
+  bru.setVar("outsidePeriodDeclarationRejected", "false");
+}

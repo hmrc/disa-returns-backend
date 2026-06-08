@@ -1,0 +1,36 @@
+meta {
+  name: 09-201-create-file-after-outside-period-declaration-rejected
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{outsidePeriodZReference}}/{{taxYear}}/{{month}}/files
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "reference": "{{upscanReference}}"
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.headers.location: eq {{servicePath}}/monthly/{{outsidePeriodZReference}}/{{taxYear}}/{{month}}/files/{{upscanReference}}
+}
+
+script:pre-request {
+  if (bru.getVar("outsidePeriodDeclarationRejected") !== "true") {
+    const response = await bru.runRequest("MonthlyReturn/Declarations/08-422-declare-outside-period");
+  
+    if (response.status !== 422) {
+      throw new Error(`Expected outside-period declaration to respond with 422, got ${response.status}`);
+    }
+  }
+}

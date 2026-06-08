@@ -28,6 +28,7 @@ import play.api.test.FakeRequest
 import play.api.test.Helpers.*
 import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.services.CreateFileUploadResult
+import uk.gov.hmrc.disareturnsbackend.services.DeclareMonthlyReturnResult
 import uk.gov.hmrc.disareturnsbackend.services.CreateMonthlyReturnResult.{AlreadyExists, Created}
 import uk.gov.hmrc.disareturnsbackend.services.MonthlyReturnService
 
@@ -45,10 +46,11 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
 
   private lazy val controller = inject[MonthlyReturnController]
 
-  private val path          = s"/monthly/$testZReference/$testTaxYear/$testRouteMonth"
-  private val nilReturnPath = s"$path/nilReturn"
-  private val filesPath     = s"$path/files"
-  private val filePath      = s"$filesPath/$testUploadReference"
+  private val path             = s"/monthly/$testZReference/$testTaxYear/$testRouteMonth"
+  private val nilReturnPath    = s"$path/nilReturn"
+  private val declarationsPath = s"$path/declarations"
+  private val filesPath        = s"$path/files"
+  private val filePath         = s"$filesPath/$testUploadReference"
 
   private val monthlyReturn = MonthlyReturn(
     zReference = testZReference,
@@ -212,6 +214,77 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
     }
   }
 
+  "MonthlyReturnController.declareMonthlyReturn" - {
+
+    "must return OK with the declared MonthlyReturn" in {
+      val declaredReturn = monthlyReturn.copy(declaredOn = Some(testCreatedOn), lastUpdated = testCreatedOn)
+
+      when(mockMonthlyReturnService.declare(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth)))
+        .thenReturn(Future.successful(DeclareMonthlyReturnResult.Declared(declaredReturn)))
+
+      val result = controller.declareMonthlyReturn(lowercaseTestZReference, testTaxYear, testRouteMonth)(
+        FakeRequest("POST", declarationsPath)
+      )
+
+      status(result) mustBe OK
+      contentAsJson(result) mustBe Json.toJson(declaredReturn)
+      verify(mockMonthlyReturnService).declare(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth))
+    }
+
+    "must return CONFLICT when the MonthlyReturn has already been declared" in {
+      when(mockMonthlyReturnService.declare(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth)))
+        .thenReturn(Future.successful(DeclareMonthlyReturnResult.AlreadyDeclared))
+
+      val result = controller.declareMonthlyReturn(testZReference, testTaxYear, testRouteMonth)(
+        FakeRequest("POST", declarationsPath)
+      )
+
+      status(result) mustBe CONFLICT
+    }
+
+    "must return NOT_FOUND when the MonthlyReturn does not exist" in {
+      when(mockMonthlyReturnService.declare(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth)))
+        .thenReturn(Future.successful(DeclareMonthlyReturnResult.MonthlyReturnNotFound))
+
+      val result = controller.declareMonthlyReturn(testZReference, testTaxYear, testRouteMonth)(
+        FakeRequest("POST", declarationsPath)
+      )
+
+      status(result) mustBe NOT_FOUND
+    }
+
+    "must return UNPROCESSABLE_ENTITY when the declaration period is closed" in {
+      when(mockMonthlyReturnService.declare(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth)))
+        .thenReturn(Future.successful(DeclareMonthlyReturnResult.OutsideDeclarationPeriod))
+
+      val result = controller.declareMonthlyReturn(testZReference, testTaxYear, testRouteMonth)(
+        FakeRequest("POST", declarationsPath)
+      )
+
+      status(result) mustBe UNPROCESSABLE_ENTITY
+    }
+
+    "must return SERVICE_UNAVAILABLE when the service fails" in {
+      when(mockMonthlyReturnService.declare(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth)))
+        .thenReturn(Future.failed(new RuntimeException(testMongoDownMessage)))
+
+      val result = controller.declareMonthlyReturn(testZReference, testTaxYear, testRouteMonth)(
+        FakeRequest("POST", declarationsPath)
+      )
+
+      status(result) mustBe SERVICE_UNAVAILABLE
+    }
+
+    "must return BAD_REQUEST when path parameters are invalid" in {
+      val result = controller.declareMonthlyReturn(invalidTestZReference, testTaxYear, testRouteMonth)(
+        FakeRequest("POST", declarationsPath)
+      )
+
+      status(result) mustBe BAD_REQUEST
+      contentAsString(result) must include(zReferenceFieldName)
+    }
+  }
+
   "MonthlyReturnController.createFileUpload" - {
 
     "must return CREATED with Location header when the file upload is created" in {
@@ -277,6 +350,24 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
       )
 
       status(result) mustBe CONFLICT
+    }
+
+    "must return UNPROCESSABLE_ENTITY when the MonthlyReturn has already been declared" in {
+      when(
+        mockMonthlyReturnService.createFileUpload(
+          eqTo(testZReference),
+          eqTo(testTaxYear),
+          eqTo(testMonth),
+          eqTo(testUploadReference)
+        )
+      )
+        .thenReturn(Future.successful(CreateFileUploadResult.MonthlyReturnAlreadyDeclared))
+
+      val result = controller.createFileUpload(testZReference, testTaxYear, testRouteMonth)(
+        FakeRequest("POST", filesPath).withBody(Json.toJson(CreateFileUploadRequest(testUploadReference)))
+      )
+
+      status(result) mustBe UNPROCESSABLE_ENTITY
     }
 
     "must return SERVICE_UNAVAILABLE when the service fails" in {
@@ -359,6 +450,72 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
       )
 
       status(result) mustBe SERVICE_UNAVAILABLE
+    }
+  }
+
+  "MonthlyReturnController.deleteFileUpload" - {
+
+    "must return NO_CONTENT when the FileUpload is deleted" in {
+      when(
+        mockMonthlyReturnService.deleteFileUpload(
+          eqTo(testZReference),
+          eqTo(testTaxYear),
+          eqTo(testMonth),
+          eqTo(testUploadReference)
+        )
+      )
+        .thenReturn(Future.successful(true))
+
+      val result = controller.deleteFileUpload(testZReference, testTaxYear, testRouteMonth, testUploadReference)(
+        FakeRequest("DELETE", filePath)
+      )
+
+      status(result) mustBe NO_CONTENT
+    }
+
+    "must return NOT_FOUND when the FileUpload does not exist" in {
+      when(
+        mockMonthlyReturnService.deleteFileUpload(
+          eqTo(testZReference),
+          eqTo(testTaxYear),
+          eqTo(testMonth),
+          eqTo(testUploadReference)
+        )
+      )
+        .thenReturn(Future.successful(false))
+
+      val result = controller.deleteFileUpload(testZReference, testTaxYear, testRouteMonth, testUploadReference)(
+        FakeRequest("DELETE", filePath)
+      )
+
+      status(result) mustBe NOT_FOUND
+    }
+
+    "must return SERVICE_UNAVAILABLE when the service fails" in {
+      when(
+        mockMonthlyReturnService.deleteFileUpload(
+          eqTo(testZReference),
+          eqTo(testTaxYear),
+          eqTo(testMonth),
+          eqTo(testUploadReference)
+        )
+      )
+        .thenReturn(Future.failed(new RuntimeException(testMongoDownMessage)))
+
+      val result = controller.deleteFileUpload(testZReference, testTaxYear, testRouteMonth, testUploadReference)(
+        FakeRequest("DELETE", filePath)
+      )
+
+      status(result) mustBe SERVICE_UNAVAILABLE
+    }
+
+    "must return BAD_REQUEST when path parameters are invalid" in {
+      val result = controller.deleteFileUpload(invalidTestZReference, testTaxYear, testRouteMonth, testUploadReference)(
+        FakeRequest("DELETE", filePath)
+      )
+
+      status(result) mustBe BAD_REQUEST
+      contentAsString(result) must include(zReferenceFieldName)
     }
   }
 }

@@ -1,0 +1,31 @@
+meta {
+  name: 03-204-delete-file-upload
+  type: http
+  seq: 4
+}
+
+delete {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{deleteZReference}}/{{taxYear}}/{{month}}/files/{{upscanReference}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 204
+}
+
+script:pre-request {
+  if (bru.getVar("deleteFileUploadCreated") !== "true") {
+    const response = await bru.runRequest("MonthlyReturn/Delete/01-201-create-file-upload-for-delete");
+  
+    if (response.status !== 201) {
+      throw new Error(`Expected delete file setup to respond with 201, got ${response.status}`);
+    }
+  }
+}
+
+script:post-response {
+  if (res.status === 204) {
+    bru.setVar("deleteFileDeleted", "true");
+  }
+}

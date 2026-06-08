@@ -1,0 +1,27 @@
+meta {
+  name: 02-200-get-file-upload-before-delete
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{deleteZReference}}/{{taxYear}}/{{month}}/files/{{upscanReference}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.reference: eq {{upscanReference}}
+  res.body.status: eq CREATED
+}
+
+script:pre-request {
+  if (bru.getVar("deleteFileUploadCreated") !== "true") {
+    const response = await bru.runRequest("MonthlyReturn/Delete/01-201-create-file-upload-for-delete");
+  
+    if (response.status !== 201) {
+      throw new Error(`Expected delete file setup to respond with 201, got ${response.status}`);
+    }
+  }
+}

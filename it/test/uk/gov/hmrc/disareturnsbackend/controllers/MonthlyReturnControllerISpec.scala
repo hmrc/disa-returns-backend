@@ -17,7 +17,7 @@
 package uk.gov.hmrc.disareturnsbackend.controllers
 
 import play.api.http.HeaderNames.LOCATION
-import play.api.http.Status.{BAD_REQUEST, CONFLICT, CREATED, NOT_FOUND, OK}
+import play.api.http.Status.{BAD_REQUEST, CONFLICT, CREATED, NO_CONTENT, NOT_FOUND, OK, UNPROCESSABLE_ENTITY}
 import play.api.libs.json.{JsValue, Json}
 import play.api.libs.ws.readableAsString
 import uk.gov.hmrc.disareturnsbackend.BaseIntegrationSpec
@@ -29,10 +29,10 @@ class MonthlyReturnControllerISpec extends BaseIntegrationSpec {
     s"$testServicePath/monthly/$invalidTestZReference/$invalidTestTaxYear/$invalidTestMonth"
   private val nilReturnPath = s"$monthlyPath/nilReturn"
   private val isoInstantPattern = "\\d{4}-\\d{2}-\\d{2}T.*Z"
+  private val declarationsPath = s"$monthlyPath/declarations"
   private val filesPath = s"$monthlyPath/files"
   private val filePath = s"$filesPath/$testUploadReference"
 
-  private val nilReturnFalseRequest = Json.obj(nilReturnFieldName -> false)
   private val nilReturnTrueRequest = Json.obj(nilReturnFieldName -> true)
   private val invalidNilReturnRequest = Json.obj(nilReturnFieldName -> "false")
   private val nilReturnValueTrueRequest = Json.obj(valueFieldName -> true)
@@ -139,6 +139,42 @@ class MonthlyReturnControllerISpec extends BaseIntegrationSpec {
     }
   }
 
+  "POST to monthly return declarations" should {
+
+    "return 200 OK with declaredOn when the MonthlyReturn exists" in {
+      postJson(monthlyPath, nilReturnFalseRequest)
+
+      val result = postJson(declarationsPath, Json.obj())
+
+      result.status shouldBe OK
+      (result.json \ declaredOnFieldName).as[String] shouldBe testCreatedOnString
+      (result.json \ lastUpdatedFieldName).as[String] shouldBe testCreatedOnString
+    }
+
+    "return 409 Conflict when the MonthlyReturn has already been declared" in {
+      postJson(monthlyPath, nilReturnFalseRequest)
+      postJson(declarationsPath, Json.obj()).status shouldBe OK
+
+      val result = postJson(declarationsPath, Json.obj())
+
+      result.status shouldBe CONFLICT
+    }
+
+    "return 404 Not Found when the MonthlyReturn does not exist" in {
+      val result = postJson(declarationsPath, Json.obj())
+
+      result.status shouldBe NOT_FOUND
+    }
+
+    "return 400 Bad Request when path parameters are invalid" in {
+      val result = postJson(s"$invalidMonthlyPath/declarations", Json.obj())
+
+      result.status shouldBe BAD_REQUEST
+      result.body   should include(zReferenceFieldName)
+      result.body   should include(taxYearFieldName)
+    }
+  }
+
   "POST to monthly return files" should {
 
     "return 201 Created with the file Location when the file upload is created" in {
@@ -163,6 +199,15 @@ class MonthlyReturnControllerISpec extends BaseIntegrationSpec {
       val result = postJson(filesPath, createFileUploadRequest)
 
       result.status shouldBe CONFLICT
+    }
+
+    "return 422 Unprocessable Entity when the MonthlyReturn has already been declared" in {
+      postJson(monthlyPath, nilReturnFalseRequest)
+      postJson(declarationsPath, Json.obj()).status shouldBe OK
+
+      val result = postJson(filesPath, createFileUploadRequest)
+
+      result.status shouldBe UNPROCESSABLE_ENTITY
     }
   }
 
@@ -189,6 +234,29 @@ class MonthlyReturnControllerISpec extends BaseIntegrationSpec {
       postJson(monthlyPath, nilReturnFalseRequest)
 
       val result = get(filePath)
+
+      result.status shouldBe NOT_FOUND
+    }
+  }
+
+  "DELETE to monthly return files" should {
+
+    "return 204 No Content and delete the file upload when it exists" in {
+      postJson(monthlyPath, nilReturnFalseRequest)
+      postJson(filesPath, createFileUploadRequest).status shouldBe CREATED
+
+      val deleteResult = delete(filePath)
+
+      deleteResult.status shouldBe NO_CONTENT
+
+      val getResult = get(filePath)
+      getResult.status shouldBe NOT_FOUND
+    }
+
+    "return 404 Not Found when the file upload does not exist" in {
+      postJson(monthlyPath, nilReturnFalseRequest)
+
+      val result = delete(filePath)
 
       result.status shouldBe NOT_FOUND
     }

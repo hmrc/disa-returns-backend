@@ -11,3 +11,7 @@
 
 # Add all the application routes to the prod.routes file
 ->         /                          prod.Routes
+
+GET        /disa-returns-backend/test-only/clock          uk.gov.hmrc.disareturnsbackend.testOnly.controllers.TestOnlyClockController.getClock
+PUT        /disa-returns-backend/test-only/clock/:date    uk.gov.hmrc.disareturnsbackend.testOnly.controllers.TestOnlyClockController.setDate(date: String)
+DELETE     /disa-returns-backend/test-only/clock          uk.gov.hmrc.disareturnsbackend.testOnly.controllers.TestOnlyClockController.resetClock

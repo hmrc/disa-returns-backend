@@ -20,6 +20,7 @@ import config.{InternalAuthTokenInitialiser, InternalAuthTokenInitialiserImpl, N
 import play.api.{Configuration, Environment}
 import play.api.inject.{Binding, Module as AppModule, bind as binding}
 import uk.gov.hmrc.disareturnsbackend.mappers.{UpscanCallbackMapper, UpscanCallbackMapperImpl}
+import uk.gov.hmrc.disareturnsbackend.testOnly.MutableClock
 
 import java.time.{Clock, ZoneOffset}
 
@@ -43,9 +44,20 @@ class Module extends AppModule:
         )
       }
 
+    val clockBindings: Seq[Binding[?]] =
+      if (configuration.getOptional[String]("application.router").contains("testOnlyDoNotUseInAppConf.Routes")) {
+        Seq(
+          binding[MutableClock].toSelf,
+          binding[Clock].to[MutableClock]
+        )
+      } else {
+        Seq(
+          binding[Clock].to(Clock.systemDefaultZone.withZone(ZoneOffset.UTC))
+        )
+      }
+
     Seq(
-      binding[Clock].to(Clock.systemDefaultZone.withZone(ZoneOffset.UTC)),
       binding[UpscanCallbackMapper].to[UpscanCallbackMapperImpl],
       binding[AppInitialiser].toSelf.eagerly()
-    ) ++ authTokenInitialiserBindings
+    ) ++ clockBindings ++ authTokenInitialiserBindings
   }

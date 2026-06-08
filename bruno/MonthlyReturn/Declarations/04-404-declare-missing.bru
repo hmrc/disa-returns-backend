@@ -1,0 +1,22 @@
+meta {
+  name: 04-404-declare-missing
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{declarationMissingZReference}}/{{taxYear}}/{{month}}/declarations
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 404
+}
+
+script:pre-request {
+  if (!bru.getVar("declarationMissingZReference")) {
+    const value = (Date.now() + Math.floor(Math.random() * 1000)) % 10000;
+    bru.setVar("declarationMissingZReference", `Z${value.toString().padStart(4, "0")}`);
+  }
+}

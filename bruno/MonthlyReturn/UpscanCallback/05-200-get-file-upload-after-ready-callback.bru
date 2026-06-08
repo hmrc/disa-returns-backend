@@ -33,7 +33,7 @@ tests {
     const responseBody = res.body ?? res.getBody();
     const body = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
   
-    expect(body.upscanCompletedOn).to.match(/^\d{4}-\d{2}-\d{2}T.*Z$/);
+    expect(body.fileUploadDetails.upscanCompletedOn).to.match(/^\d{4}-\d{2}-\d{2}T.*Z$/);
     expect(body.fileUploadDetails.fileMimeType).to.equal(bru.getEnvVar("csvMimeType"));
     expect(body.fileUploadDetails.checksum).to.equal(bru.getEnvVar("checksum"));
     expect(body.fileUploadDetails.size).to.equal(Number(bru.getEnvVar("fileSize")));

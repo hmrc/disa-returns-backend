@@ -40,11 +40,26 @@ final case class MonthlyReturn(
   createdOn: Instant,
   nilReturn: Boolean = false,
   fileUploads: List[FileUpload],
+  declaredOn: Option[Instant] = None,
   lastUpdated: Instant
 ) {
 
-  def createFileUpload(reference: String, createdOn: Instant): MonthlyReturn =
-    if (nilReturn || fileUploads.exists(_.reference == reference)) {
+  def hasDeclaration: Boolean = declaredOn.isDefined
+
+  def declare(declaredOn: Instant): MonthlyReturn =
+    if (hasDeclaration) {
+      this
+    } else {
+      copy(
+        declaredOn = Some(declaredOn),
+        lastUpdated = declaredOn
+      )
+    }
+
+  def createFileUpload(reference: String, createdOn: Instant): MonthlyReturn = {
+    val cannotAcceptFileUpload = nilReturn || hasDeclaration || fileUploads.exists(_.reference == reference)
+
+    if (cannotAcceptFileUpload) {
       this
     } else {
       copy(
@@ -56,6 +71,20 @@ final case class MonthlyReturn(
         lastUpdated = createdOn
       )
     }
+  }
+
+  def deleteFileUpload(reference: String, updatedOn: Instant): MonthlyReturn = {
+    val updatedUploads = fileUploads.filterNot(_.reference == reference)
+
+    if (updatedUploads == fileUploads) {
+      this
+    } else {
+      copy(
+        fileUploads = updatedUploads,
+        lastUpdated = updatedOn
+      )
+    }
+  }
 
   def completeUpscan(
     reference: String,
@@ -72,8 +101,7 @@ final case class MonthlyReturn(
         reference = reference,
         status = status,
         createdOn = upscanCompletedOn,
-        upscanCompletedOn = Some(upscanCompletedOn),
-        fileUploadDetails = fileUploadDetails,
+        fileUploadDetails = fileUploadDetails.map(_.copy(upscanCompletedOn = Some(upscanCompletedOn))),
         failureReason = failureReason,
         failureMessage = failureMessage
       )
@@ -148,7 +176,6 @@ final case class FileUpload(
   reference: String,
   status: FileUploadStatus,
   createdOn: Instant,
-  upscanCompletedOn: Option[Instant] = None,
   fileUploadDetails: Option[FileUploadDetails] = None,
   failureReason: Option[FileUploadFailureReason] = None,
   failureMessage: Option[String] = None
@@ -172,7 +199,8 @@ final case class FileUploadDetails(
   uploadTimestamp: Instant,
   checksum: String,
   size: Long,
-  upscanDownloadUrl: String
+  upscanDownloadUrl: String,
+  upscanCompletedOn: Option[Instant] = None
 )
 
 object FileUploadDetails {

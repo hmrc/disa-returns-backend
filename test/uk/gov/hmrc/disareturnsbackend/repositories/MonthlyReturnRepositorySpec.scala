@@ -22,6 +22,7 @@ import uk.gov.hmrc.disareturnsbackend.models.FileUploadFailureReason.Rejected
 import uk.gov.hmrc.disareturnsbackend.models.FileUploadStatus.*
 import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository.CreateFileUploadRepositoryResult.*
+import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository.DeclareMonthlyReturnRepositoryResult
 import uk.gov.hmrc.mongo.test.DefaultPlayMongoRepositorySupport
 
 import java.time.{Clock, Instant, ZoneOffset}
@@ -179,6 +180,35 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
       }
     }
 
+    "declare" - {
+
+      "must declare a MonthlyReturn when it exists" in {
+        repository.upsert(buildMonthlyReturn()).futureValue
+
+        val result = repository.declare(zReference, taxYear, month).futureValue
+
+        val stored = repository.get(zReference, taxYear, month).futureValue.value
+        result mustBe DeclareMonthlyReturnRepositoryResult.MonthlyReturnDeclared(stored)
+        stored.declaredOn mustBe Some(fixedNow)
+        stored.createdOn mustBe existingUpdated
+        stored.lastUpdated mustBe fixedNow
+      }
+
+      "must return MonthlyReturnAlreadyDeclared when the MonthlyReturn has already been declared" in {
+        repository.upsert(buildMonthlyReturn(declaredOn = Some(existingUpdated))).futureValue
+
+        repository.declare(zReference, taxYear, month).futureValue mustBe
+          DeclareMonthlyReturnRepositoryResult.MonthlyReturnAlreadyDeclared
+
+        repository.get(zReference, taxYear, month).futureValue.value.declaredOn mustBe Some(existingUpdated)
+      }
+
+      "must return MonthlyReturnNotFound when the MonthlyReturn does not exist" in {
+        repository.declare(zReference, taxYear, month).futureValue mustBe
+          DeclareMonthlyReturnRepositoryResult.MonthlyReturnNotFound
+      }
+    }
+
     "createFileUpload" - {
 
       "must return None when the MonthlyReturn does not exist" in {
@@ -229,6 +259,16 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
 
         repository.get(zReference, taxYear, month).futureValue.value.fileUploads mustBe Nil
       }
+
+      "must not append a file upload when the MonthlyReturn has already been declared" in {
+        repository.upsert(buildMonthlyReturn(declaredOn = Some(existingUpdated))).futureValue
+
+        repository
+          .createFileUpload(zReference, taxYear, month, uploadReference)
+          .futureValue mustBe MonthlyReturnAlreadyDeclared
+
+        repository.get(zReference, taxYear, month).futureValue.value.fileUploads mustBe Nil
+      }
     }
 
     "getFileUpload" - {
@@ -248,6 +288,30 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
         repository.upsert(buildMonthlyReturn()).futureValue
 
         repository.getFileUpload(zReference, taxYear, month, uploadReference).futureValue mustBe None
+      }
+    }
+
+    "deleteFileUpload" - {
+
+      "must remove a FileUpload when the MonthlyReturn and FileUpload exist" in {
+        val fileUpload = createdFileUpload()
+        repository.upsert(buildMonthlyReturn(fileUploads = List(fileUpload))).futureValue
+
+        repository.deleteFileUpload(zReference, taxYear, month, uploadReference).futureValue mustBe true
+
+        val stored = repository.get(zReference, taxYear, month).futureValue.value
+        stored.fileUploads mustBe Nil
+        stored.lastUpdated mustBe fixedNow
+      }
+
+      "must return false when the MonthlyReturn does not exist" in {
+        repository.deleteFileUpload(zReference, taxYear, month, uploadReference).futureValue mustBe false
+      }
+
+      "must return false when the FileUpload does not exist" in {
+        repository.upsert(buildMonthlyReturn()).futureValue
+
+        repository.deleteFileUpload(zReference, taxYear, month, uploadReference).futureValue mustBe false
       }
     }
 
@@ -273,8 +337,7 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
           reference = uploadReference,
           status = FileUploadStatus.UpscanSuccess,
           createdOn = fixedNow,
-          upscanCompletedOn = Some(fixedNow),
-          fileUploadDetails = Some(fileUploadDetails)
+          fileUploadDetails = Some(fileUploadDetails.copy(upscanCompletedOn = Some(fixedNow)))
         )
       }
 
@@ -300,7 +363,6 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
           reference = uploadReference,
           status = UpscanRejected,
           createdOn = fixedNow,
-          upscanCompletedOn = Some(fixedNow),
           failureReason = Some(Rejected),
           failureMessage = Some(testDuplicateFileMessage)
         )
@@ -347,8 +409,7 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
             reference = missingUploadReference,
             status = FileUploadStatus.UpscanSuccess,
             createdOn = fixedNow,
-            upscanCompletedOn = Some(fixedNow),
-            fileUploadDetails = Some(fileUploadDetails)
+            fileUploadDetails = Some(fileUploadDetails.copy(upscanCompletedOn = Some(fixedNow)))
           )
         )
       }
@@ -372,8 +433,7 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
             reference = uploadReference,
             status = FileUploadStatus.UpscanSuccess,
             createdOn = fixedNow,
-            upscanCompletedOn = Some(fixedNow),
-            fileUploadDetails = Some(fileUploadDetails)
+            fileUploadDetails = Some(fileUploadDetails.copy(upscanCompletedOn = Some(fixedNow)))
           )
         )
       }
@@ -400,6 +460,7 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
   private def buildMonthlyReturn(
     nilReturn: Boolean = false,
     fileUploads: List[FileUpload] = Nil,
+    declaredOn: Option[Instant] = None,
     lastUpdated: Instant = existingUpdated
   ): MonthlyReturn =
     MonthlyReturn(
@@ -409,6 +470,7 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
       createdOn = lastUpdated,
       nilReturn = nilReturn,
       fileUploads = fileUploads,
+      declaredOn = declaredOn,
       lastUpdated = lastUpdated
     )
 

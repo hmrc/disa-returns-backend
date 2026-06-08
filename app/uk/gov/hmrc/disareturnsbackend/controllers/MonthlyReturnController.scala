@@ -21,7 +21,7 @@ import play.api.Logging
 import play.api.libs.json.{JsValue, Json}
 import play.api.mvc.{Action, AnyContent, ControllerComponents, Result}
 import uk.gov.hmrc.disareturnsbackend.models.{CreateFileUploadRequest, CreateMonthlyReturnRequest, UpdateNilReturnRequest}
-import uk.gov.hmrc.disareturnsbackend.services.{CreateFileUploadResult, CreateMonthlyReturnResult, MonthlyReturnService}
+import uk.gov.hmrc.disareturnsbackend.services.{CreateFileUploadResult, CreateMonthlyReturnResult, DeclareMonthlyReturnResult, MonthlyReturnService}
 import uk.gov.hmrc.disareturnsbackend.validators.ValidationHelper
 import uk.gov.hmrc.play.bootstrap.backend.controller.BackendController
 import uk.gov.hmrc.play.bootstrap.controller.WithJsonBody
@@ -93,6 +93,25 @@ class MonthlyReturnController @Inject() (
       }
     }
 
+  def declareMonthlyReturn(zReference: String, taxYear: String, month: String): Action[AnyContent] =
+    Action.async {
+      logger.info(
+        s"[MonthlyReturnController][declareMonthlyReturn] Declare monthly return request for zReference [$zReference], taxYear [$taxYear], month [$month]"
+      )
+
+      withValidMonthlyReturnParams(zReference, taxYear, month) { (validZReference, validTaxYear, validMonth) =>
+        monthlyReturnService
+          .declare(validZReference, validTaxYear, validMonth)
+          .map {
+            case DeclareMonthlyReturnResult.Declared(monthlyReturn)  => Ok(Json.toJson(monthlyReturn))
+            case DeclareMonthlyReturnResult.AlreadyDeclared          => Conflict
+            case DeclareMonthlyReturnResult.MonthlyReturnNotFound    => NotFound
+            case DeclareMonthlyReturnResult.OutsideDeclarationPeriod => UnprocessableEntity
+          }
+          .recover { case NonFatal(_) => ServiceUnavailable }
+      }
+    }
+
   def createFileUpload(zReference: String, taxYear: String, month: String): Action[JsValue] =
     Action.async(parse.json) { implicit request =>
       withValidMonthlyReturnParams(zReference, taxYear, month) { (validZReference, validTaxYear, validMonth) =>
@@ -104,10 +123,11 @@ class MonthlyReturnController @Inject() (
           monthlyReturnService
             .createFileUpload(validZReference, validTaxYear, validMonth, createRequest.reference)
             .map {
-              case CreateFileUploadResult.FileUploadCreated(_)    =>
+              case CreateFileUploadResult.FileUploadCreated(_)         =>
                 Created.withHeaders(LOCATION -> s"${request.path}/${createRequest.reference}")
-              case CreateFileUploadResult.FileUploadAlreadyExists => Conflict
-              case CreateFileUploadResult.MonthlyReturnNotFound   => NotFound
+              case CreateFileUploadResult.FileUploadAlreadyExists      => Conflict
+              case CreateFileUploadResult.MonthlyReturnAlreadyDeclared => UnprocessableEntity
+              case CreateFileUploadResult.MonthlyReturnNotFound        => NotFound
             }
             .recover { case NonFatal(_) => ServiceUnavailable }
         }
@@ -126,6 +146,23 @@ class MonthlyReturnController @Inject() (
           .map {
             case Some(fileUpload) => Ok(Json.toJson(fileUpload))
             case None             => NotFound
+          }
+          .recover { case NonFatal(_) => ServiceUnavailable }
+      }
+    }
+
+  def deleteFileUpload(zReference: String, taxYear: String, month: String, reference: String): Action[AnyContent] =
+    Action.async {
+      logger.info(
+        s"[MonthlyReturnController][deleteFileUpload] Delete file upload request for zReference [$zReference], taxYear [$taxYear], month [$month], upload reference [$reference]"
+      )
+
+      withValidMonthlyReturnParams(zReference, taxYear, month) { (validZReference, validTaxYear, validMonth) =>
+        monthlyReturnService
+          .deleteFileUpload(validZReference, validTaxYear, validMonth, reference)
+          .map {
+            case true  => NoContent
+            case false => NotFound
           }
           .recover { case NonFatal(_) => ServiceUnavailable }
       }

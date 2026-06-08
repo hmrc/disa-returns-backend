@@ -27,6 +27,7 @@ import org.mongodb.scala.model.Filters
 import play.api.Application
 import play.api.inject.bind
 import play.api.inject.guice.GuiceApplicationBuilder
+import play.api.libs.json.{JsObject, Json}
 import play.api.libs.ws.WSClient
 import play.api.test.DefaultAwaitTimeout
 import play.api.test.Helpers.await
@@ -34,6 +35,7 @@ import uk.gov.hmrc.disareturnsbackend.utils.RequestUtils
 import uk.gov.hmrc.mongo.MongoComponent
 import uk.gov.hmrc.play.audit.http.connector.DatastreamMetrics
 
+import java.time.{Clock, ZoneOffset}
 import scala.concurrent.ExecutionContext
 import scala.reflect.ClassTag
 
@@ -51,7 +53,10 @@ trait BaseIntegrationSpec
 
   override lazy val app: Application = new GuiceApplicationBuilder()
     .configure(config)
-    .overrides(bind[DatastreamMetrics].toInstance(DatastreamMetrics.disabled))
+    .overrides(
+      bind[Clock].toInstance(Clock.fixed(testCreatedOn, ZoneOffset.UTC)),
+      bind[DatastreamMetrics].toInstance(DatastreamMetrics.disabled)
+    )
     .build()
 
   def config: Map[String, Any] =
@@ -73,6 +78,9 @@ trait BaseIntegrationSpec
   }
 
   def serviceUrl(path: String): String = s"http://localhost:$port$path"
+
+  protected val emptyJson: JsObject             = Json.obj()
+  protected val nilReturnFalseRequest: JsObject = Json.obj(nilReturnFieldName -> false)
 
   def clearMongoCollections(): Unit = {
     await(
