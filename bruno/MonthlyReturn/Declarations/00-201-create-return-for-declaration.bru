@@ -26,6 +26,12 @@ assert {
 }
 
 script:pre-request {
+  const clearResponse = await bru.runRequest("TestOnly/MonthlyReturns/01-204-clear-monthly-returns");
+  
+  if (clearResponse.status !== 204) {
+    throw new Error(`Expected monthly returns cleanup to respond with 204, got ${clearResponse.status}`);
+  }
+  
   const base = (Date.now() + Math.floor(Math.random() * 1000)) % 10000;
   
   function zRef(offset) {
@@ -35,12 +41,4 @@ script:pre-request {
   
   bru.setVar("declarationZReference", zRef(0));
   bru.setVar("declarationMissingZReference", zRef(1));
-  bru.setVar("declarationReturnCreated", "false");
-  bru.setVar("monthlyReturnDeclared", "false");
-}
-
-script:post-response {
-  if (res.status === 201) {
-    bru.setVar("declarationReturnCreated", "true");
-  }
 }

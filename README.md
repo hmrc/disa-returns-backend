@@ -257,6 +257,7 @@ Test-only clock routes are available only with that router:
 - `GET /disa-returns-backend/test-only/clock`
 - `PUT /disa-returns-backend/test-only/clock/yyyy-MM-dd`
 - `DELETE /disa-returns-backend/test-only/clock`
+- `DELETE /disa-returns-backend/test-only/monthly-returns`
 
 Use `GET` to inspect the app clock:
 
@@ -278,6 +279,12 @@ curl -X DELETE http://localhost:1207/disa-returns-backend/test-only/clock
 
 For example, set the clock to `2026-05-20` to test declaration attempts outside the configured declaration period.
 
+Use the monthly returns cleanup route to remove all monthly returns from the local database before automation runs:
+
+```bash
+curl -X DELETE http://localhost:1207/disa-returns-backend/test-only/monthly-returns
+```
+
 ### Running the test suite
 
 To run the unit tests:
@@ -298,15 +305,31 @@ The Bruno collection is under `bruno/MonthlyReturn` and is organised into:
 
 - `Create`
 - `Declarations`
+- `Delete`
 - `Get`
 - `Update`
 - `UpscanCallback`
 
-The `bruno/TestOnly/Clock` folder covers the test-only clock routes. It requires the service to be running with `-Dapplication.router=testOnlyDoNotUseInAppConf.Routes`; otherwise the routes will not be available.
+The `bruno/TestOnly/Clock` folder covers the test-only clock routes. The `bruno/TestOnly/MonthlyReturns` folder clears monthly returns from the local database. These require the service to be running with `-Dapplication.router=testOnlyDoNotUseInAppConf.Routes`; otherwise the routes will not be available.
 
-The collection can be run as a whole against a running local service. The first create request generates fresh valid `zReference` values for that run, then the later requests reuse those values to create a monthly return, get it, update `nilReturn` to `true`, and update it back to `false`. The Upscan callback folder also creates a fresh non-nil monthly return with `callbackZReference`, creates a file upload placeholder with `POST /files`, gets that file upload with `GET /files/:reference`, sends a READY callback, then gets the monthly return to confirm the completed file upload was recorded. The GET-after-READY request runs the READY callback setup requests in its pre-request script when needed, so it can also be run directly.
+Monthly return Bruno setup requests call the test-only cleanup route before generating `Zxxxx` references. This avoids collisions with old local data while keeping generated references inside the allowed zReference format. Do not run these Bruno folders in parallel, because cleanup requests delete all monthly returns from the local database.
 
-Generated Bruno `zReference` values are set as runtime variables with `bru.setVar`, not environment variables, so running the collection should not rewrite `bruno/environments/Local.bru`. If you run a later request on its own, run `Create/01-201-create-nil-return-false` first or provide the generated variables manually.
+These Bruno requests clear monthly returns by calling `TestOnly/MonthlyReturns/01-204-clear-monthly-returns` in their pre-request script:
+
+| Request | Why it clears monthly returns |
+| --- | --- |
+| `MonthlyReturn/Create/01-201-create-nil-return-false` | Creates a clean baseline return and generates `zReference`, `nilZReference`, and `missingZReference`. |
+| `MonthlyReturn/Declarations/00-201-create-return-for-declaration` | Creates a clean return to declare and generates declaration references. |
+| `MonthlyReturn/Declarations/04-404-declare-missing` | Ensures the declaration reference is missing. |
+| `MonthlyReturn/Declarations/06-200-set-clock-outside-period` | Creates a clean outside-period scenario and generates `outsidePeriodZReference`. |
+| `MonthlyReturn/Delete/00-201-create-return-for-delete` | Creates a clean return for file delete tests and generates `deleteZReference`. |
+| `MonthlyReturn/UpscanCallback/00-201-create-return-for-success-callback` | Creates a clean return for callback tests and generates `callbackZReference`. |
+
+Many later requests run one of these setup requests from their pre-request script, so they can also clear monthly returns indirectly. For example, `MonthlyReturn/Get/01-200-get-existing` runs `MonthlyReturn/Create/01-201-create-nil-return-false`, and `MonthlyReturn/Update/02-200-set-nil-return-false` runs the update setup chain.
+
+Run executable Bruno folders explicitly against a running local service, for example `bru run MonthlyReturn/Get --env Local --bail`. The setup scripts create the data each folder needs. The Upscan callback folder creates a fresh non-nil monthly return with `callbackZReference`, creates a file upload placeholder with `POST /files`, gets that file upload with `GET /files/:reference`, sends a READY callback, then gets the monthly return to confirm the completed file upload was recorded.
+
+Generated Bruno `zReference` values are set as runtime variables with `bru.setVar`, not environment variables, so running Bruno should not rewrite `bruno/environments/Local.bru`.
 
 The callback requests return `202 Accepted`. Completed file upload details appear on the GET after the READY callback in the collection run.
 

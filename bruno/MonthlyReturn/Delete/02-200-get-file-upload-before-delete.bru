@@ -17,11 +17,9 @@ assert {
 }
 
 script:pre-request {
-  if (bru.getVar("deleteFileUploadCreated") !== "true") {
-    const response = await bru.runRequest("MonthlyReturn/Delete/01-201-create-file-upload-for-delete");
+  const response = await bru.runRequest("MonthlyReturn/Delete/01-201-create-file-upload-for-delete");
   
-    if (response.status !== 201) {
-      throw new Error(`Expected delete file setup to respond with 201, got ${response.status}`);
-    }
+  if (response.status !== 201) {
+    throw new Error(`Expected delete file setup to respond with 201, got ${response.status}`);
   }
 }

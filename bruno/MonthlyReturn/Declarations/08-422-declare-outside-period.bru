@@ -15,17 +15,9 @@ assert {
 }
 
 script:pre-request {
-  if (bru.getVar("outsidePeriodReturnCreated") !== "true") {
-    const response = await bru.runRequest("MonthlyReturn/Declarations/07-201-create-return-outside-period");
+  const response = await bru.runRequest("MonthlyReturn/Declarations/07-201-create-return-outside-period");
   
-    if (response.status !== 201) {
-      throw new Error(`Expected outside-period return setup to respond with 201, got ${response.status}`);
-    }
-  }
-}
-
-script:post-response {
-  if (res.status === 422) {
-    bru.setVar("outsidePeriodDeclarationRejected", "true");
+  if (response.status !== 201) {
+    throw new Error(`Expected outside-period return setup to respond with 201, got ${response.status}`);
   }
 }

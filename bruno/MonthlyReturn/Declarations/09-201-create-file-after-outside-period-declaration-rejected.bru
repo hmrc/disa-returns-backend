@@ -26,11 +26,9 @@ assert {
 }
 
 script:pre-request {
-  if (bru.getVar("outsidePeriodDeclarationRejected") !== "true") {
-    const response = await bru.runRequest("MonthlyReturn/Declarations/08-422-declare-outside-period");
+  const response = await bru.runRequest("MonthlyReturn/Declarations/08-422-declare-outside-period");
   
-    if (response.status !== 422) {
-      throw new Error(`Expected outside-period declaration to respond with 422, got ${response.status}`);
-    }
+  if (response.status !== 422) {
+    throw new Error(`Expected outside-period declaration to respond with 422, got ${response.status}`);
   }
 }

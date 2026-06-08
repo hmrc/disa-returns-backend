@@ -19,11 +19,9 @@ assert {
 }
 
 script:pre-request {
-  if (bru.getVar("monthlyReturnDeclared") !== "true") {
-    const response = await bru.runRequest("MonthlyReturn/Declarations/01-200-declare-return");
+  const response = await bru.runRequest("MonthlyReturn/Declarations/01-200-declare-return");
   
-    if (response.status !== 200) {
-      throw new Error(`Expected declaration request to respond with 200, got ${response.status}`);
-    }
+  if (response.status !== 200) {
+    throw new Error(`Expected declaration request to respond with 200, got ${response.status}`);
   }
 }

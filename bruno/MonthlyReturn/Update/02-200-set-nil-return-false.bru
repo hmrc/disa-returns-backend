@@ -24,3 +24,11 @@ assert {
   res.status: eq 200
   res.body.nilReturn: eq false
 }
+
+script:pre-request {
+  const response = await bru.runRequest("MonthlyReturn/Update/01-200-set-nil-return-true");
+  
+  if (response.status !== 200) {
+    throw new Error(`Expected nilReturn true setup to respond with 200, got ${response.status}`);
+  }
+}

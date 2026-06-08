@@ -18,12 +18,10 @@ assert {
 }
 
 script:pre-request {
-  if (bru.getVar("declarationReturnCreated") !== "true") {
-    const response = await bru.runRequest("MonthlyReturn/Declarations/00-201-create-return-for-declaration");
+  const response = await bru.runRequest("MonthlyReturn/Declarations/00-201-create-return-for-declaration");
   
-    if (response.status !== 201) {
-      throw new Error(`Expected declaration setup to respond with 201, got ${response.status}`);
-    }
+  if (response.status !== 201) {
+    throw new Error(`Expected declaration setup to respond with 201, got ${response.status}`);
   }
 }
 
@@ -32,7 +30,6 @@ script:post-response {
     const responseBody = res.body ?? res.getBody();
     const body = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
   
-    bru.setVar("monthlyReturnDeclared", "true");
     bru.setVar("declaredOn", body.declaredOn);
   }
 }

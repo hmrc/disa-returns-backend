@@ -17,11 +17,9 @@ assert {
 }
 
 script:pre-request {
-  if (bru.getVar("fileUploadCreated") !== "true") {
-    const response = await bru.runRequest("MonthlyReturn/UpscanCallback/01-201-create-file-upload");
+  const response = await bru.runRequest("MonthlyReturn/UpscanCallback/01-201-create-file-upload");
   
-    if (response.status !== 201) {
-      throw new Error(`Expected file upload setup to respond with 201, got ${response.status}`);
-    }
+  if (response.status !== 201) {
+    throw new Error(`Expected file upload setup to respond with 201, got ${response.status}`);
   }
 }

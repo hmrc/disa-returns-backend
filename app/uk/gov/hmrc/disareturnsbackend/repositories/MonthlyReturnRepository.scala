@@ -67,6 +67,12 @@ class MonthlyReturnRepository @Inject() (
       .find(byKey(zReference, taxYear, month))
       .headOption()
 
+  def deleteAll(): Future[Long] =
+    collection
+      .deleteMany(Filters.empty())
+      .toFuture()
+      .map(_.getDeletedCount)
+
   def create(zReference: String, taxYear: String, month: Int, nilReturn: Boolean): Future[Boolean] = {
     val createdOn = now()
 
