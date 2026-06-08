@@ -20,7 +20,7 @@ import play.api.http.HeaderNames.LOCATION
 import play.api.Logging
 import play.api.libs.json.{JsValue, Json}
 import play.api.mvc.{Action, AnyContent, ControllerComponents, Result}
-import uk.gov.hmrc.disareturnsbackend.models.{CreateFileUploadRequest, CreateMonthlyReturnRequest, UpdateNilReturnRequest}
+import uk.gov.hmrc.disareturnsbackend.models.{CreateFileUploadRequest, CreateMonthlyReturnRequest, CreateMonthlyReturnResponse, UpdateNilReturnRequest}
 import uk.gov.hmrc.disareturnsbackend.services.{CreateFileUploadResult, CreateMonthlyReturnResult, DeclareMonthlyReturnResult, MonthlyReturnService}
 import uk.gov.hmrc.disareturnsbackend.validators.ValidationHelper
 import uk.gov.hmrc.play.bootstrap.backend.controller.BackendController
@@ -66,8 +66,9 @@ class MonthlyReturnController @Inject() (
           monthlyReturnService
             .create(validZReference, validTaxYear, validMonth, createRequest.nilReturn)
             .map {
-              case CreateMonthlyReturnResult.Created       => Created.withHeaders(LOCATION -> request.path)
-              case CreateMonthlyReturnResult.AlreadyExists => Conflict
+              case CreateMonthlyReturnResult.Created(submissionId) =>
+                Created(Json.toJson(CreateMonthlyReturnResponse(submissionId))).withHeaders(LOCATION -> request.path)
+              case CreateMonthlyReturnResult.AlreadyExists         => Conflict
             }
             .recover { case NonFatal(_) => ServiceUnavailable }
         }

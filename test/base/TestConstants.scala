@@ -17,6 +17,7 @@
 package base
 
 import java.time.Instant
+import java.util.UUID
 
 trait TestConstants {
 
@@ -34,6 +35,8 @@ trait TestConstants {
   protected val testMonth        = 5
   protected val testRouteMonth   = "5"
   protected val invalidTestMonth = 13
+
+  protected val testSubmissionId: UUID = UUID.fromString("1d3df389-98d4-4fd1-b05d-88473fcba6ba")
 
   protected val testUploadReference    = "2b4d6f3a-8c1e-4e4b-9c7a-123456789abc"
   protected val missingUploadReference = "missing-reference"
@@ -56,6 +59,7 @@ trait TestConstants {
   protected val testFileSize     = 1024L
 
   protected val zReferenceFieldName        = "zReference"
+  protected val submissionIdFieldName      = "submissionId"
   protected val taxYearFieldName           = "taxYear"
   protected val monthFieldName             = "month"
   protected val nilReturnFieldName         = "nilReturn"

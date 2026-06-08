@@ -20,6 +20,7 @@ body:json {
   }
 }
 
+
 assert {
   res.status: eq 201
   res.headers.location: eq {{servicePath}}/monthly/{{zReference}}/{{taxYear}}/{{month}}
@@ -42,4 +43,20 @@ script:pre-request {
   bru.setVar("zReference", zRef(0));
   bru.setVar("nilZReference", zRef(1));
   bru.setVar("missingZReference", zRef(2));
+}
+
+script:post-response {
+  const responseBody = res.body ?? res.getBody();
+  const body = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
+  
+  bru.setVar("monthlySubmissionId", body.submissionId);
+}
+
+tests {
+  test("response contains generated submissionId", function() {
+    const responseBody = res.body ?? res.getBody();
+    const body = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
+  
+    expect(body.submissionId).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  });
 }

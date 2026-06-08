@@ -33,6 +33,7 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
 
   private val mockMonthlyReturnRepository = mock[MonthlyReturnRepository]
   private val appConfig                   = inject[AppConfig]
+  private val mockUuidGenerator           = mock[UuidGenerator]
   private val service                     = buildService(testCreatedOn)
 
   private val zReference      = testZReference
@@ -42,6 +43,7 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
 
   private val monthlyReturn = MonthlyReturn(
     zReference = zReference,
+    submissionId = testSubmissionId,
     taxYear = taxYear,
     month = month,
     createdOn = testExistingUpdatedOn,
@@ -53,6 +55,7 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
   override protected def beforeEach(): Unit = {
     super.beforeEach()
     reset(mockMonthlyReturnRepository)
+    reset(mockUuidGenerator)
   }
 
   "MonthlyReturnService" - {
@@ -70,15 +73,33 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
     "create" - {
 
       "must return Created when the repository creates the MonthlyReturn" in {
-        when(mockMonthlyReturnRepository.create(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(true)))
-          .thenReturn(Future.successful(true))
+        when(mockUuidGenerator.randomUuid()).thenReturn(testSubmissionId)
+        when(
+          mockMonthlyReturnRepository.create(
+            eqTo(zReference),
+            eqTo(taxYear),
+            eqTo(month),
+            eqTo(testSubmissionId),
+            eqTo(true)
+          )
+        )
+          .thenReturn(Future.successful(Some(monthlyReturn)))
 
-        service.create(zReference, taxYear, month, nilReturn = true).futureValue mustBe Created
+        service.create(zReference, taxYear, month, nilReturn = true).futureValue mustBe Created(testSubmissionId)
       }
 
       "must return AlreadyExists when the repository rejects the create" in {
-        when(mockMonthlyReturnRepository.create(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(false)))
-          .thenReturn(Future.successful(false))
+        when(mockUuidGenerator.randomUuid()).thenReturn(testSubmissionId)
+        when(
+          mockMonthlyReturnRepository.create(
+            eqTo(zReference),
+            eqTo(taxYear),
+            eqTo(month),
+            eqTo(testSubmissionId),
+            eqTo(false)
+          )
+        )
+          .thenReturn(Future.successful(None))
 
         service.create(zReference, taxYear, month, nilReturn = false).futureValue mustBe AlreadyExists
       }
@@ -281,6 +302,7 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
     new MonthlyReturnService(
       monthlyReturnRepository = mockMonthlyReturnRepository,
       appConfig = appConfig,
-      clock = Clock.fixed(now, ZoneOffset.UTC)
+      clock = Clock.fixed(now, ZoneOffset.UTC),
+      uuidGenerator = mockUuidGenerator
     )
 }

@@ -25,6 +25,7 @@ import uk.gov.hmrc.disareturnsbackend.services.CreateFileUploadResult.*
 import uk.gov.hmrc.disareturnsbackend.services.CreateMonthlyReturnResult.{AlreadyExists, Created}
 
 import java.time.{Clock, LocalDate}
+import java.util.UUID
 import javax.inject.{Inject, Singleton}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
@@ -33,7 +34,8 @@ import scala.util.control.NonFatal
 class MonthlyReturnService @Inject() (
   monthlyReturnRepository: MonthlyReturnRepository,
   appConfig: AppConfig,
-  clock: Clock
+  clock: Clock,
+  uuidGenerator: UuidGenerator
 )(implicit ec: ExecutionContext)
     extends Logging {
 
@@ -62,17 +64,24 @@ class MonthlyReturnService @Inject() (
         Future.failed(exception)
       }
 
-  def create(zReference: String, taxYear: String, month: Int, nilReturn: Boolean): Future[CreateMonthlyReturnResult] =
-    monthlyReturnRepository
-      .create(zReference, taxYear, month, nilReturn)
-      .map {
-        case true =>
-          logger.info(
-            s"[MonthlyReturnService][create] Created monthly return for zReference [$zReference], taxYear [$taxYear], month [$month], nilReturn [$nilReturn]"
-          )
-          Created
+  def create(
+    zReference: String,
+    taxYear: String,
+    month: Int,
+    nilReturn: Boolean
+  ): Future[CreateMonthlyReturnResult] = {
+    val submissionId = uuidGenerator.randomUuid()
 
-        case false =>
+    monthlyReturnRepository
+      .create(zReference, taxYear, month, submissionId, nilReturn)
+      .map {
+        case Some(monthlyReturn) =>
+          logger.info(
+            s"[MonthlyReturnService][create] Created monthly return for zReference [$zReference], taxYear [$taxYear], month [$month], submissionId [$submissionId], nilReturn [$nilReturn]"
+          )
+          Created(monthlyReturn.submissionId)
+
+        case None =>
           logger.warn(
             s"[MonthlyReturnService][create] Monthly return already exists for zReference [$zReference], taxYear [$taxYear], month [$month]"
           )
@@ -80,11 +89,12 @@ class MonthlyReturnService @Inject() (
       }
       .recoverWith { case NonFatal(exception) =>
         logger.error(
-          s"[MonthlyReturnService][create] Failed to create monthly return for zReference [$zReference], taxYear [$taxYear], month [$month], nilReturn [$nilReturn]",
+          s"[MonthlyReturnService][create] Failed to create monthly return for zReference [$zReference], taxYear [$taxYear], month [$month], submissionId [$submissionId], nilReturn [$nilReturn]",
           exception
         )
         Future.failed(exception)
       }
+  }
 
   def updateNilReturn(
     zReference: String,
@@ -263,7 +273,7 @@ class MonthlyReturnService @Inject() (
 sealed trait CreateMonthlyReturnResult
 
 object CreateMonthlyReturnResult {
-  case object Created extends CreateMonthlyReturnResult
+  final case class Created(submissionId: UUID) extends CreateMonthlyReturnResult
   case object AlreadyExists extends CreateMonthlyReturnResult
 }
 

@@ -54,6 +54,7 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
   )
   private val monthlyReturn             = MonthlyReturn(
     zReference = zReference,
+    submissionId = testSubmissionId,
     taxYear = taxYear,
     month = month,
     createdOn = testExistingUpdatedOn.minusSeconds(3600),

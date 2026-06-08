@@ -54,6 +54,7 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
 
   private val monthlyReturn = MonthlyReturn(
     zReference = testZReference,
+    submissionId = testSubmissionId,
     taxYear = testTaxYear,
     month = testMonth,
     createdOn = testExistingUpdatedOn,
@@ -111,34 +112,62 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
   "MonthlyReturnController.createMonthlyReturn" - {
 
     "must return CREATED with Location header when the MonthlyReturn is created" in {
-      when(mockMonthlyReturnService.create(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth), eqTo(true)))
-        .thenReturn(Future.successful(Created))
+      when(
+        mockMonthlyReturnService.create(
+          eqTo(testZReference),
+          eqTo(testTaxYear),
+          eqTo(testMonth),
+          eqTo(true)
+        )
+      )
+        .thenReturn(Future.successful(Created(testSubmissionId)))
 
       val result = controller.createMonthlyReturn(testZReference, testTaxYear, testRouteMonth)(
-        FakeRequest("POST", path).withBody(Json.toJson(CreateMonthlyReturnRequest(nilReturn = true)))
+        FakeRequest("POST", path).withBody(
+          Json.toJson(CreateMonthlyReturnRequest(nilReturn = true))
+        )
       )
 
       status(result) mustBe CREATED
       header(LOCATION, result).value mustBe path
+      contentAsJson(result) mustBe Json.toJson(CreateMonthlyReturnResponse(testSubmissionId))
     }
 
     "must return CONFLICT when the MonthlyReturn already exists" in {
-      when(mockMonthlyReturnService.create(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth), eqTo(false)))
+      when(
+        mockMonthlyReturnService.create(
+          eqTo(testZReference),
+          eqTo(testTaxYear),
+          eqTo(testMonth),
+          eqTo(false)
+        )
+      )
         .thenReturn(Future.successful(AlreadyExists))
 
       val result = controller.createMonthlyReturn(testZReference, testTaxYear, testRouteMonth)(
-        FakeRequest("POST", path).withBody(Json.toJson(CreateMonthlyReturnRequest(nilReturn = false)))
+        FakeRequest("POST", path).withBody(
+          Json.toJson(CreateMonthlyReturnRequest(nilReturn = false))
+        )
       )
 
       status(result) mustBe CONFLICT
     }
 
     "must return SERVICE_UNAVAILABLE when the service fails" in {
-      when(mockMonthlyReturnService.create(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth), eqTo(false)))
+      when(
+        mockMonthlyReturnService.create(
+          eqTo(testZReference),
+          eqTo(testTaxYear),
+          eqTo(testMonth),
+          eqTo(false)
+        )
+      )
         .thenReturn(Future.failed(new RuntimeException(testMongoDownMessage)))
 
       val result = controller.createMonthlyReturn(testZReference, testTaxYear, testRouteMonth)(
-        FakeRequest("POST", path).withBody(Json.toJson(CreateMonthlyReturnRequest(nilReturn = false)))
+        FakeRequest("POST", path).withBody(
+          Json.toJson(CreateMonthlyReturnRequest(nilReturn = false))
+        )
       )
 
       status(result) mustBe SERVICE_UNAVAILABLE
@@ -146,7 +175,9 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
 
     "must return BAD_REQUEST when nilReturn is not a boolean" in {
       val result = controller.createMonthlyReturn(testZReference, testTaxYear, testRouteMonth)(
-        FakeRequest("POST", path).withBody(Json.obj(nilReturnFieldName -> "false"))
+        FakeRequest("POST", path).withBody(
+          Json.obj(nilReturnFieldName -> "false")
+        )
       )
 
       status(result) mustBe BAD_REQUEST

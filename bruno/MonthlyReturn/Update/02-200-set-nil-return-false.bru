@@ -22,6 +22,7 @@ body:json {
 
 assert {
   res.status: eq 200
+  res.body.submissionId: eq {{monthlySubmissionId}}
   res.body.nilReturn: eq false
 }
 
