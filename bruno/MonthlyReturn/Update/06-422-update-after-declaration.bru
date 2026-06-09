@@ -1,0 +1,39 @@
+meta {
+  name: 06-422-update-after-declaration
+  type: http
+  seq: 6
+}
+
+put {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{declarationZReference}}/{{taxYear}}/{{month}}/nilReturn
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "value": true
+  }
+}
+
+assert {
+  res.status: eq 422
+}
+
+script:pre-request {
+  const clockResponse = await bru.runRequest("TestOnly/Clock/03-200-reset-clock");
+  
+  if (clockResponse.status !== 200) {
+    throw new Error(`Expected clock reset to respond with 200, got ${clockResponse.status}`);
+  }
+  
+  const response = await bru.runRequest("MonthlyReturn/Declarations/01-204-declare-return");
+  
+  if (response.status !== 204) {
+    throw new Error(`Expected declaration setup to respond with 204, got ${response.status}`);
+  }
+}

@@ -18,20 +18,23 @@ package uk.gov.hmrc.disareturnsbackend.services
 
 import base.SpecBase
 import org.mockito.ArgumentMatchers.eq as eqTo
-import org.mockito.Mockito.{reset, verify, when}
+import org.mockito.Mockito.{reset, verify, verifyNoInteractions, when}
 import org.scalatest.BeforeAndAfterEach
+import uk.gov.hmrc.disareturnsbackend.config.AppConfig
 import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository
-import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository.CreateFileUploadRepositoryResult
+import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository.{CreateFileUploadRepositoryResult, DeclareMonthlyReturnRepositoryResult, UpdateNilReturnRepositoryResult}
 import uk.gov.hmrc.disareturnsbackend.services.CreateMonthlyReturnResult.{AlreadyExists, Created}
 
+import java.time.{Clock, Instant, ZoneOffset}
 import scala.concurrent.Future
 
 class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
 
   private val mockMonthlyReturnRepository = mock[MonthlyReturnRepository]
+  private val appConfig                   = inject[AppConfig]
   private val mockUuidGenerator           = mock[UuidGenerator]
-  private val service                     = new MonthlyReturnService(mockMonthlyReturnRepository, mockUuidGenerator)
+  private val service                     = buildService(testCreatedOn)
 
   private val zReference      = testZReference
   private val taxYear         = testTaxYear
@@ -108,11 +111,98 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
         val updatedReturn = monthlyReturn.copy(nilReturn = true)
 
         when(mockMonthlyReturnRepository.updateNilReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(true)))
-          .thenReturn(Future.successful(Some(updatedReturn)))
+          .thenReturn(Future.successful(UpdateNilReturnRepositoryResult.NilReturnUpdated(updatedReturn)))
 
-        service.updateNilReturn(zReference, taxYear, month, nilReturn = true).futureValue mustBe Some(updatedReturn)
+        service.updateNilReturn(zReference, taxYear, month, nilReturn = true).futureValue mustBe
+          UpdateNilReturnResult.NilReturnUpdated(updatedReturn)
 
         verify(mockMonthlyReturnRepository).updateNilReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(true))
+      }
+
+      "must return MonthlyReturnAlreadyDeclared when the repository rejects a declared return" in {
+        when(mockMonthlyReturnRepository.updateNilReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(true)))
+          .thenReturn(Future.successful(UpdateNilReturnRepositoryResult.MonthlyReturnAlreadyDeclared))
+
+        service.updateNilReturn(zReference, taxYear, month, nilReturn = true).futureValue mustBe
+          UpdateNilReturnResult.MonthlyReturnAlreadyDeclared
+      }
+
+      "must return MonthlyReturnNotFound when the repository cannot find the MonthlyReturn" in {
+        when(mockMonthlyReturnRepository.updateNilReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(true)))
+          .thenReturn(Future.successful(UpdateNilReturnRepositoryResult.MonthlyReturnNotFound))
+
+        service.updateNilReturn(zReference, taxYear, month, nilReturn = true).futureValue mustBe
+          UpdateNilReturnResult.MonthlyReturnNotFound
+      }
+    }
+
+    "declare" - {
+
+      "must return Declared when the repository declares the MonthlyReturn" in {
+        when(mockMonthlyReturnRepository.declare(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(
+            Future.successful(DeclareMonthlyReturnRepositoryResult.MonthlyReturnDeclared)
+          )
+
+        service.declare(zReference, taxYear, month).futureValue mustBe DeclareMonthlyReturnResult.Declared
+
+        verify(mockMonthlyReturnRepository).declare(eqTo(zReference), eqTo(taxYear), eqTo(month))
+      }
+
+      "must return AlreadyDeclared when the repository rejects a duplicate declaration" in {
+        when(mockMonthlyReturnRepository.declare(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(DeclareMonthlyReturnRepositoryResult.MonthlyReturnAlreadyDeclared))
+
+        service.declare(zReference, taxYear, month).futureValue mustBe DeclareMonthlyReturnResult.AlreadyDeclared
+      }
+
+      "must return MonthlyReturnNotFound when the repository cannot find the MonthlyReturn" in {
+        when(mockMonthlyReturnRepository.declare(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(DeclareMonthlyReturnRepositoryResult.MonthlyReturnNotFound))
+
+        service.declare(zReference, taxYear, month).futureValue mustBe DeclareMonthlyReturnResult.MonthlyReturnNotFound
+      }
+
+      "must allow declarations from the configured start day" in {
+        val startOfDeclarationPeriod = Instant.parse("2026-05-06T00:00:00Z")
+        val startDayService          = buildService(startOfDeclarationPeriod)
+        when(mockMonthlyReturnRepository.declare(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(
+            Future.successful(DeclareMonthlyReturnRepositoryResult.MonthlyReturnDeclared)
+          )
+
+        startDayService.declare(zReference, taxYear, month).futureValue mustBe
+          DeclareMonthlyReturnResult.Declared
+      }
+
+      "must return OutsideDeclarationPeriod and not call the repository before the configured start day" in {
+        val beforeStartDayService = buildService(Instant.parse("2026-05-05T23:59:59Z"))
+
+        beforeStartDayService.declare(zReference, taxYear, month).futureValue mustBe
+          DeclareMonthlyReturnResult.OutsideDeclarationPeriod
+
+        verifyNoInteractions(mockMonthlyReturnRepository)
+      }
+
+      "must allow declarations until the end of the configured end day" in {
+        val endOfDeclarationPeriod = Instant.parse("2026-05-19T23:59:59Z")
+        val endDayService          = buildService(endOfDeclarationPeriod)
+        when(mockMonthlyReturnRepository.declare(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(
+            Future.successful(DeclareMonthlyReturnRepositoryResult.MonthlyReturnDeclared)
+          )
+
+        endDayService.declare(zReference, taxYear, month).futureValue mustBe
+          DeclareMonthlyReturnResult.Declared
+      }
+
+      "must return OutsideDeclarationPeriod and not call the repository after the configured end day" in {
+        val afterEndDayService = buildService(Instant.parse("2026-05-20T00:00:00Z"))
+
+        afterEndDayService.declare(zReference, taxYear, month).futureValue mustBe
+          DeclareMonthlyReturnResult.OutsideDeclarationPeriod
+
+        verifyNoInteractions(mockMonthlyReturnRepository)
       }
     }
 
@@ -156,6 +246,17 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
         service.createFileUpload(zReference, taxYear, month, uploadReference).futureValue mustBe
           CreateFileUploadResult.FileUploadAlreadyExists
       }
+
+      "must return MonthlyReturnAlreadyDeclared when the repository rejects a declared return" in {
+        when(
+          mockMonthlyReturnRepository
+            .createFileUpload(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(uploadReference))
+        )
+          .thenReturn(Future.successful(CreateFileUploadRepositoryResult.MonthlyReturnAlreadyDeclared))
+
+        service.createFileUpload(zReference, taxYear, month, uploadReference).futureValue mustBe
+          CreateFileUploadResult.MonthlyReturnAlreadyDeclared
+      }
     }
 
     "getFileUpload" - {
@@ -182,5 +283,43 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
         )
       }
     }
+
+    "deleteFileUpload" - {
+
+      "must return the repository result" in {
+        when(
+          mockMonthlyReturnRepository
+            .deleteFileUpload(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(uploadReference))
+        )
+          .thenReturn(Future.successful(true))
+
+        service.deleteFileUpload(zReference, taxYear, month, uploadReference).futureValue mustBe true
+
+        verify(mockMonthlyReturnRepository).deleteFileUpload(
+          eqTo(zReference),
+          eqTo(taxYear),
+          eqTo(month),
+          eqTo(uploadReference)
+        )
+      }
+
+      "must return false when the repository cannot delete a file upload" in {
+        when(
+          mockMonthlyReturnRepository
+            .deleteFileUpload(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(uploadReference))
+        )
+          .thenReturn(Future.successful(false))
+
+        service.deleteFileUpload(zReference, taxYear, month, uploadReference).futureValue mustBe false
+      }
+    }
   }
+
+  private def buildService(now: Instant): MonthlyReturnService =
+    new MonthlyReturnService(
+      monthlyReturnRepository = mockMonthlyReturnRepository,
+      appConfig = appConfig,
+      clock = Clock.fixed(now, ZoneOffset.UTC),
+      uuidGenerator = mockUuidGenerator
+    )
 }

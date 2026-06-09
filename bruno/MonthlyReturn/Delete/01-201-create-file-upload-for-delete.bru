@@ -1,0 +1,34 @@
+meta {
+  name: 01-201-create-file-upload-for-delete
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{deleteZReference}}/{{taxYear}}/{{month}}/files
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "reference": "{{upscanReference}}"
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.headers.location: eq {{servicePath}}/monthly/{{deleteZReference}}/{{taxYear}}/{{month}}/files/{{upscanReference}}
+}
+
+script:pre-request {
+  const response = await bru.runRequest("MonthlyReturn/Delete/00-201-create-return-for-delete");
+  
+  if (response.status !== 201) {
+    throw new Error(`Expected delete return setup to respond with 201, got ${response.status}`);
+  }
+}

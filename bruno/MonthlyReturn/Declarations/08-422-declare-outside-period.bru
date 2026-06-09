@@ -1,0 +1,23 @@
+meta {
+  name: 08-422-declare-outside-period
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{outsidePeriodZReference}}/{{taxYear}}/{{month}}/declarations
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 422
+}
+
+script:pre-request {
+  const response = await bru.runRequest("MonthlyReturn/Declarations/07-201-create-return-outside-period");
+  
+  if (response.status !== 201) {
+    throw new Error(`Expected outside-period return setup to respond with 201, got ${response.status}`);
+  }
+}

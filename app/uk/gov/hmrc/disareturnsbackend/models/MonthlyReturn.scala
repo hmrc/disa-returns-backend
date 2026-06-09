@@ -42,11 +42,26 @@ final case class MonthlyReturn(
   createdOn: Instant,
   nilReturn: Boolean = false,
   fileUploads: List[FileUpload],
+  declaredOn: Option[Instant] = None,
   lastUpdated: Instant
 ) {
 
-  def createFileUpload(reference: String, createdOn: Instant): MonthlyReturn =
-    if (nilReturn || fileUploads.exists(_.reference == reference)) {
+  def hasDeclaration: Boolean = declaredOn.isDefined
+
+  def declare(declaredOn: Instant): MonthlyReturn =
+    if (hasDeclaration) {
+      this
+    } else {
+      copy(
+        declaredOn = Some(declaredOn),
+        lastUpdated = declaredOn
+      )
+    }
+
+  def createFileUpload(reference: String, createdOn: Instant): MonthlyReturn = {
+    val cannotAcceptFileUpload = nilReturn || hasDeclaration || fileUploads.exists(_.reference == reference)
+
+    if (cannotAcceptFileUpload) {
       this
     } else {
       copy(
@@ -58,6 +73,20 @@ final case class MonthlyReturn(
         lastUpdated = createdOn
       )
     }
+  }
+
+  def deleteFileUpload(reference: String, updatedOn: Instant): MonthlyReturn = {
+    val updatedUploads = fileUploads.filterNot(_.reference == reference)
+
+    if (updatedUploads == fileUploads) {
+      this
+    } else {
+      copy(
+        fileUploads = updatedUploads,
+        lastUpdated = updatedOn
+      )
+    }
+  }
 
   def completeUpscan(
     reference: String,
@@ -67,28 +96,23 @@ final case class MonthlyReturn(
     failureReason: Option[FileUploadFailureReason] = None,
     failureMessage: Option[String] = None
   ): MonthlyReturn =
-    if (nilReturn) {
+    if (!canCompleteUpscan(reference)) {
       this
     } else {
       val completedFileUpload = FileUpload(
         reference = reference,
         status = status,
         createdOn = upscanCompletedOn,
-        upscanCompletedOn = Some(upscanCompletedOn),
-        fileUploadDetails = fileUploadDetails,
+        fileUploadDetails = fileUploadDetails.map(_.copy(upscanCompletedOn = Some(upscanCompletedOn))),
         failureReason = failureReason,
         failureMessage = failureMessage
       )
 
       val updatedUploads =
-        if (fileUploads.exists(_.reference == reference)) {
-          fileUploads.map {
-            case fileUpload if fileUpload.reference == reference =>
-              completedFileUpload.copy(createdOn = fileUpload.createdOn)
-            case fileUpload                                      => fileUpload
-          }
-        } else {
-          fileUploads :+ completedFileUpload
+        fileUploads.map {
+          case fileUpload if fileUpload.reference == reference =>
+            completedFileUpload.copy(createdOn = fileUpload.createdOn)
+          case fileUpload                                      => fileUpload
         }
 
       if (updatedUploads == fileUploads) {
@@ -98,6 +122,20 @@ final case class MonthlyReturn(
           fileUploads = updatedUploads,
           lastUpdated = upscanCompletedOn
         )
+      }
+    }
+
+  def canCompleteUpscan(reference: String): Boolean =
+    if (nilReturn) {
+      false
+    } else {
+      fileUploads.exists { fileUpload =>
+        val hasMatchingReference        = fileUpload.reference == reference
+        val hasCreatedStatus            = fileUpload.status == FileUploadStatus.Created
+        val wasCreatedBeforeDeclaration =
+          declaredOn.forall(d => fileUpload.createdOn.isBefore(d))
+
+        hasMatchingReference && hasCreatedStatus && wasCreatedBeforeDeclaration
       }
     }
 
@@ -152,7 +190,6 @@ final case class FileUpload(
   reference: String,
   status: FileUploadStatus,
   createdOn: Instant,
-  upscanCompletedOn: Option[Instant] = None,
   fileUploadDetails: Option[FileUploadDetails] = None,
   failureReason: Option[FileUploadFailureReason] = None,
   failureMessage: Option[String] = None
@@ -176,7 +213,8 @@ final case class FileUploadDetails(
   uploadTimestamp: Instant,
   checksum: String,
   size: Long,
-  upscanDownloadUrl: String
+  upscanDownloadUrl: String,
+  upscanCompletedOn: Option[Instant] = None
 )
 
 object FileUploadDetails {

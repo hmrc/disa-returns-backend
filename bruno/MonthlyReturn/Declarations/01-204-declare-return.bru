@@ -1,0 +1,23 @@
+meta {
+  name: 01-204-declare-return
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{declarationZReference}}/{{taxYear}}/{{month}}/declarations
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 204
+}
+
+script:pre-request {
+  const response = await bru.runRequest("MonthlyReturn/Declarations/00-201-create-return-for-declaration");
+  
+  if (response.status !== 201) {
+    throw new Error(`Expected declaration setup to respond with 201, got ${response.status}`);
+  }
+}

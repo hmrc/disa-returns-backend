@@ -25,3 +25,11 @@ assert {
   res.body.submissionId: eq {{monthlySubmissionId}}
   res.body.nilReturn: eq true
 }
+
+script:pre-request {
+  const response = await bru.runRequest("MonthlyReturn/Create/01-201-create-nil-return-false");
+  
+  if (response.status !== 201) {
+    throw new Error(`Expected monthly return setup to respond with 201, got ${response.status}`);
+  }
+}

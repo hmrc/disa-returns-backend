@@ -1,0 +1,33 @@
+meta {
+  name: 05-422-create-file-after-declaration
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{declarationZReference}}/{{taxYear}}/{{month}}/files
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "reference": "{{upscanReference}}"
+  }
+}
+
+assert {
+  res.status: eq 422
+}
+
+script:pre-request {
+  const response = await bru.runRequest("MonthlyReturn/Declarations/01-204-declare-return");
+  
+  if (response.status !== 204) {
+    throw new Error(`Expected declaration request to respond with 204, got ${response.status}`);
+  }
+}

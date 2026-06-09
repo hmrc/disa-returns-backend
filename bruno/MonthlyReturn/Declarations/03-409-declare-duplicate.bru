@@ -1,0 +1,23 @@
+meta {
+  name: 03-409-declare-duplicate
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{declarationZReference}}/{{taxYear}}/{{month}}/declarations
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 409
+}
+
+script:pre-request {
+  const response = await bru.runRequest("MonthlyReturn/Declarations/01-204-declare-return");
+  
+  if (response.status !== 204) {
+    throw new Error(`Expected declaration request to respond with 204, got ${response.status}`);
+  }
+}

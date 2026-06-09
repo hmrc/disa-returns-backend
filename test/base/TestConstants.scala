@@ -65,6 +65,7 @@ trait TestConstants {
   protected val nilReturnFieldName         = "nilReturn"
   protected val fileUploadsFieldName       = "fileUploads"
   protected val createdOnFieldName         = "createdOn"
+  protected val declaredOnFieldName        = "declaredOn"
   protected val upscanCompletedOnFieldName = "upscanCompletedOn"
   protected val lastUpdatedFieldName       = "lastUpdated"
   protected val referenceFieldName         = "reference"

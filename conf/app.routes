@@ -1,9 +1,11 @@
 # microservice specific routes
 
 GET    /monthly/:zReference/:taxYear/:month                    uk.gov.hmrc.disareturnsbackend.controllers.MonthlyReturnController.getMonthlyReturn(zReference: String, taxYear: String, month: String)
-GET    /monthly/:zReference/:taxYear/:month/files/:reference   uk.gov.hmrc.disareturnsbackend.controllers.MonthlyReturnController.getFileUpload(zReference: String, taxYear: String, month: String, reference: String)
 POST   /monthly/:zReference/:taxYear/:month                    uk.gov.hmrc.disareturnsbackend.controllers.MonthlyReturnController.createMonthlyReturn(zReference: String, taxYear: String, month: String)
+POST   /monthly/:zReference/:taxYear/:month/declarations       uk.gov.hmrc.disareturnsbackend.controllers.MonthlyReturnController.declareMonthlyReturn(zReference: String, taxYear: String, month: String)
 POST   /monthly/:zReference/:taxYear/:month/files              uk.gov.hmrc.disareturnsbackend.controllers.MonthlyReturnController.createFileUpload(zReference: String, taxYear: String, month: String)
+GET    /monthly/:zReference/:taxYear/:month/files/:reference   uk.gov.hmrc.disareturnsbackend.controllers.MonthlyReturnController.getFileUpload(zReference: String, taxYear: String, month: String, reference: String)
+DELETE /monthly/:zReference/:taxYear/:month/files/:reference   uk.gov.hmrc.disareturnsbackend.controllers.MonthlyReturnController.deleteFileUpload(zReference: String, taxYear: String, month: String, reference: String)
 PUT    /monthly/:zReference/:taxYear/:month/nilReturn          uk.gov.hmrc.disareturnsbackend.controllers.MonthlyReturnController.updateNilReturn(zReference: String, taxYear: String, month: String)
 
 ## upscan callbacks

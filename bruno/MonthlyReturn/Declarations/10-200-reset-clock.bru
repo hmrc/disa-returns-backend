@@ -1,0 +1,15 @@
+meta {
+  name: 10-200-reset-clock
+  type: http
+  seq: 11
+}
+
+delete {
+  url: {{baseUrl}}{{servicePath}}/test-only/clock
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}

@@ -7,7 +7,9 @@
 | --- | --- | --- |
 | `GET` | `/disa-returns-backend/monthly/:zReference/:taxYear/:month` | Gets an existing monthly return. |
 | `GET` | `/disa-returns-backend/monthly/:zReference/:taxYear/:month/files/:reference` | Gets a file upload for a monthly return. |
+| `DELETE` | `/disa-returns-backend/monthly/:zReference/:taxYear/:month/files/:reference` | Deletes a file upload from a monthly return. |
 | `POST` | `/disa-returns-backend/monthly/:zReference/:taxYear/:month` | Creates a monthly return. |
+| `POST` | `/disa-returns-backend/monthly/:zReference/:taxYear/:month/declarations` | Declares an existing monthly return. |
 | `POST` | `/disa-returns-backend/monthly/:zReference/:taxYear/:month/files` | Creates a file upload placeholder for a monthly return. |
 | `PUT` | `/disa-returns-backend/monthly/:zReference/:taxYear/:month/nilReturn` | Updates whether the monthly return is a nil return. |
 | `POST` | `/disa-returns-backend/monthly/upscan/callback/:zReference/:taxYear/:month` | Receives the Upscan callback for a monthly return file upload. |
@@ -46,6 +48,17 @@ Example response:
 }
 ```
 
+### Declare Monthly Return
+
+`POST /disa-returns-backend/monthly/:zReference/:taxYear/:month/declarations`
+
+- Returns `204 No Content` when the record exists and has not already been declared.
+- Returns `409 Conflict` when the monthly return has already been declared.
+- Returns `404 Not Found` when the monthly return does not exist.
+- Returns `422 Unprocessable Entity` when the request is outside the declaration period.
+- Returns `503 Service Unavailable` when MongoDB is unavailable.
+- The declaration period is from 00:00 on the configured start day to the end of the configured end day, inclusive.
+
 ### Create File Upload
 
 `POST /disa-returns-backend/monthly/:zReference/:taxYear/:month/files`
@@ -61,6 +74,7 @@ Request body:
 - Returns `201 Created` with the file upload resource path in the `Location` header when the file upload placeholder is created.
 - Returns `409 Conflict` when a file upload already exists with the same `reference`.
 - Returns `404 Not Found` when the monthly return does not exist or cannot accept file uploads.
+- Returns `422 Unprocessable Entity` when the monthly return has already been declared for the period.
 - Returns `503 Service Unavailable` when MongoDB is unavailable.
 
 ### Get File Upload
@@ -82,6 +96,14 @@ Example response:
 }
 ```
 
+### Delete File Upload
+
+`DELETE /disa-returns-backend/monthly/:zReference/:taxYear/:month/files/:reference`
+
+- Returns `204 No Content` when the monthly return and file upload exist. The file upload is removed from the monthly return.
+- Returns `404 Not Found` when the monthly return does not exist or the file upload does not exist.
+- Returns `503 Service Unavailable` when MongoDB is unavailable.
+
 ### Get Monthly Return
 
 `GET /disa-returns-backend/monthly/:zReference/:taxYear/:month`
@@ -101,6 +123,7 @@ Example response:
   "nilReturn": false,
   "fileUploads": [],
   "createdOn": "2026-05-17T12:00:00Z",
+  "declaredOn": "2026-05-17T12:00:00Z",
   "lastUpdated": "2026-05-17T12:00:00Z"
 }
 ```
@@ -122,14 +145,16 @@ Request body:
 - Setting `value` to `false` updates `nilReturn` to `false` and leaves file uploads empty.
 - Missing or non-boolean `value` fields return `400 Bad Request`.
 - Returns `404 Not Found` when the monthly return does not exist.
+- Returns `422 Unprocessable Entity` when the monthly return has already been declared for the period.
 - Returns `503 Service Unavailable` when MongoDB is unavailable.
 
 ### Monthly Upscan Callback
 
 - The endpoint accepts Upscan `READY` and `FAILED` callback payloads and returns `202 Accepted` when the payload is valid.
 - If the monthly return is a nil return, the callback still returns `202 Accepted` but the file result is not stored.
-- If the monthly return is not a nil return, the callback stores the file result. Existing upload references are completed in place; new callback references are added as completed file uploads.
-- Completed file uploads include `upscanCompletedOn`, which records when Upscan processing completed, and `fileUploadDetails.upscanDownloadUrl` for the Upscan download URL.
+- If the monthly return is not a nil return, the callback only completes an existing file upload with the same reference in `CREATED` state. Callbacks for missing, deleted, or already-completed references return `202 Accepted` but are not stored.
+- If the monthly return has been declared, a callback can still complete an existing `CREATED` file upload when that upload was created before the declaration time.
+- Completed file uploads include `fileUploadDetails.upscanCompletedOn`, which records when Upscan processing completed, and `fileUploadDetails.upscanDownloadUrl` for the Upscan download URL.
 - Invalid JSON, unknown `fileStatus` values, or unknown `failureReason` values return `400 Bad Request`.
 - Non-JSON requests return `415 Unsupported Media Type`.
 
@@ -157,14 +182,14 @@ Stored file upload after a successful callback:
   "reference": "2b4d6f3a-8c1e-4e4b-9c7a-123456789abc",
   "status": "UPSCAN_SUCCESS",
   "createdOn": "2026-05-17T12:00:00Z",
-  "upscanCompletedOn": "2026-05-17T12:01:00Z",
   "fileUploadDetails": {
     "fileName": "return.csv",
     "fileMimeType": "text/csv",
     "uploadTimestamp": "2026-05-17T12:00:00Z",
     "checksum": "396f101dd52e8b2ace0dcf5ed09b1d1f030e608938510ce46e7a5c7a4e775100",
     "size": 1024,
-    "upscanDownloadUrl": "https://fus-outbound-bucket.s3.eu-west-2.amazonaws.com/object-key?X-Amz-Signature=..."
+    "upscanDownloadUrl": "https://fus-outbound-bucket.s3.eu-west-2.amazonaws.com/object-key?X-Amz-Signature=...",
+    "upscanCompletedOn": "2026-05-17T12:01:00Z"
   }
 }
 ```
@@ -212,6 +237,51 @@ sm2 --start DISA_RETURNS_ALL
 sbt run
 ```
 
+To run locally with HMRC-style test-only routes enabled:
+
+```bash
+sbt run -Dapplication.router=testOnlyDoNotUseInAppConf.Routes
+```
+
+If starting through service-manager, pass the same JVM parameter in the local service profile:
+
+```bash
+-Dapplication.router=testOnlyDoNotUseInAppConf.Routes
+```
+
+Test-only clock routes are available only with that router:
+
+- `GET /disa-returns-backend/test-only/clock`
+- `PUT /disa-returns-backend/test-only/clock/yyyy-MM-dd`
+- `DELETE /disa-returns-backend/test-only/clock`
+- `DELETE /disa-returns-backend/test-only/monthly-returns`
+
+Use `GET` to inspect the app clock:
+
+```bash
+curl http://localhost:1207/disa-returns-backend/test-only/clock
+```
+
+Use `PUT` to set the app date for declaration-period testing. The date must be in `yyyy-MM-dd` format and is applied at `00:00:00Z`:
+
+```bash
+curl -X PUT http://localhost:1207/disa-returns-backend/test-only/clock/2026-05-20
+```
+
+Use `DELETE` to reset back to the system UTC clock:
+
+```bash
+curl -X DELETE http://localhost:1207/disa-returns-backend/test-only/clock
+```
+
+For example, set the clock to `2026-05-20` to test declaration attempts outside the configured declaration period.
+
+Use the monthly returns cleanup route to remove all monthly returns from the local database before automation runs:
+
+```bash
+curl -X DELETE http://localhost:1207/disa-returns-backend/test-only/monthly-returns
+```
+
 ### Running the test suite
 
 To run the unit tests:
@@ -231,13 +301,32 @@ sbt it/test
 The Bruno collection is under `bruno/MonthlyReturn` and is organised into:
 
 - `Create`
+- `Declarations`
+- `Delete`
 - `Get`
 - `Update`
 - `UpscanCallback`
 
-The collection can be run as a whole against a running local service. The first create request generates fresh valid `zReference` values for that run, then the later requests reuse those values to create a monthly return, get it, update `nilReturn` to `true`, and update it back to `false`. The Upscan callback folder also creates a fresh non-nil monthly return with `callbackZReference`, creates a file upload placeholder with `POST /files`, gets that file upload with `GET /files/:reference`, sends a READY callback, then gets the monthly return to confirm the completed file upload was recorded. The GET-after-READY request runs the READY callback setup requests in its pre-request script when needed, so it can also be run directly.
+The `bruno/TestOnly/Clock` folder covers the test-only clock routes. The `bruno/TestOnly/MonthlyReturns` folder clears monthly returns from the local database. These require the service to be running with `-Dapplication.router=testOnlyDoNotUseInAppConf.Routes`; otherwise the routes will not be available.
 
-Generated Bruno `zReference` values are set as runtime variables with `bru.setVar`, not environment variables, so running the collection should not rewrite `bruno/environments/Local.bru`. If you run a later request on its own, run `Create/01-201-create-nil-return-false` first or provide the generated variables manually.
+Monthly return Bruno setup requests call the test-only cleanup route before generating `Zxxxx` references. This avoids collisions with old local data while keeping generated references inside the allowed zReference format. Do not run these Bruno folders in parallel, because cleanup requests delete all monthly returns from the local database.
+
+These Bruno requests clear monthly returns by calling `TestOnly/MonthlyReturns/01-204-clear-monthly-returns` in their pre-request script:
+
+| Request | Why it clears monthly returns |
+| --- | --- |
+| `MonthlyReturn/Create/01-201-create-nil-return-false` | Creates a clean baseline return and generates `zReference`, `nilZReference`, and `missingZReference`. |
+| `MonthlyReturn/Declarations/00-201-create-return-for-declaration` | Creates a clean return to declare and generates declaration references. |
+| `MonthlyReturn/Declarations/04-404-declare-missing` | Ensures the declaration reference is missing. |
+| `MonthlyReturn/Declarations/06-200-set-clock-outside-period` | Creates a clean outside-period scenario and generates `outsidePeriodZReference`. |
+| `MonthlyReturn/Delete/00-201-create-return-for-delete` | Creates a clean return for file delete tests and generates `deleteZReference`. |
+| `MonthlyReturn/UpscanCallback/00-201-create-return-for-success-callback` | Creates a clean return for callback tests and generates `callbackZReference`. |
+
+Many later requests run one of these setup requests from their pre-request script, so they can also clear monthly returns indirectly. For example, `MonthlyReturn/Get/01-200-get-existing` runs `MonthlyReturn/Create/01-201-create-nil-return-false`, and `MonthlyReturn/Update/02-200-set-nil-return-false` runs the update setup chain.
+
+Run executable Bruno folders explicitly against a running local service, for example `bru run MonthlyReturn/Get --env Local --bail`. The setup scripts create the data each folder needs. The Upscan callback folder creates a fresh non-nil monthly return with `callbackZReference`, creates a file upload placeholder with `POST /files`, gets that file upload with `GET /files/:reference`, sends a READY callback, then gets the monthly return to confirm the completed file upload was recorded.
+
+Generated Bruno `zReference` values are set as runtime variables with `bru.setVar`, not environment variables, so running Bruno should not rewrite `bruno/environments/Local.bru`.
 
 The callback requests return `202 Accepted`. Completed file upload details appear on the GET after the READY callback in the collection run.
 

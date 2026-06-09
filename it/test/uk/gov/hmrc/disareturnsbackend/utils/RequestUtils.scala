@@ -34,6 +34,12 @@ trait RequestUtils extends DefaultAwaitTimeout {
         .get()
     )
 
+  protected def delete(path: String): WSResponse =
+    await(
+      ws.url(serviceUrl(path))
+        .delete()
+    )
+
   protected def postJson(path: String, body: JsValue): WSResponse =
     await(
       ws.url(serviceUrl(path))

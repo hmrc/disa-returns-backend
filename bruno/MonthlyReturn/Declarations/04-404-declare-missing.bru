@@ -1,0 +1,26 @@
+meta {
+  name: 04-404-declare-missing
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{declarationMissingZReference}}/{{taxYear}}/{{month}}/declarations
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 404
+}
+
+script:pre-request {
+  const clearResponse = await bru.runRequest("TestOnly/MonthlyReturns/01-204-clear-monthly-returns");
+  
+  if (clearResponse.status !== 204) {
+    throw new Error(`Expected monthly returns cleanup to respond with 204, got ${clearResponse.status}`);
+  }
+  
+  const value = (Date.now() + Math.floor(Math.random() * 1000)) % 10000;
+  bru.setVar("declarationMissingZReference", `Z${value.toString().padStart(4, "0")}`);
+}

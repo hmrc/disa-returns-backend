@@ -1,0 +1,25 @@
+meta {
+  name: 01-200-get-clock
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}{{servicePath}}/test-only/clock
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("clock response includes date and instant", function() {
+    const responseBody = res.body ?? res.getBody();
+    const body = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
+  
+    expect(body.date).to.match(/^\d{4}-\d{2}-\d{2}$/);
+    expect(body.instant).to.match(/^\d{4}-\d{2}-\d{2}T.*Z$/);
+  });
+}

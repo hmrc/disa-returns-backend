@@ -1,0 +1,23 @@
+meta {
+  name: 04-404-get-file-upload-after-delete
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{deleteZReference}}/{{taxYear}}/{{month}}/files/{{upscanReference}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 404
+}
+
+script:pre-request {
+  const response = await bru.runRequest("MonthlyReturn/Delete/03-204-delete-file-upload");
+  
+  if (response.status !== 204) {
+    throw new Error(`Expected delete request to respond with 204, got ${response.status}`);
+  }
+}

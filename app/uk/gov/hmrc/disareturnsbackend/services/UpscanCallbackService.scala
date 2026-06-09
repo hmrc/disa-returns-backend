@@ -42,7 +42,7 @@ class UpscanCallbackService @Inject() (
       case success: UpscanSuccess =>
         val status = FileUploadStatus.UpscanSuccess
 
-        completeUpscanUnlessNilReturn(
+        tryCompleteUpscanFileUpload(
           zReference = zReference,
           taxYear = taxYear,
           month = month,
@@ -60,7 +60,7 @@ class UpscanCallbackService @Inject() (
       case failure: UpscanFailure =>
         val status = upscanCallbackMapper.toFileUploadStatus(failure.failureDetails.failureReason)
 
-        completeUpscanUnlessNilReturn(
+        tryCompleteUpscanFileUpload(
           zReference = zReference,
           taxYear = taxYear,
           month = month,
@@ -75,7 +75,7 @@ class UpscanCallbackService @Inject() (
         }
     }
 
-  private def completeUpscanUnlessNilReturn(
+  private def tryCompleteUpscanFileUpload(
     zReference: String,
     taxYear: String,
     month: Int,
@@ -88,7 +88,13 @@ class UpscanCallbackService @Inject() (
     monthlyReturnRepository.get(zReference, taxYear, month).flatMap {
       case Some(monthlyReturn) if monthlyReturn.nilReturn =>
         logger.warn(
-          s"[UpscanCallbackService][completeUpscanUnlessNilReturn] Ignoring upscan callback for zReference [$zReference], taxYear [$taxYear], month [$month], upload reference [$reference] because nilReturn is [true] and file uploads cannot be processed"
+          s"[UpscanCallbackService][tryCompleteUpscanFileUpload] Ignoring upscan callback for zReference [$zReference], taxYear [$taxYear], month [$month], upload reference [$reference] because nilReturn is [true] and file uploads cannot be processed"
+        )
+        Future.successful(())
+
+      case Some(monthlyReturn) if !monthlyReturn.canCompleteUpscan(reference) =>
+        logger.warn(
+          s"[UpscanCallbackService][tryCompleteUpscanFileUpload] Ignoring upscan callback for zReference [$zReference], taxYear [$taxYear], month [$month], upload reference [$reference] because no completable CREATED file upload exists with that reference"
         )
         Future.successful(())
 

@@ -1,0 +1,44 @@
+meta {
+  name: 00-201-create-return-for-declaration
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{declarationZReference}}/{{taxYear}}/{{month}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "nilReturn": false
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.headers.location: eq {{servicePath}}/monthly/{{declarationZReference}}/{{taxYear}}/{{month}}
+}
+
+script:pre-request {
+  const clearResponse = await bru.runRequest("TestOnly/MonthlyReturns/01-204-clear-monthly-returns");
+  
+  if (clearResponse.status !== 204) {
+    throw new Error(`Expected monthly returns cleanup to respond with 204, got ${clearResponse.status}`);
+  }
+  
+  const base = (Date.now() + Math.floor(Math.random() * 1000)) % 10000;
+  
+  function zRef(offset) {
+    const value = (base + offset) % 10000;
+    return `Z${value.toString().padStart(4, "0")}`;
+  }
+  
+  bru.setVar("declarationZReference", zRef(0));
+  bru.setVar("declarationMissingZReference", zRef(1));
+}

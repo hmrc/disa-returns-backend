@@ -25,10 +25,18 @@ assert {
   res.headers.location: eq {{servicePath}}/monthly/{{nilZReference}}/{{taxYear}}/{{month}}
 }
 
+script:pre-request {
+  const response = await bru.runRequest("MonthlyReturn/Create/01-201-create-nil-return-false");
+  
+  if (response.status !== 201) {
+    throw new Error(`Expected monthly return setup to respond with 201, got ${response.status}`);
+  }
+}
+
 script:post-response {
   const responseBody = res.body ?? res.getBody();
   const body = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
-
+  
   bru.setVar("nilSubmissionId", body.submissionId);
 }
 
@@ -36,7 +44,7 @@ tests {
   test("response contains generated submissionId", function() {
     const responseBody = res.body ?? res.getBody();
     const body = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
-
+  
     expect(body.submissionId).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   });
 }
