@@ -31,12 +31,12 @@ class FileUploadWorkItemRepository @Inject() (
   config: AppConfig,
   mongoComponent: MongoComponent
 )(implicit ec: ExecutionContext)
-  extends WorkItemRepository[FileUploadWorkItem](
-    collectionName = "fileUploadWorkItems",
-    mongoComponent = mongoComponent,
-    itemFormat = FileUploadWorkItem.format,
-    workItemFields = WorkItemFields.default
-  ) {
+    extends WorkItemRepository[FileUploadWorkItem](
+      collectionName = "fileUploadWorkItems",
+      mongoComponent = mongoComponent,
+      itemFormat = FileUploadWorkItem.format,
+      workItemFields = WorkItemFields.default
+    ) {
 
   override def now(): Instant =
     clock.instant()
@@ -44,9 +44,11 @@ class FileUploadWorkItemRepository @Inject() (
   override val inProgressRetryAfter: Duration =
     config.fileUploadJobInProgressRetryAfter
 
-  def enqueue(zReference: String,
-              taxYear: String,
-              month: Int,
-              fileReference: String): Future[WorkItem[FileUploadWorkItem]] =
+  def enqueue(
+    zReference: String,
+    taxYear: String,
+    month: Int,
+    fileReference: String
+  ): Future[WorkItem[FileUploadWorkItem]] =
     pushNew(FileUploadWorkItem(zReference, taxYear, month, fileReference))
 }

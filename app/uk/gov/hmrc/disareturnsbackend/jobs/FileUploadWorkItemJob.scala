@@ -28,7 +28,7 @@ import javax.inject.{Inject, Singleton}
 import scala.concurrent.Future
 
 @Singleton
-class FileUploadWorkItemJob @Inject()(
+class FileUploadWorkItemJob @Inject() (
   actorSystem: ActorSystem,
   clock: Clock,
   lifecycle: ApplicationLifecycle,

@@ -23,8 +23,7 @@ final case class FileUploadWorkItem(
   taxYear: String,
   month: Int,
   reference: String
-) {
-}
+) {}
 
 object FileUploadWorkItem {
   implicit val format: OFormat[FileUploadWorkItem] = Json.format[FileUploadWorkItem]

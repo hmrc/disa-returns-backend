@@ -37,8 +37,8 @@ abstract class WorkItemJob[A](
 
   private val workerCount =
     math.max(1, Runtime.getRuntime.availableProcessors() / 2)
-  private val started  = new AtomicBoolean(false)
-  private val stopping = new AtomicBoolean(false)
+  private val started     = new AtomicBoolean(false)
+  private val stopping    = new AtomicBoolean(false)
 
   private implicit val workerExecutionContext: ExecutionContext =
     actorSystem.dispatchers.lookup(dispatcherName)
@@ -50,13 +50,12 @@ abstract class WorkItemJob[A](
     Future.successful(())
   }
 
-  def start(): Unit = {
+  def start(): Unit =
     if (started.compareAndSet(false, true)) {
       logger.info(s"[$jobName][start] Starting with $workerCount workers")
       stopping.set(false)
       (1 to workerCount).foreach(startWorker)
     }
-  }
 
   private def stop(): Unit =
     stopping.set(true)
@@ -97,7 +96,7 @@ abstract class WorkItemJob[A](
     workItemRepository.pullOutstanding(now, now).flatMap {
       case Some(workItem) =>
         processWorkItem(workerId, workItem)
-      case None =>
+      case None           =>
         Future.successful(false)
     }
   }

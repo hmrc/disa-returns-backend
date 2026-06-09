@@ -24,7 +24,9 @@ import uk.gov.hmrc.mongo.workitem.{ProcessingStatus, WorkItem}
 
 import java.time.{Clock, Instant, ZoneOffset}
 
-class FileUploadWorkItemRepositorySpec extends SpecBase with DefaultPlayMongoRepositorySupport[WorkItem[FileUploadWorkItem]] {
+class FileUploadWorkItemRepositorySpec
+    extends SpecBase
+    with DefaultPlayMongoRepositorySupport[WorkItem[FileUploadWorkItem]] {
 
   override protected def databaseName: String = "disa-returns-backend-file-upload-work-item-repository-test"
 

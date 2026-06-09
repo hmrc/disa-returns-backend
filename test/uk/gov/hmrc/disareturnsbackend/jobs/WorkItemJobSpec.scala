@@ -30,11 +30,11 @@ import scala.concurrent.{Future, Promise}
 
 class WorkItemJobSpec extends SpecBase {
 
-  private val workerCount =
+  private val workerCount    =
     math.max(1, Runtime.getRuntime.availableProcessors() / 2)
-  private val now              = Instant.parse("2026-06-08T12:00:00Z")
-  private val clock            = Clock.fixed(now, ZoneOffset.UTC)
-  private val testWorkItem     = WorkItem(
+  private val now            = Instant.parse("2026-06-08T12:00:00Z")
+  private val clock          = Clock.fixed(now, ZoneOffset.UTC)
+  private val testWorkItem   = WorkItem(
     id = new ObjectId(),
     receivedAt = now,
     updatedAt = now,
@@ -43,9 +43,9 @@ class WorkItemJobSpec extends SpecBase {
     failureCount = 0,
     item = "test-item"
   )
-  private val actorSystem      = inject[ActorSystem]
-  private val dispatcherName   = "contexts.file-upload-work-item"
-  private val pollInterval     = 1.hour
+  private val actorSystem    = inject[ActorSystem]
+  private val dispatcherName = "contexts.file-upload-work-item"
+  private val pollInterval   = 1.hour
 
   "start" - {
 
@@ -93,9 +93,9 @@ class WorkItemJobSpec extends SpecBase {
   }
 
   trait TestSetup {
-    val mockLifecycle: ApplicationLifecycle                  = mock[ApplicationLifecycle]
-    val mockWorkItemRepository: WorkItemRepository[String]   = mock[WorkItemRepository[String]]
-    val processedWorkItem: Promise[WorkItem[String]]         = Promise[WorkItem[String]]()
+    val mockLifecycle: ApplicationLifecycle                = mock[ApplicationLifecycle]
+    val mockWorkItemRepository: WorkItemRepository[String] = mock[WorkItemRepository[String]]
+    val processedWorkItem: Promise[WorkItem[String]]       = Promise[WorkItem[String]]()
 
     def processResult: Future[Boolean] = Future.successful(false)
 
