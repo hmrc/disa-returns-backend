@@ -68,6 +68,15 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
 
         service.get(zReference, taxYear, month).futureValue mustBe Some(monthlyReturn)
       }
+
+      "must fail when the repository fails" in {
+        val exception = new RuntimeException(testMongoDownMessage)
+
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.failed(exception))
+
+        service.get(zReference, taxYear, month).failed.futureValue mustBe exception
+      }
     }
 
     "create" - {
@@ -103,6 +112,24 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
 
         service.create(zReference, taxYear, month, nilReturn = false).futureValue mustBe AlreadyExists
       }
+
+      "must fail when the repository fails" in {
+        val exception = new RuntimeException(testMongoDownMessage)
+
+        when(mockUuidGenerator.randomUuid()).thenReturn(testSubmissionId)
+        when(
+          mockMonthlyReturnRepository.create(
+            eqTo(zReference),
+            eqTo(taxYear),
+            eqTo(month),
+            eqTo(testSubmissionId),
+            eqTo(false)
+          )
+        )
+          .thenReturn(Future.failed(exception))
+
+        service.create(zReference, taxYear, month, nilReturn = false).failed.futureValue mustBe exception
+      }
     }
 
     "updateNilReturn" - {
@@ -133,6 +160,15 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
 
         service.updateNilReturn(zReference, taxYear, month, nilReturn = true).futureValue mustBe
           UpdateNilReturnResult.MonthlyReturnNotFound
+      }
+
+      "must fail when the repository fails" in {
+        val exception = new RuntimeException(testMongoDownMessage)
+
+        when(mockMonthlyReturnRepository.updateNilReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(true)))
+          .thenReturn(Future.failed(exception))
+
+        service.updateNilReturn(zReference, taxYear, month, nilReturn = true).failed.futureValue mustBe exception
       }
     }
 
@@ -204,6 +240,15 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
 
         verifyNoInteractions(mockMonthlyReturnRepository)
       }
+
+      "must fail when the repository fails" in {
+        val exception = new RuntimeException(testMongoDownMessage)
+
+        when(mockMonthlyReturnRepository.declare(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.failed(exception))
+
+        service.declare(zReference, taxYear, month).failed.futureValue mustBe exception
+      }
     }
 
     "createFileUpload" - {
@@ -257,6 +302,18 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
         service.createFileUpload(zReference, taxYear, month, uploadReference).futureValue mustBe
           CreateFileUploadResult.MonthlyReturnAlreadyDeclared
       }
+
+      "must fail when the repository fails" in {
+        val exception = new RuntimeException(testMongoDownMessage)
+
+        when(
+          mockMonthlyReturnRepository
+            .createFileUpload(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(uploadReference))
+        )
+          .thenReturn(Future.failed(exception))
+
+        service.createFileUpload(zReference, taxYear, month, uploadReference).failed.futureValue mustBe exception
+      }
     }
 
     "getFileUpload" - {
@@ -281,6 +338,17 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
           eqTo(month),
           eqTo(uploadReference)
         )
+      }
+
+      "must fail when the repository fails" in {
+        val exception = new RuntimeException(testMongoDownMessage)
+
+        when(
+          mockMonthlyReturnRepository.getFileUpload(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(uploadReference))
+        )
+          .thenReturn(Future.failed(exception))
+
+        service.getFileUpload(zReference, taxYear, month, uploadReference).failed.futureValue mustBe exception
       }
     }
 
@@ -311,6 +379,18 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
           .thenReturn(Future.successful(false))
 
         service.deleteFileUpload(zReference, taxYear, month, uploadReference).futureValue mustBe false
+      }
+
+      "must fail when the repository fails" in {
+        val exception = new RuntimeException(testMongoDownMessage)
+
+        when(
+          mockMonthlyReturnRepository
+            .deleteFileUpload(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(uploadReference))
+        )
+          .thenReturn(Future.failed(exception))
+
+        service.deleteFileUpload(zReference, taxYear, month, uploadReference).failed.futureValue mustBe exception
       }
     }
   }

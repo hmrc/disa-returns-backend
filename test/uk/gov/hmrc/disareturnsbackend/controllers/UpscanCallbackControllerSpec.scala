@@ -23,6 +23,7 @@ import org.scalatest.BeforeAndAfterEach
 import play.api.Application
 import play.api.inject.bind
 import play.api.libs.json.{JsValue, Json, OWrites}
+import play.api.mvc.Result
 import play.api.test.FakeRequest
 import play.api.test.Helpers.*
 import uk.gov.hmrc.disareturnsbackend.models.*
@@ -164,13 +165,33 @@ class UpscanCallbackControllerSpec extends SpecBase with BeforeAndAfterEach {
       status(result) mustBe BAD_REQUEST
       contentAsString(result) must include(invalidUpscanResultPayloadMessage)
     }
+
+    "must return BAD_REQUEST when path parameters are invalid" in {
+      val result = monthlyReturnUpscanCallback(
+        requestBody = Json.toJson(successfulUploadResult),
+        zReference = invalidTestZReference,
+        taxYear = testTaxYear,
+        month = routeMonth
+      )
+
+      status(result) mustBe BAD_REQUEST
+      contentAsString(result) must include(zReferenceFieldName)
+    }
   }
 
-  private def monthlyReturnUpscanCallback(requestBody: JsValue) =
+  private def monthlyReturnUpscanCallback(requestBody: JsValue): Future[Result] =
+    monthlyReturnUpscanCallback(requestBody, zReference, taxYear, routeMonth)
+
+  private def monthlyReturnUpscanCallback(
+    requestBody: JsValue,
+    zReference: String,
+    taxYear: String,
+    month: String
+  ): Future[Result] =
     controller.monthlyReturnUpscanCallback(
       zReference = zReference,
       taxYear = taxYear,
-      month = routeMonth
+      month = month
     )(
       FakeRequest()
         .withBody(requestBody)

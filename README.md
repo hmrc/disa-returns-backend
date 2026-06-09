@@ -209,6 +209,51 @@ Failed upload callback example:
 
 - Supported failure reasons are `QUARANTINE`, `REJECTED`, and `UNKNOWN`.
 
+## Work Items
+
+### File Upload
+
+Successful Upscan `READY` callbacks enqueue a file upload work item after the monthly return file upload has been completed successfully. The work item contains the monthly return key and upload reference:
+
+```json
+{
+  "zReference": "Z1234",
+  "taxYear": "2026-27",
+  "month": 5,
+  "reference": "2b4d6f3a-8c1e-4e4b-9c7a-123456789abc"
+}
+```
+
+The `FileUploadWorkItemJob` polls the `fileUploadWorkItems` collection and processes outstanding work items asynchronously. The job is started by `AppInitialiser` after internal-auth token initialisation succeeds. Startup is not blocked while internal-auth initialisation is in progress, but the work item job is not started until it completes successfully.
+
+Work item configuration lives in `conf/application.conf`:
+
+```hocon
+contexts {
+  file-upload-work-item {
+    fork-join-executor {
+      parallelism-min = 2
+      parallelism-factor = 1.0
+      parallelism-max = 8
+    }
+  }
+}
+
+file-upload-work-item-job {
+  pollInterval = 10 seconds
+  inProgressRetryAfter = 5 minutes
+}
+```
+
+Config purpose:
+
+- `contexts.file-upload-work-item` defines the dispatcher used by the background file upload work item workers.
+- `contexts.file-upload-work-item.parallelism-min` sets the minimum number of dispatcher threads available to the job.
+- `contexts.file-upload-work-item.parallelism-factor` scales dispatcher threads relative to available processors.
+- `contexts.file-upload-work-item.parallelism-max` caps the dispatcher thread pool.
+- `file-upload-work-item-job.pollInterval` controls how long the job waits before polling again when no work item is available.
+- `file-upload-work-item-job.inProgressRetryAfter` controls when an `InProgress` work item becomes eligible to be pulled again if it has not completed. This prevents stuck work items from being hidden forever.
+
 ## Before running the app
 
 This repository relies on having mongodb running locally. You can start it with:

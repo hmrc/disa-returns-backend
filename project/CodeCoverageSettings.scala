@@ -10,9 +10,15 @@ object CodeCoverageSettings {
     "uk.gov.hmrc.disareturnsbackend.AppInitialiser",
     "uk.gov.hmrc.disareturnsbackend.Module",
     "uk.gov.hmrc.disareturnsbackend.config.AppConfig",
+    "uk.gov.hmrc.disareturnsbackend.models.CreateFileUploadRequest",
+    "uk.gov.hmrc.disareturnsbackend.models.CreateMonthlyReturnRequest",
+    "uk.gov.hmrc.disareturnsbackend.models.CreateMonthlyReturnResponse",
+    "uk.gov.hmrc.disareturnsbackend.models.FileUploadWorkItem",
+    "uk.gov.hmrc.disareturnsbackend.models.UpdateNilReturnRequest",
     "app.*",
     "prod.*",
     ".*Routes.*",
+    "uk.gov.hmrc.disareturnsbackend.testOnly.*",
     "testOnly.*",
     "testOnlyDoNotUseInAppConf.*"
   )
