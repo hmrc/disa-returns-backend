@@ -20,6 +20,10 @@ import javax.inject.{Inject, Singleton}
 import play.api.Configuration
 import uk.gov.hmrc.play.bootstrap.config.ServicesConfig
 
+import java.time.Duration
+import scala.concurrent.duration.FiniteDuration
+import scala.jdk.DurationConverters.*
+
 @Singleton
 class AppConfig @Inject() (
   config: Configuration,
@@ -35,4 +39,13 @@ class AppConfig @Inject() (
 
   val declarationPeriodStart: Int = config.get[Int]("declarationPeriodStart")
   val declarationPeriodEnd: Int   = config.get[Int]("declarationPeriodEnd")
+
+  val fileUploadJobInProgressRetryAfter: Duration = config
+    .getOptional[Duration]("file-upload-work-item-job.inProgressRetryAfter")
+    .getOrElse(Duration.ofMinutes(5))
+
+  val fileUploadJobPollInterval: FiniteDuration = config
+    .getOptional[Duration]("file-upload-work-item-job.pollInterval")
+    .getOrElse(Duration.ofSeconds(10))
+    .toScala
 }

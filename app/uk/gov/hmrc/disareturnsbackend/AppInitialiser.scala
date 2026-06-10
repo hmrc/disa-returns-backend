@@ -19,13 +19,16 @@ package uk.gov.hmrc.disareturnsbackend
 import org.apache.pekko.Done
 import play.api.Logging
 import uk.gov.hmrc.disareturnsbackend.config.InternalAuthTokenInitialiser
+import uk.gov.hmrc.disareturnsbackend.jobs.FileUploadWorkItemJob
 
 import javax.inject.{Inject, Singleton}
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Try
 
 @Singleton
 class AppInitialiser @Inject() (
-  internalAuthTokenInitialiser: InternalAuthTokenInitialiser
+  internalAuthTokenInitialiser: InternalAuthTokenInitialiser,
+  fileUploadWorkItemJob: FileUploadWorkItemJob
 )(implicit ec: ExecutionContext)
     extends Logging {
 
@@ -34,6 +37,10 @@ class AppInitialiser @Inject() (
 
   initialised.foreach { _ =>
     logger.info("[AppInitialiser] Internal auth initialiser completed")
+
+    Try(fileUploadWorkItemJob.start()).failed.foreach { exception =>
+      logger.error("[AppInitialiser] File upload work item job failed to start", exception)
+    }
   }
 
   initialised.failed.foreach { exception =>
