@@ -31,6 +31,13 @@ class MonthlyReturnSpec extends SpecBase {
     size = testFileSize,
     upscanDownloadUrl = testDownloadUrl
   )
+  private val validation         = FileUploadValidationResult(1, 0, FileUploadValidationStatus.ValidationSuccess)
+  private val inlineErrors       = List(
+    FileUploadValidationError(
+      rowNumber = 1,
+      errorCodes = List(accountNumberRequiredErrorCode, invalidNationalInsuranceErrorCode)
+    )
+  )
   private val emptyMonthlyReturn = MonthlyReturn(
     zReference = testZReference,
     submissionId = testSubmissionId,
@@ -273,6 +280,25 @@ class MonthlyReturnSpec extends SpecBase {
       result.lastUpdated mustBe testUpscanCompletedOn
     }
 
+    "must leave other file uploads unchanged when completing a matching upload" in {
+      val otherFileUpload = FileUpload("other-reference", FileUploadStatus.Created, testCreatedOn)
+      val monthlyReturn   = emptyMonthlyReturn.copy(
+        fileUploads = List(
+          FileUpload(testUploadReference, FileUploadStatus.Created, testCreatedOn),
+          otherFileUpload
+        )
+      )
+
+      val result = monthlyReturn.completeUpscan(
+        reference = testUploadReference,
+        status = FileUploadStatus.UpscanSuccess,
+        upscanCompletedOn = testUpscanCompletedOn,
+        fileUploadDetails = Some(fileUploadDetails)
+      )
+
+      result.fileUploads(1) mustBe otherFileUpload
+    }
+
     "must not add a completed file upload when the reference does not exist" in {
       val monthlyReturn = emptyMonthlyReturn.createFileUpload(testUploadReference, testCreatedOn)
 
@@ -281,6 +307,17 @@ class MonthlyReturnSpec extends SpecBase {
         status = FileUploadStatus.UpscanSuccess,
         upscanCompletedOn = testUpscanCompletedOn,
         fileUploadDetails = Some(fileUploadDetails)
+      ) mustBe monthlyReturn
+    }
+
+    "must leave the return unchanged when completion does not change the upload" in {
+      val monthlyReturn = emptyMonthlyReturn.createFileUpload(testUploadReference, testCreatedOn)
+
+      monthlyReturn.completeUpscan(
+        reference = testUploadReference,
+        status = FileUploadStatus.Created,
+        upscanCompletedOn = testUpscanCompletedOn,
+        fileUploadDetails = None
       ) mustBe monthlyReturn
     }
 
@@ -369,14 +406,116 @@ class MonthlyReturnSpec extends SpecBase {
     }
   }
 
+  "updateFileUploadProcessingDetails" - {
+
+    "must store object-store locations and validation on the matching upload" in {
+      val validationWithInlineErrors = validation.copy(
+        status = FileUploadValidationStatus.ValidationFailed,
+        validationErrors = 2,
+        inlineErrors = inlineErrors
+      )
+      val monthlyReturn              = emptyMonthlyReturn.copy(
+        fileUploads = List(
+          FileUpload(testUploadReference, FileUploadStatus.UpscanSuccess, testCreatedOn, Some(fileUploadDetails)),
+          FileUpload("other-reference", FileUploadStatus.UpscanSuccess, testCreatedOn, Some(fileUploadDetails))
+        )
+      )
+
+      val result = monthlyReturn.updateFileUploadProcessingDetails(
+        reference = testUploadReference,
+        validation = validationWithInlineErrors,
+        objectStoreFileLocation = Some("original-location"),
+        objectStoreFileErrorsLocation = Some("errors-location"),
+        updatedOn = testUpscanCompletedOn
+      )
+
+      val updatedDetails = result.fileUploads.head.fileUploadDetails.value
+      updatedDetails.objectStoreFileLocation mustBe Some("original-location")
+      updatedDetails.objectStoreFileErrorsLocation mustBe Some("errors-location")
+      updatedDetails.validation mustBe Some(validationWithInlineErrors)
+      result.fileUploads.head.status mustBe FileUploadStatus.ValidationFailure
+      result.fileUploads(1) mustBe monthlyReturn.fileUploads(1)
+      result.lastUpdated mustBe testUpscanCompletedOn
+    }
+
+    "must set validation failure status when validation fails" in {
+      val failedValidation = FileUploadValidationResult(1, 1, FileUploadValidationStatus.ValidationFailed)
+      val monthlyReturn    = emptyMonthlyReturn.copy(
+        fileUploads =
+          List(FileUpload(testUploadReference, FileUploadStatus.UpscanSuccess, testCreatedOn, Some(fileUploadDetails)))
+      )
+
+      val result = monthlyReturn.updateFileUploadProcessingDetails(
+        reference = testUploadReference,
+        validation = failedValidation,
+        objectStoreFileLocation = Some("original-location"),
+        objectStoreFileErrorsLocation = Some("errors-location"),
+        updatedOn = testUpscanCompletedOn
+      )
+
+      result.fileUploads.head.status mustBe FileUploadStatus.ValidationFailure
+    }
+
+    "must set validation failure status when the file is invalid" in {
+      val invalidFileValidation = FileUploadValidationResult(0, 0, FileUploadValidationStatus.InvalidFile)
+      val monthlyReturn         = emptyMonthlyReturn.copy(
+        fileUploads =
+          List(FileUpload(testUploadReference, FileUploadStatus.UpscanSuccess, testCreatedOn, Some(fileUploadDetails)))
+      )
+
+      val result = monthlyReturn.updateFileUploadProcessingDetails(
+        reference = testUploadReference,
+        validation = invalidFileValidation,
+        objectStoreFileLocation = Some("original-location"),
+        objectStoreFileErrorsLocation = None,
+        updatedOn = testUpscanCompletedOn
+      )
+
+      result.fileUploads.head.status mustBe FileUploadStatus.ValidationFailure
+    }
+
+    "must store None for errors location when no error file exists" in {
+      val monthlyReturn = emptyMonthlyReturn.copy(
+        fileUploads =
+          List(FileUpload(testUploadReference, FileUploadStatus.UpscanSuccess, testCreatedOn, Some(fileUploadDetails)))
+      )
+
+      val result = monthlyReturn.updateFileUploadProcessingDetails(
+        reference = testUploadReference,
+        validation = validation,
+        objectStoreFileLocation = Some("original-location"),
+        objectStoreFileErrorsLocation = None,
+        updatedOn = testUpscanCompletedOn
+      )
+
+      result.fileUploads.head.fileUploadDetails.value.objectStoreFileErrorsLocation mustBe None
+    }
+
+    "must leave the return unchanged when the matching upload has no details" in {
+      val monthlyReturn = emptyMonthlyReturn.copy(
+        fileUploads = List(FileUpload(testUploadReference, FileUploadStatus.UpscanSuccess, testCreatedOn, None))
+      )
+
+      monthlyReturn.updateFileUploadProcessingDetails(
+        reference = testUploadReference,
+        validation = validation,
+        objectStoreFileLocation = Some("original-location"),
+        objectStoreFileErrorsLocation = None,
+        updatedOn = testUpscanCompletedOn
+      ) mustBe monthlyReturn
+    }
+  }
+
   "FileUploadStatus format" - {
 
     Seq(
-      Created                        -> createdStatusString,
-      FileUploadStatus.UpscanSuccess -> upscanSuccessStatusString,
-      UpscanQuarantine               -> upscanQuarantineStatusString,
-      UpscanRejected                 -> upscanRejectedStatusString,
-      UpscanUnknown                  -> upscanUnknownStatusString
+      Created                            -> createdStatusString,
+      FileUploadStatus.UpscanSuccess     -> upscanSuccessStatusString,
+      UpscanQuarantine                   -> upscanQuarantineStatusString,
+      UpscanRejected                     -> upscanRejectedStatusString,
+      UpscanUnknown                      -> upscanUnknownStatusString,
+      FileUploadStatus.ValidationSuccess -> validationSuccessStatusString,
+      FileUploadStatus.ValidationFailure -> validationFailureStatusString
     ).foreach { case (modelValue, jsonValue) =>
       s"must serialise and deserialise $jsonValue" in {
         Json.toJson[FileUploadStatus](modelValue) mustBe JsString(jsonValue)

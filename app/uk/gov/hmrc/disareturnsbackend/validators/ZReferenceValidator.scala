@@ -20,10 +20,10 @@ import scala.util.matching.Regex
 
 object ZReferenceValidator {
 
-  private val ZReferencePattern: Regex = "^[zZ][0-9]{4}$".r
+  private val zReferencePattern: Regex = "^[zZ][0-9]{4}$".r
 
   def isValid(zReference: String): Boolean =
     Option(zReference).exists { value =>
-      ZReferencePattern.pattern.matcher(value).matches()
+      zReferencePattern.pattern.matcher(value).matches()
     }
 }

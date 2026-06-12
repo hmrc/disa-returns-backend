@@ -83,12 +83,15 @@ trait BaseIntegrationSpec
   protected val nilReturnFalseRequest: JsObject = Json.obj(nilReturnFieldName -> false)
 
   def clearMongoCollections(): Unit = {
-    await(
-      inject[MongoComponent]
-        .database
-        .getCollection(monthlyReturnsCollectionName)
-        .deleteMany(Filters.empty())
-        .toFuture()
-    )
+    val database = inject[MongoComponent].database
+
+    Seq(monthlyReturnsCollectionName, monthlyReturnFileUploadWorkItemsCollectionName).foreach { collectionName =>
+      await(
+        database
+          .getCollection(collectionName)
+          .deleteMany(Filters.empty())
+          .toFuture()
+      )
+    }
   }
 }

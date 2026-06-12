@@ -19,8 +19,9 @@ package uk.gov.hmrc.disareturnsbackend
 import config.{InternalAuthTokenInitialiser, InternalAuthTokenInitialiserImpl, NoOpInternalAuthTokenInitialiser}
 import play.api.{Configuration, Environment}
 import play.api.inject.{Binding, Module as AppModule, bind as binding}
-import uk.gov.hmrc.disareturnsbackend.jobs.FileUploadWorkItemJob
+import uk.gov.hmrc.disareturnsbackend.jobs.MonthlyReturnWorkItemJob
 import uk.gov.hmrc.disareturnsbackend.mappers.{UpscanCallbackMapper, UpscanCallbackMapperImpl}
+import uk.gov.hmrc.disareturnsbackend.services.{MonthlyReturnFileUploadProcessingService, MonthlyReturnFileUploadProcessingServiceImpl}
 import uk.gov.hmrc.disareturnsbackend.testOnly.MutableClock
 
 import java.time.{Clock, ZoneOffset}
@@ -58,7 +59,8 @@ class Module extends AppModule:
       }
 
     Seq(
-      binding[FileUploadWorkItemJob].toSelf,
+      binding[MonthlyReturnWorkItemJob].toSelf,
+      binding[MonthlyReturnFileUploadProcessingService].to[MonthlyReturnFileUploadProcessingServiceImpl],
       binding[UpscanCallbackMapper].to[UpscanCallbackMapperImpl],
       binding[AppInitialiser].toSelf.eagerly()
     ) ++ clockBindings ++ authTokenInitialiserBindings

@@ -19,7 +19,7 @@ package uk.gov.hmrc.disareturnsbackend.services
 import play.api.Logging
 import uk.gov.hmrc.disareturnsbackend.mappers.UpscanCallbackMapper
 import uk.gov.hmrc.disareturnsbackend.models.*
-import uk.gov.hmrc.disareturnsbackend.repositories.{FileUploadWorkItemRepository, MonthlyReturnRepository}
+import uk.gov.hmrc.disareturnsbackend.repositories.*
 
 import javax.inject.{Inject, Singleton}
 import scala.concurrent.{ExecutionContext, Future}
@@ -28,7 +28,7 @@ import scala.util.control.NonFatal
 @Singleton
 class UpscanCallbackService @Inject() (
   monthlyReturnRepository: MonthlyReturnRepository,
-  fileUploadWorkItemRepository: FileUploadWorkItemRepository,
+  monthlyReturnFileUploadWorkItemRepository: MonthlyReturnFileUploadWorkItemRepository,
   upscanCallbackMapper: UpscanCallbackMapper
 )(implicit ec: ExecutionContext)
     extends Logging {
@@ -55,7 +55,7 @@ class UpscanCallbackService @Inject() (
           failureMessage = None
         ).flatMap {
           case true  =>
-            enqueueFileUploadWorkItem(zReference, taxYear, month, success.reference)
+            enqueueMonthlyReturnFileUploadWorkItem(zReference, taxYear, month, success.reference)
           case false =>
             Future.successful(())
         }
@@ -140,13 +140,13 @@ class UpscanCallbackService @Inject() (
           }
     }
 
-  private def enqueueFileUploadWorkItem(
+  private def enqueueMonthlyReturnFileUploadWorkItem(
     zReference: String,
     taxYear: String,
     month: Int,
     reference: String
   ): Future[Unit] =
-    fileUploadWorkItemRepository
+    monthlyReturnFileUploadWorkItemRepository
       .enqueue(
         zReference = zReference,
         taxYear = taxYear,
@@ -155,11 +155,11 @@ class UpscanCallbackService @Inject() (
       )
       .map { _ =>
         logger.info(
-          s"[UpscanCallbackService][enqueueFileUploadWorkItem] Added file upload work item for zReference [$zReference], taxYear [$taxYear], month [$month], upload reference [$reference]"
+          s"[UpscanCallbackService][enqueueMonthlyReturnFileUploadWorkItem] Added monthly return file upload work item for zReference [$zReference], taxYear [$taxYear], month [$month], upload reference [$reference]"
         )
       }
       .recoverWith { case NonFatal(exception) =>
-        logEnqueueFileUploadWorkItemFailure(zReference, taxYear, month, reference, exception)
+        logEnqueueMonthlyReturnFileUploadWorkItemFailure(zReference, taxYear, month, reference, exception)
         Future.failed(exception)
       }
 
@@ -193,7 +193,7 @@ class UpscanCallbackService @Inject() (
       exception
     )
 
-  private def logEnqueueFileUploadWorkItemFailure(
+  private def logEnqueueMonthlyReturnFileUploadWorkItemFailure(
     zReference: String,
     taxYear: String,
     month: Int,
@@ -201,7 +201,7 @@ class UpscanCallbackService @Inject() (
     exception: Throwable
   ): Unit =
     logger.error(
-      s"[UpscanCallbackService][logEnqueueFileUploadWorkItemFailure] Failed to add file upload work item for zReference [$zReference], taxYear [$taxYear], month [$month], upload reference [$reference]",
+      s"[UpscanCallbackService][logEnqueueMonthlyReturnFileUploadWorkItemFailure] Failed to add monthly return file upload work item for zReference [$zReference], taxYear [$taxYear], month [$month], upload reference [$reference]",
       exception
     )
 

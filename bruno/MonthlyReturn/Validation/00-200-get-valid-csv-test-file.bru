@@ -1,0 +1,15 @@
+meta {
+  name: 00-200-get-valid-csv-test-file
+  type: http
+  seq: 0
+}
+
+get {
+  url: {{baseUrl}}{{servicePath}}/test-only/file-upload/monthly/isa-open-valid.csv
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}

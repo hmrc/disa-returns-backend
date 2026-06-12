@@ -1,0 +1,42 @@
+meta {
+  name: 01-202-ready-validation-callback
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}{{servicePath}}/monthly/upscan/callback/{{callbackZReference}}/{{taxYear}}/{{month}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "reference": "{{upscanReference}}",
+    "fileStatus": "READY",
+    "downloadUrl": "{{baseUrl}}{{servicePath}}/test-only/file-upload/monthly/{{validationFileName}}",
+    "uploadDetails": {
+      "fileName": "{{validationFileName}}",
+      "fileMimeType": "{{validationMimeType}}",
+      "uploadTimestamp": "{{uploadTimestamp}}",
+      "checksum": "{{validationChecksum}}",
+      "size": {{validationFileSize}}
+    }
+  }
+}
+
+script:pre-request {
+  const fixtureName = bru.getVar("validationFileName");
+  const fixtureReference = `validation-${fixtureName.replace(/[^A-Za-z0-9]+/g, "-").replace(/-$/, "")}`;
+  bru.setVar("upscanReference", fixtureReference);
+  
+  const response = await bru.runRequest("MonthlyReturn/UpscanCallback/01-201-create-file-upload");
+  
+  if (response.status !== 201) {
+    throw new Error(`Expected file upload setup to respond with 201, got ${response.status}`);
+  }
+}

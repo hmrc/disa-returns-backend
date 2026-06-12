@@ -16,13 +16,16 @@
 
 package base
 
+import uk.gov.hmrc.disareturnsbackend.utils.Constants.CSV_MIME_TYPE
+
 import java.time.Instant
 import java.util.UUID
 
 trait TestConstants {
 
-  protected val testServicePath              = "/disa-returns-backend"
-  protected val monthlyReturnsCollectionName = "monthlyReturns"
+  protected val testServicePath                                = "/disa-returns-backend"
+  protected val monthlyReturnsCollectionName                   = "monthlyReturns"
+  protected val monthlyReturnFileUploadWorkItemsCollectionName = "monthlyReturnFileUploadWorkItems"
 
   protected val testZReference          = "Z1234"
   protected val lowercaseTestZReference = "z1234"
@@ -53,10 +56,10 @@ trait TestConstants {
   protected val testUpscanCompletedOnString: String      = testUpscanCompletedOn.toString
   protected val testExistingUpdatedOnEpochMillis: String = testExistingUpdatedOn.toEpochMilli.toString
 
-  protected val testFileName     = "return.csv"
-  protected val testFileMimeType = "text/csv"
-  protected val testChecksum     = "396f101dd52e8b2ace0dcf5ed09b1d1f030e608938510ce46e7a5c7a4e775100"
-  protected val testFileSize     = 1024L
+  protected val testFileMimeType: String = CSV_MIME_TYPE
+  protected val testFileName             = "return.csv"
+  protected val testChecksum             = "396f101dd52e8b2ace0dcf5ed09b1d1f030e608938510ce46e7a5c7a4e775100"
+  protected val testFileSize             = 1024L
 
   protected val zReferenceFieldName        = "zReference"
   protected val submissionIdFieldName      = "submissionId"
@@ -92,7 +95,24 @@ trait TestConstants {
   protected val upscanQuarantineStatusString  = "UPSCAN_QUARANTINE"
   protected val upscanRejectedStatusString    = "UPSCAN_REJECTED"
   protected val upscanUnknownStatusString     = "UPSCAN_UNKNOWN"
+  protected val validationSuccessStatusString = "VALIDATION_SUCCESS"
+  protected val validationFailureStatusString = "VALIDATION_FAILURE"
   protected val unknownFileUploadStatusString = "UNKNOWN_STATUS"
+
+  protected val accountNumberRequiredErrorCode            = "E010"
+  protected val nationalInsuranceRequiredErrorCode        = "E020"
+  protected val invalidNationalInsuranceErrorCode         = "E022"
+  protected val firstNameRequiredErrorCode                = "E030"
+  protected val invalidFirstNameErrorCode                 = "E032"
+  protected val surnameRequiredErrorCode                  = "E050"
+  protected val dateOfBirthRequiredErrorCode              = "E060"
+  protected val isaTypeRequiredErrorCode                  = "E070"
+  protected val transferInRequiredErrorCode               = "E090"
+  protected val transferOutRequiredErrorCode              = "E100"
+  protected val lastSubscriptionRequiredErrorCode         = "E120"
+  protected val currentYearSubscriptionsRequiredErrorCode = "E130"
+  protected val invalidCurrentYearSubscriptionsErrorCode  = "E132"
+  protected val marketValueRequiredErrorCode              = "E160"
 
   protected val readyFileStatusString   = "READY"
   protected val failedFileStatusString  = "FAILED"
