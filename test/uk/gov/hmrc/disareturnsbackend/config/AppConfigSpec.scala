@@ -42,7 +42,7 @@ class AppConfigSpec extends SpecBase {
       "appName"                                                       -> "disa-returns-backend",
       "declarationPeriodEnd"                                          -> 19,
       "declarationPeriodStart"                                        -> 6,
-      "internal-auth.token"                                           -> "valid-internal-auth-token",
+      "internal-auth.token"                                           -> "valid-internal-auth-token-disa-returns-backend",
       "mongodb.monthlyReturnTimeToLiveInDays"                         -> 20L,
       "monthly-return-file-upload-work-item-job.pollInterval"         -> "10 seconds",
       "monthly-return-file-upload-work-item-job.inProgressRetryAfter" -> "5 minutes"

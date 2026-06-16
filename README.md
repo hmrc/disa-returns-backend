@@ -527,7 +527,7 @@ When using `OBJECT_STORE_STUB` locally, object-store stores files under its file
 
 ```bash
 curl -s \
-  -H "Authorization: valid-internal-auth-token" \
+  -H "Authorization: valid-internal-auth-token-disa-returns-backend" \
   http://localhost:8464/object-store/list/disa-returns-backend | jq
 ```
 
@@ -537,7 +537,7 @@ To download one of the listed files, call the `location` returned by the list re
 
 ```bash
 curl -s \
-  -H "Authorization: valid-internal-auth-token" \
+  -H "Authorization: valid-internal-auth-token-disa-returns-backend" \
   http://localhost:8464/object-store/object/disa-returns-backend/validation-isa-open-valid-csv \
   --output validation-isa-open-valid.csv
 ```
@@ -546,7 +546,7 @@ For an errors workbook, use the `-errors` location and save it as `.xlsx`:
 
 ```bash
 curl -s \
-  -H "Authorization: valid-internal-auth-token" \
+  -H "Authorization: valid-internal-auth-token-disa-returns-backend" \
   http://localhost:8464/object-store/object/disa-returns-backend/validation-row-errors-invalid-csv-errors \
   --output validation-row-errors-invalid-csv-errors.xlsx
 ```
