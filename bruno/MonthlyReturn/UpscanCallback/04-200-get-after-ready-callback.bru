@@ -31,7 +31,7 @@ tests {
   test("ready callback file upload is recorded", function() {
     const responseBody = res.body ?? res.getBody();
     const body = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
-    const expectedReference = bru.getEnvVar("upscanReference");
+    const expectedReference = bru.getVar("upscanReference");
     const expectedFileName = bru.getEnvVar("fileName");
   
     expect(body.fileUploads).to.have.lengthOf(1);
