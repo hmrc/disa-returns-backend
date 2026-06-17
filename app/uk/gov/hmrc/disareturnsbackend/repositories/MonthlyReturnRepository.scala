@@ -20,10 +20,8 @@ import org.bson.conversions.Bson
 import org.mongodb.scala.model.*
 import uk.gov.hmrc.disareturnsbackend.config.AppConfig
 import uk.gov.hmrc.disareturnsbackend.models.*
-import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository.CreateFileUploadRepositoryResult
 import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository.CreateFileUploadRepositoryResult.*
-import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository.DeclareMonthlyReturnRepositoryResult
-import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository.UpdateNilReturnRepositoryResult
+import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository.*
 import uk.gov.hmrc.mongo.MongoComponent
 import uk.gov.hmrc.mongo.MongoUtils.DuplicateKey
 import uk.gov.hmrc.mongo.play.json.{Codecs, PlayMongoRepository}
@@ -61,7 +59,8 @@ class MonthlyReturnRepository @Inject() (
       ),
       replaceIndexes = true,
       extraCodecs = Codecs.playFormatSumCodecs(FileUploadStatus.format) ++
-        Codecs.playFormatSumCodecs(FileUploadFailureReason.format)
+        Codecs.playFormatSumCodecs(FileUploadFailureReason.format) ++
+        Codecs.playFormatSumCodecs(FileUploadValidationStatus.format)
     ) {
 
   def get(zReference: String, taxYear: String, month: Int): Future[Option[MonthlyReturn]] =
@@ -242,6 +241,39 @@ class MonthlyReturnRepository @Inject() (
         }
 
       case None =>
+        Future.successful(false)
+    }
+  }
+
+  def updateFileUploadProcessingDetails(
+    zReference: String,
+    taxYear: String,
+    month: Int,
+    reference: String,
+    validation: FileUploadValidationResult,
+    objectStoreFileLocation: Option[String],
+    objectStoreFileErrorsLocation: Option[String]
+  ): Future[Boolean] = {
+    val updatedOn = now()
+
+    get(zReference, taxYear, month).flatMap {
+      case Some(monthlyReturn) if monthlyReturn.getFileUpload(reference).exists(_.fileUploadDetails.isDefined) =>
+        val updatedMonthlyReturn =
+          monthlyReturn.updateFileUploadProcessingDetails(
+            reference = reference,
+            validation = validation,
+            objectStoreFileLocation = objectStoreFileLocation,
+            objectStoreFileErrorsLocation = objectStoreFileErrorsLocation,
+            updatedOn = updatedOn
+          )
+
+        if (updatedMonthlyReturn == monthlyReturn) {
+          Future.successful(false)
+        } else {
+          replace(updatedMonthlyReturn)
+        }
+
+      case _ =>
         Future.successful(false)
     }
   }

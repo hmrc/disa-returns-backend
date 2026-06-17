@@ -25,6 +25,7 @@ import play.api.inject.ApplicationLifecycle
 import uk.gov.hmrc.mongo.workitem.{ProcessingStatus, WorkItem, WorkItemRepository}
 
 import java.time.{Clock, Instant, ZoneOffset}
+import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.duration.DurationInt
 import scala.concurrent.{Future, Promise}
 
@@ -44,7 +45,7 @@ class WorkItemJobSpec extends SpecBase {
     item = "test-item"
   )
   private val actorSystem    = inject[ActorSystem]
-  private val dispatcherName = "contexts.file-upload-work-item"
+  private val dispatcherName = "contexts.monthly-return-file-upload-work-item"
   private val pollInterval   = 1.hour
 
   "start" - {
@@ -90,22 +91,47 @@ class WorkItemJobSpec extends SpecBase {
       verify(mockWorkItemRepository, mockitoTimeout(1000).times(workerCount))
         .pullOutstanding(any[Instant], any[Instant])
     }
+
+    "must stop scheduled workers when the lifecycle stops" in new TestSetup {
+      override def jobPollInterval = 1.second
+
+      val pullCount      = new AtomicInteger(0)
+      val firstPollsDone = Promise[Unit]()
+
+      when(mockWorkItemRepository.pullOutstanding(any[Instant], any[Instant]))
+        .thenAnswer { _ =>
+          if (pullCount.incrementAndGet() == workerCount) {
+            firstPollsDone.trySuccess(())
+          }
+
+          Future.successful(None)
+        }
+
+      job.start()
+      firstPollsDone.future.futureValue
+      lifecycle.stop().futureValue
+      Thread.sleep(jobPollInterval.toMillis + 100)
+
+      pullCount.get() mustBe workerCount
+    }
   }
 
   trait TestSetup {
-    val mockLifecycle: ApplicationLifecycle                = mock[ApplicationLifecycle]
+    val lifecycle: CapturingLifecycle                      = new CapturingLifecycle
     val mockWorkItemRepository: WorkItemRepository[String] = mock[WorkItemRepository[String]]
     val processedWorkItem: Promise[WorkItem[String]]       = Promise[WorkItem[String]]()
 
     def processResult: Future[Boolean] = Future.successful(false)
 
-    val job = new WorkItemJob[String](
+    def jobPollInterval = pollInterval
+
+    val job = new BaseWorkItemJob[String](
       actorSystem = actorSystem,
       clock = clock,
-      lifecycle = mockLifecycle,
+      lifecycle = lifecycle,
       workItemRepository = mockWorkItemRepository,
       dispatcherName = dispatcherName,
-      pollInterval = pollInterval
+      pollInterval = jobPollInterval
     ) {
       override protected val jobName: String = "TestWorkItemJob"
 
@@ -117,5 +143,16 @@ class WorkItemJobSpec extends SpecBase {
         processResult
       }
     }
+  }
+
+  final class CapturingLifecycle extends ApplicationLifecycle {
+
+    private var stopHook: () => Future[?] = () => Future.successful(())
+
+    override def addStopHook(hook: () => Future[?]): Unit =
+      stopHook = hook
+
+    override def stop(): Future[?] =
+      stopHook()
   }
 }

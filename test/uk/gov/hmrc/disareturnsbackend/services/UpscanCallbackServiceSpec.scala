@@ -23,19 +23,19 @@ import org.mockito.Mockito.{never, reset, verify, when}
 import org.scalatest.BeforeAndAfterEach
 import uk.gov.hmrc.disareturnsbackend.mappers.{UpscanCallbackMapper, UpscanCallbackMapperImpl}
 import uk.gov.hmrc.disareturnsbackend.models.*
-import uk.gov.hmrc.disareturnsbackend.repositories.{FileUploadWorkItemRepository, MonthlyReturnRepository}
+import uk.gov.hmrc.disareturnsbackend.repositories.{MonthlyReturnFileUploadWorkItemRepository, MonthlyReturnRepository}
 import uk.gov.hmrc.mongo.workitem.{ProcessingStatus, WorkItem}
 
 import scala.concurrent.Future
 
 class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
 
-  private val mockMonthlyReturnRepository                = mock[MonthlyReturnRepository]
-  private val mockFileUploadWorkItemRepository           = mock[FileUploadWorkItemRepository]
-  private val upscanCallbackMapper: UpscanCallbackMapper = new UpscanCallbackMapperImpl()
-  private val service                                    = new UpscanCallbackService(
+  private val mockMonthlyReturnRepository                   = mock[MonthlyReturnRepository]
+  private val mockMonthlyReturnFileUploadWorkItemRepository = mock[MonthlyReturnFileUploadWorkItemRepository]
+  private val upscanCallbackMapper: UpscanCallbackMapper    = new UpscanCallbackMapperImpl()
+  private val service                                       = new UpscanCallbackService(
     mockMonthlyReturnRepository,
-    mockFileUploadWorkItemRepository,
+    mockMonthlyReturnFileUploadWorkItemRepository,
     upscanCallbackMapper
   )
 
@@ -72,14 +72,14 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
 
   override protected def beforeEach(): Unit = {
     super.beforeEach()
-    reset(mockMonthlyReturnRepository, mockFileUploadWorkItemRepository)
+    reset(mockMonthlyReturnRepository, mockMonthlyReturnFileUploadWorkItemRepository)
   }
 
   "monthlyReturnUpscanCallback" - {
 
     "must complete a file upload as UPSCAN_SUCCESS for a READY callback" in {
       stubCompleteUpscan(result = true)
-      stubEnqueueFileUploadWorkItem()
+      stubEnqueueMonthlyReturnFileUploadWorkItem()
 
       service
         .monthlyReturnUpscanCallback(
@@ -104,7 +104,7 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
         eqTo(Option.empty[FileUploadFailureReason]),
         eqTo(Option.empty[String])
       )
-      verifyEnqueueFileUploadWorkItem()
+      verifyEnqueueMonthlyReturnFileUploadWorkItem()
     }
 
     "must not enqueue a file upload work item when no monthly return is updated" in {
@@ -123,7 +123,7 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
         )
         .futureValue
 
-      verifyNoFileUploadWorkItemEnqueued()
+      verifyNoMonthlyReturnFileUploadWorkItemEnqueued()
     }
 
     "must not complete a file upload for a nil return" in {
@@ -152,7 +152,7 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
         any[Option[FileUploadFailureReason]],
         any[Option[String]]
       )
-      verifyNoFileUploadWorkItemEnqueued()
+      verifyNoMonthlyReturnFileUploadWorkItemEnqueued()
     }
 
     "must not complete a file upload when the reference does not exist" in {
@@ -181,7 +181,7 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
         any[Option[FileUploadFailureReason]],
         any[Option[String]]
       )
-      verifyNoFileUploadWorkItemEnqueued()
+      verifyNoMonthlyReturnFileUploadWorkItemEnqueued()
     }
 
     "must not complete a file upload for a declared return when the reference does not exist" in {
@@ -210,7 +210,7 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
         any[Option[FileUploadFailureReason]],
         any[Option[String]]
       )
-      verifyNoFileUploadWorkItemEnqueued()
+      verifyNoMonthlyReturnFileUploadWorkItemEnqueued()
     }
 
     "must complete a file upload for a declared return when the CREATED upload exists from before declaration" in {
@@ -238,7 +238,7 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
           any[Option[String]]
         )
       ).thenReturn(Future.successful(true))
-      stubEnqueueFileUploadWorkItem()
+      stubEnqueueMonthlyReturnFileUploadWorkItem()
 
       service
         .monthlyReturnUpscanCallback(
@@ -263,7 +263,7 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
         eqTo(Option.empty[FileUploadFailureReason]),
         eqTo(Option.empty[String])
       )
-      verifyEnqueueFileUploadWorkItem()
+      verifyEnqueueMonthlyReturnFileUploadWorkItem()
     }
 
     Seq(
@@ -299,7 +299,7 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
           eqTo(Some(fileUploadFailureReason)),
           eqTo(Some(testUpscanFailureMessage))
         )
-        verifyNoFileUploadWorkItemEnqueued()
+        verifyNoMonthlyReturnFileUploadWorkItemEnqueued()
       }
     }
 
@@ -331,12 +331,12 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
         eqTo(Option.empty[FileUploadFailureReason]),
         eqTo(Option.empty[String])
       )
-      verifyNoFileUploadWorkItemEnqueued()
+      verifyNoMonthlyReturnFileUploadWorkItemEnqueued()
     }
 
     "must fail when adding a file upload work item fails for a READY callback" in {
       stubCompleteUpscan(result = true)
-      stubEnqueueFileUploadWorkItem(Future.failed(new RuntimeException(testMongoDownMessage)))
+      stubEnqueueMonthlyReturnFileUploadWorkItem(Future.failed(new RuntimeException(testMongoDownMessage)))
 
       service
         .monthlyReturnUpscanCallback(
@@ -363,7 +363,7 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
         eqTo(Option.empty[FileUploadFailureReason]),
         eqTo(Option.empty[String])
       )
-      verifyEnqueueFileUploadWorkItem()
+      verifyEnqueueMonthlyReturnFileUploadWorkItem()
     }
 
     "must fail when the repository fails for a FAILED callback" in {
@@ -396,12 +396,12 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
         eqTo(Some(FileUploadFailureReason.Rejected)),
         eqTo(Some(testUpscanFailureMessage))
       )
-      verifyNoFileUploadWorkItemEnqueued()
+      verifyNoMonthlyReturnFileUploadWorkItemEnqueued()
     }
   }
 
-  private def stubEnqueueFileUploadWorkItem(): Unit =
-    stubEnqueueFileUploadWorkItem(
+  private def stubEnqueueMonthlyReturnFileUploadWorkItem(): Unit =
+    stubEnqueueMonthlyReturnFileUploadWorkItem(
       Future.successful(
         WorkItem(
           id = new ObjectId(),
@@ -410,14 +410,16 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
           availableAt = testCreatedOn,
           status = ProcessingStatus.ToDo,
           failureCount = 0,
-          item = FileUploadWorkItem(zReference, taxYear, month, upscanReference)
+          item = MonthlyReturnFileUploadWorkItem(zReference, taxYear, month, upscanReference)
         )
       )
     )
 
-  private def stubEnqueueFileUploadWorkItem(result: Future[WorkItem[FileUploadWorkItem]]): Unit =
+  private def stubEnqueueMonthlyReturnFileUploadWorkItem(
+    result: Future[WorkItem[MonthlyReturnFileUploadWorkItem]]
+  ): Unit =
     when(
-      mockFileUploadWorkItemRepository.enqueue(
+      mockMonthlyReturnFileUploadWorkItemRepository.enqueue(
         any[String],
         any[String],
         any[Int],
@@ -425,16 +427,16 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
       )
     ).thenReturn(result)
 
-  private def verifyEnqueueFileUploadWorkItem(): Unit =
-    verify(mockFileUploadWorkItemRepository).enqueue(
+  private def verifyEnqueueMonthlyReturnFileUploadWorkItem(): Unit =
+    verify(mockMonthlyReturnFileUploadWorkItemRepository).enqueue(
       eqTo(zReference),
       eqTo(taxYear),
       eqTo(month),
       eqTo(upscanReference)
     )
 
-  private def verifyNoFileUploadWorkItemEnqueued(): Unit =
-    verify(mockFileUploadWorkItemRepository, never()).enqueue(
+  private def verifyNoMonthlyReturnFileUploadWorkItemEnqueued(): Unit =
+    verify(mockMonthlyReturnFileUploadWorkItemRepository, never()).enqueue(
       any[String],
       any[String],
       any[Int],

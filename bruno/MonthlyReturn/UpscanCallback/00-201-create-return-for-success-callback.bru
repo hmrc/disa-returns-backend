@@ -26,6 +26,12 @@ assert {
 }
 
 script:pre-request {
+  const clearWorkItemsResponse = await bru.runRequest("TestOnly/MonthlyReturnFileUploadWorkItems/01-204-clear-work-items");
+  
+  if (clearWorkItemsResponse.status !== 204) {
+    throw new Error(`Expected monthly return file-upload work-item cleanup to respond with 204, got ${clearWorkItemsResponse.status}`);
+  }
+  
   const clearResponse = await bru.runRequest("TestOnly/MonthlyReturns/01-204-clear-monthly-returns");
   
   if (clearResponse.status !== 204) {

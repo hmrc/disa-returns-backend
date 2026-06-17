@@ -1,0 +1,52 @@
+meta {
+  name: 03-200-empty-row-invalid-csv-processed
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{callbackZReference}}/{{taxYear}}/{{month}}/files/{{upscanReference}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+script:pre-request {
+  bru.setVar("validationFileName", "empty-row-invalid.csv");
+  bru.setVar("validationMimeType", bru.getEnvVar("csvMimeType"));
+  bru.setVar("validationChecksum", "5fd0c7dd7d7a1a5f255b62ff5f0408ce7e9c25438092b62b11dda572625586c5");
+  bru.setVar("validationFileSize", 471);
+  bru.setVar("expectedUploadStatus", "VALIDATION_FAILURE");
+  bru.setVar("expectedValidationStatus", "ValidationFailed");
+  bru.setVar("expectedRowsValidated", 1);
+  bru.setVar("expectedValidationErrors", 11);
+  bru.setVar("expectedInlineErrors", '[{"rowNumber":1,"errorCodes":["E010","E020","E030","E050","E060","E070","E090","E100","E120","E130","E160"]}]');
+  bru.setVar("expectedErrorsWorkbook", "true");
+
+  const response = await bru.runRequest("TestOnly/ValidationHelpers/01-202-ready-validation-callback");
+  if (response.status !== 202) {
+    throw new Error(`Expected READY callback to respond with 202, got ${response.status}`);
+  }
+  const delayMs = Number(bru.getEnvVar("validationProcessingDelayMs") ?? 10000);
+  await new Promise(resolve => setTimeout(resolve, delayMs));
+}
+
+tests {
+  test("processed as expected", function() {
+    const responseBody = res.body ?? res.getBody();
+    const body = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
+    const details = body.fileUploadDetails;
+    const validation = details.validation;
+    expect(body.status).to.equal(bru.getVar("expectedUploadStatus"));
+    expect(details.fileName).to.equal(bru.getVar("validationFileName"));
+    expect(validation.status).to.equal(bru.getVar("expectedValidationStatus"));
+    expect(validation.rowsValidated).to.equal(Number(bru.getVar("expectedRowsValidated")));
+    expect(validation.validationErrors).to.equal(Number(bru.getVar("expectedValidationErrors")));
+    expect(validation.inlineErrors ?? []).to.deep.equal(JSON.parse(bru.getVar("expectedInlineErrors")));
+    expect(details.objectStoreFileLocation).to.equal(`disa-returns-backend/${bru.getVar("upscanReference")}`);
+    expect(details.objectStoreFileErrorsLocation).to.equal(`disa-returns-backend/${bru.getVar("upscanReference")}-errors`);
+  });
+}

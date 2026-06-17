@@ -48,6 +48,9 @@ final case class MonthlyReturn(
 
   def hasDeclaration: Boolean = declaredOn.isDefined
 
+  def getFileUpload(reference: String): Option[FileUpload] =
+    fileUploads.find(_.reference == reference)
+
   def declare(declaredOn: Instant): MonthlyReturn =
     if (hasDeclaration) {
       this
@@ -156,6 +159,48 @@ final case class MonthlyReturn(
     } else {
       this
     }
+
+  def updateFileUploadProcessingDetails(
+    reference: String,
+    validation: FileUploadValidationResult,
+    objectStoreFileLocation: Option[String],
+    objectStoreFileErrorsLocation: Option[String],
+    updatedOn: Instant
+  ): MonthlyReturn = {
+    val updatedUploads = fileUploads.map {
+      case fileUpload if fileUpload.reference == reference =>
+        val validationStatus = validation.status match {
+          case FileUploadValidationStatus.ValidationSuccess => FileUploadStatus.ValidationSuccess
+          case FileUploadValidationStatus.ValidationFailed  => FileUploadStatus.ValidationFailure
+          case FileUploadValidationStatus.InvalidFile       => FileUploadStatus.ValidationFailure
+        }
+        fileUpload.fileUploadDetails match {
+          case Some(details) =>
+            val updatedDetails = details.copy(
+              objectStoreFileLocation = objectStoreFileLocation,
+              objectStoreFileErrorsLocation = objectStoreFileErrorsLocation,
+              validation = Some(validation)
+            )
+
+            fileUpload.copy(status = validationStatus, fileUploadDetails = Some(updatedDetails))
+
+          case None =>
+            fileUpload
+        }
+
+      case fileUpload =>
+        fileUpload
+    }
+
+    if (updatedUploads == fileUploads) {
+      this
+    } else {
+      copy(
+        fileUploads = updatedUploads,
+        lastUpdated = updatedOn
+      )
+    }
+  }
 }
 
 object MonthlyReturn {
@@ -184,109 +229,4 @@ object MonthlyReturn {
       derivedMongoFormat
     )
   }
-}
-
-final case class FileUpload(
-  reference: String,
-  status: FileUploadStatus,
-  createdOn: Instant,
-  fileUploadDetails: Option[FileUploadDetails] = None,
-  failureReason: Option[FileUploadFailureReason] = None,
-  failureMessage: Option[String] = None
-)
-
-object FileUpload {
-  implicit val format: OFormat[FileUpload] = Json.format[FileUpload]
-
-  val mongoFormat: OFormat[FileUpload] = {
-    import MonthlyReturnFormats.mongoInstantFormat
-
-    implicit val fileUploadDetailsFormat: OFormat[FileUploadDetails] = FileUploadDetails.mongoFormat
-
-    Json.format[FileUpload]
-  }
-}
-
-final case class FileUploadDetails(
-  fileName: String,
-  fileMimeType: String,
-  uploadTimestamp: Instant,
-  checksum: String,
-  size: Long,
-  upscanDownloadUrl: String,
-  upscanCompletedOn: Option[Instant] = None
-)
-
-object FileUploadDetails {
-  implicit val format: OFormat[FileUploadDetails] = Json.format[FileUploadDetails]
-
-  val mongoFormat: OFormat[FileUploadDetails] = {
-    import MonthlyReturnFormats.mongoInstantFormat
-
-    Json.format[FileUploadDetails]
-  }
-}
-
-sealed trait FileUploadFailureReason {
-  val value: String
-}
-
-object FileUploadFailureReason {
-
-  case object Quarantine extends FileUploadFailureReason { val value = "QUARANTINE" }
-  case object Rejected extends FileUploadFailureReason { val value = "REJECTED" }
-  case object Unknown extends FileUploadFailureReason { val value = "UNKNOWN" }
-
-  val values: Seq[FileUploadFailureReason] =
-    Seq(Quarantine, Rejected, Unknown)
-
-  private def fromString(value: String): Option[FileUploadFailureReason] =
-    values.find(_.value == value)
-
-  implicit val reads: Reads[FileUploadFailureReason] = Reads {
-    case JsString(value) =>
-      fromString(value)
-        .map(JsSuccess(_))
-        .getOrElse(JsError(s"Invalid file upload failure reason: $value"))
-    case _               =>
-      JsError("File upload failure reason must be a string")
-  }
-
-  implicit val writes: Writes[FileUploadFailureReason] =
-    Writes(reason => JsString(reason.value))
-
-  implicit val format: Format[FileUploadFailureReason] = Format(reads, writes)
-}
-
-sealed trait FileUploadStatus {
-  val value: String
-}
-
-object FileUploadStatus {
-
-  case object Created extends FileUploadStatus { val value = "CREATED" }
-  case object UpscanSuccess extends FileUploadStatus { val value = "UPSCAN_SUCCESS" }
-  case object UpscanQuarantine extends FileUploadStatus { val value = "UPSCAN_QUARANTINE" }
-  case object UpscanRejected extends FileUploadStatus { val value = "UPSCAN_REJECTED" }
-  case object UpscanUnknown extends FileUploadStatus { val value = "UPSCAN_UNKNOWN" }
-
-  val values: Seq[FileUploadStatus] =
-    Seq(Created, UpscanSuccess, UpscanQuarantine, UpscanRejected, UpscanUnknown)
-
-  private def fromString(value: String): Option[FileUploadStatus] =
-    values.find(_.value == value)
-
-  implicit val reads: Reads[FileUploadStatus] = Reads {
-    case JsString(value) =>
-      fromString(value)
-        .map(JsSuccess(_))
-        .getOrElse(JsError(s"Invalid file upload status: $value"))
-    case _               =>
-      JsError("File upload status must be a string")
-  }
-
-  implicit val writes: Writes[FileUploadStatus] =
-    Writes(status => JsString(status.value))
-
-  implicit val format: Format[FileUploadStatus] = Format(reads, writes)
 }

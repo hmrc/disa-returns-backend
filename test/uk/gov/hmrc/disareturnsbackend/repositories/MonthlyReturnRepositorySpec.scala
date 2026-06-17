@@ -50,6 +50,7 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
   private val uploadReference   = testUploadReference
   private val existingUpdated   = testExistingUpdatedOn
   private val createdOn         = testRepositoryCreatedOn
+  private val validation        = FileUploadValidationResult(1, 0, FileUploadValidationStatus.ValidationSuccess)
   private val fileUploadDetails = FileUploadDetails(
     fileName = testFileName,
     fileMimeType = testFileMimeType,
@@ -212,6 +213,17 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
           case other                                                           =>
             fail(s"Expected NilReturnUpdated, got $other")
         }
+      }
+
+      "must return the existing MonthlyReturn when nilReturn is unchanged" in {
+        val monthlyReturn       = buildMonthlyReturn(nilReturn = false)
+        val storedMonthlyReturn = monthlyReturn.copy(lastUpdated = fixedNow)
+        repository.upsert(monthlyReturn).futureValue
+
+        repository.updateNilReturn(zReference, taxYear, month, nilReturn = false).futureValue mustBe
+          UpdateNilReturnRepositoryResult.NilReturnUpdated(storedMonthlyReturn)
+
+        repository.get(zReference, taxYear, month).futureValue.value mustBe storedMonthlyReturn
       }
 
       "must return MonthlyReturnAlreadyDeclared when the MonthlyReturn has already been declared" in {
@@ -565,6 +577,109 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
         repository.get(zReference, taxYear, month).futureValue.value.fileUploads mustBe Nil
       }
     }
+
+    "updateFileUploadProcessingDetails" - {
+
+      "must update file upload processing details when the MonthlyReturn and FileUploadDetails exist" in {
+        repository
+          .upsert(buildMonthlyReturn(fileUploads = List(completedFileUpload(reference = uploadReference))))
+          .futureValue
+
+        repository
+          .updateFileUploadProcessingDetails(
+            zReference = zReference,
+            taxYear = taxYear,
+            month = month,
+            reference = uploadReference,
+            validation = validation,
+            objectStoreFileLocation = Some("original-location"),
+            objectStoreFileErrorsLocation = Some("errors-location")
+          )
+          .futureValue mustBe true
+
+        val storedFileUpload = repository.get(zReference, taxYear, month).futureValue.value.fileUploads.head
+        storedFileUpload.status mustBe ValidationSuccess
+        storedFileUpload.fileUploadDetails.value mustBe fileUploadDetails.copy(
+          objectStoreFileLocation = Some("original-location"),
+          objectStoreFileErrorsLocation = Some("errors-location"),
+          validation = Some(validation)
+        )
+      }
+
+      "must return false when processing details are unchanged" in {
+        val completedUpload     = completedFileUpload(reference = uploadReference).copy(
+          status = ValidationSuccess,
+          fileUploadDetails = Some(fileUploadDetails.copy(validation = Some(validation)))
+        )
+        val monthlyReturn       = buildMonthlyReturn(fileUploads = List(completedUpload))
+        val storedMonthlyReturn = monthlyReturn.copy(lastUpdated = fixedNow)
+        repository.upsert(monthlyReturn).futureValue
+
+        repository
+          .updateFileUploadProcessingDetails(
+            zReference = zReference,
+            taxYear = taxYear,
+            month = month,
+            reference = uploadReference,
+            validation = validation,
+            objectStoreFileLocation = None,
+            objectStoreFileErrorsLocation = None
+          )
+          .futureValue mustBe false
+
+        repository.get(zReference, taxYear, month).futureValue.value mustBe storedMonthlyReturn
+      }
+
+      "must return false when the MonthlyReturn does not exist" in {
+        repository
+          .updateFileUploadProcessingDetails(
+            zReference = zReference,
+            taxYear = taxYear,
+            month = month,
+            reference = uploadReference,
+            validation = validation,
+            objectStoreFileLocation = Some("original-location"),
+            objectStoreFileErrorsLocation = None
+          )
+          .futureValue mustBe false
+      }
+
+      "must return false when the file upload reference does not exist" in {
+        repository
+          .upsert(buildMonthlyReturn(fileUploads = List(completedFileUpload(reference = uploadReference))))
+          .futureValue
+
+        repository
+          .updateFileUploadProcessingDetails(
+            zReference = zReference,
+            taxYear = taxYear,
+            month = month,
+            reference = missingUploadReference,
+            validation = validation,
+            objectStoreFileLocation = Some("original-location"),
+            objectStoreFileErrorsLocation = None
+          )
+          .futureValue mustBe false
+      }
+
+      "must return false when the file upload has no FileUploadDetails" in {
+        repository
+          .upsert(buildMonthlyReturn(fileUploads = List(createdFileUpload(reference = uploadReference))))
+          .futureValue
+
+        repository
+          .updateFileUploadProcessingDetails(
+            zReference = zReference,
+            taxYear = taxYear,
+            month = month,
+            reference = uploadReference,
+            validation = validation,
+            objectStoreFileLocation = Some("original-location"),
+            objectStoreFileErrorsLocation = None
+          )
+          .futureValue mustBe false
+      }
+    }
   }
 
   private def buildMonthlyReturn(
@@ -592,5 +707,15 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
       reference = reference,
       status = Created,
       createdOn = createdOn
+    )
+
+  private def completedFileUpload(
+    reference: String = uploadReference
+  ): FileUpload =
+    FileUpload(
+      reference = reference,
+      status = FileUploadStatus.UpscanSuccess,
+      createdOn = createdOn,
+      fileUploadDetails = Some(fileUploadDetails)
     )
 }

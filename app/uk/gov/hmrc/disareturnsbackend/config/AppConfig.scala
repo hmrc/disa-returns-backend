@@ -32,20 +32,22 @@ class AppConfig @Inject() (
 
   val appName: String = config.get[String]("appName")
 
+  val declarationPeriodEnd: Int   = config.get[Int]("declarationPeriodEnd")
+  val declarationPeriodStart: Int = config.get[Int]("declarationPeriodStart")
+
+  val fileUploadMaxInlineErrors: Int = config.getOptional[Int]("fileUploadMaxInlineErrors").getOrElse(25)
+
   val internalAuthService: String = servicesConfig.baseUrl("internal-auth")
   val internalAuthToken: String   = config.get[String]("internal-auth.token")
 
-  val monthlyReturnTimeToLiveInDays: Long = config.get[Long]("mongodb.monthlyReturnTimeToLiveInDays")
-
-  val declarationPeriodStart: Int = config.get[Int]("declarationPeriodStart")
-  val declarationPeriodEnd: Int   = config.get[Int]("declarationPeriodEnd")
-
-  val fileUploadJobInProgressRetryAfter: Duration = config
-    .getOptional[Duration]("file-upload-work-item-job.inProgressRetryAfter")
+  val monthlyReturnFileUploadJobInProgressRetryAfter: Duration = config
+    .getOptional[Duration]("monthly-return-file-upload-work-item-job.inProgressRetryAfter")
     .getOrElse(Duration.ofMinutes(5))
 
-  val fileUploadJobPollInterval: FiniteDuration = config
-    .getOptional[Duration]("file-upload-work-item-job.pollInterval")
+  val monthlyReturnFileUploadJobPollInterval: FiniteDuration = config
+    .getOptional[Duration]("monthly-return-file-upload-work-item-job.pollInterval")
     .getOrElse(Duration.ofSeconds(10))
     .toScala
+
+  val monthlyReturnTimeToLiveInDays: Long = config.get[Long]("mongodb.monthlyReturnTimeToLiveInDays")
 }

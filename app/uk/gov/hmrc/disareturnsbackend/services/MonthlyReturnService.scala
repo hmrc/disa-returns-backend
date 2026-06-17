@@ -23,6 +23,7 @@ import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository
 import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository.{CreateFileUploadRepositoryResult, DeclareMonthlyReturnRepositoryResult, UpdateNilReturnRepositoryResult}
 import uk.gov.hmrc.disareturnsbackend.services.CreateFileUploadResult.*
 import uk.gov.hmrc.disareturnsbackend.services.CreateMonthlyReturnResult.{AlreadyExists, Created}
+import uk.gov.hmrc.disareturnsbackend.utils.UuidGenerator
 
 import java.time.{Clock, LocalDate}
 import java.util.UUID

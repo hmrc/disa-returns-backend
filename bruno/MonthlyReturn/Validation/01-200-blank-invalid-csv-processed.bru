@@ -1,0 +1,51 @@
+meta {
+  name: 01-200-blank-invalid-csv-processed
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{callbackZReference}}/{{taxYear}}/{{month}}/files/{{upscanReference}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+script:pre-request {
+  bru.setVar("validationFileName", "blank-invalid.csv");
+  bru.setVar("validationMimeType", bru.getEnvVar("csvMimeType"));
+  bru.setVar("validationChecksum", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+  bru.setVar("validationFileSize", 0);
+  bru.setVar("expectedUploadStatus", "VALIDATION_FAILURE");
+  bru.setVar("expectedValidationStatus", "InvalidFile");
+  bru.setVar("expectedRowsValidated", 0);
+  bru.setVar("expectedValidationErrors", 0);
+  bru.setVar("expectedInlineErrors", "[]");
+
+  const response = await bru.runRequest("TestOnly/ValidationHelpers/01-202-ready-validation-callback");
+  if (response.status !== 202) {
+    throw new Error(`Expected READY callback to respond with 202, got ${response.status}`);
+  }
+  const delayMs = Number(bru.getEnvVar("validationProcessingDelayMs") ?? 10000);
+  await new Promise(resolve => setTimeout(resolve, delayMs));
+}
+
+tests {
+  test("processed as expected", function() {
+    const responseBody = res.body ?? res.getBody();
+    const body = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
+    const details = body.fileUploadDetails;
+    const validation = details.validation;
+    expect(body.status).to.equal(bru.getVar("expectedUploadStatus"));
+    expect(details.fileName).to.equal(bru.getVar("validationFileName"));
+    expect(validation.status).to.equal(bru.getVar("expectedValidationStatus"));
+    expect(validation.rowsValidated).to.equal(Number(bru.getVar("expectedRowsValidated")));
+    expect(validation.validationErrors).to.equal(Number(bru.getVar("expectedValidationErrors")));
+    expect(validation.inlineErrors ?? []).to.deep.equal(JSON.parse(bru.getVar("expectedInlineErrors")));
+    expect(details.objectStoreFileLocation).to.equal(`disa-returns-backend/${bru.getVar("upscanReference")}`);
+    expect(details.objectStoreFileErrorsLocation).to.equal(undefined);
+  });
+}

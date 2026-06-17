@@ -31,7 +31,7 @@ import scala.concurrent.Future
 
 class InternalAuthTokenInitialiserImplSpec extends SpecBase {
 
-  private val internalAuthToken   = "valid-internal-auth-token"
+  private val internalAuthToken   = "valid-internal-auth-token-disa-returns-backend"
   private val appName             = "disa-returns-backend"
   private val internalAuthService = "http://localhost:8470"
   private val fullTokenUrl        = url"$internalAuthService/test-only/token"

@@ -16,3 +16,5 @@ GET        /disa-returns-backend/test-only/clock          uk.gov.hmrc.disareturn
 PUT        /disa-returns-backend/test-only/clock/:date    uk.gov.hmrc.disareturnsbackend.testOnly.controllers.TestOnlyClockController.setDate(date: String)
 DELETE     /disa-returns-backend/test-only/clock          uk.gov.hmrc.disareturnsbackend.testOnly.controllers.TestOnlyClockController.resetClock
 DELETE     /disa-returns-backend/test-only/monthly-returns uk.gov.hmrc.disareturnsbackend.testOnly.controllers.TestOnlyMonthlyReturnController.deleteAll()
+DELETE     /disa-returns-backend/test-only/monthly-return-file-upload-work-items uk.gov.hmrc.disareturnsbackend.testOnly.controllers.TestOnlyMonthlyReturnFileUploadWorkItemController.deleteAll()
+GET        /disa-returns-backend/test-only/file-upload/monthly/:filename uk.gov.hmrc.disareturnsbackend.testOnly.controllers.TestOnlyFileUploadController.getMonthlyFile(filename: String)

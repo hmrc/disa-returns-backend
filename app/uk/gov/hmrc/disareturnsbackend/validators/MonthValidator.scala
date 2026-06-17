@@ -18,7 +18,7 @@ package uk.gov.hmrc.disareturnsbackend.validators
 
 object MonthValidator {
 
-  private val ValidMonths: Range = 1 to 12
+  private val validMonths: Range = 1 to 12
 
   def isValid(month: String): Boolean =
     parse(month).isDefined
@@ -26,5 +26,5 @@ object MonthValidator {
   def parse(month: String): Option[Int] =
     Option(month)
       .flatMap(value => value.toIntOption)
-      .filter(ValidMonths.contains)
+      .filter(validMonths.contains)
 }
