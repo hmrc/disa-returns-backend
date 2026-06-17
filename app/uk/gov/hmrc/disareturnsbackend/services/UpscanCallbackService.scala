@@ -54,9 +54,9 @@ class UpscanCallbackService @Inject() (
           failureReason = None,
           failureMessage = None
         ).flatMap {
-          case true  =>
+          case Some(FileUploadStatus.UpscanSuccess) =>
             enqueueMonthlyReturnFileUploadWorkItem(zReference, taxYear, month, success.reference)
-          case false =>
+          case _                                    =>
             Future.successful(())
         }
 
@@ -84,7 +84,7 @@ class UpscanCallbackService @Inject() (
     fileUploadDetails: Option[FileUploadDetails],
     failureReason: Option[FileUploadFailureReason] = None,
     failureMessage: Option[String] = None
-  ): Future[Boolean] =
+  ): Future[Option[FileUploadStatus]] =
     tryCompleteUpscanFileUpload(
       zReference = zReference,
       taxYear = taxYear,
@@ -108,36 +108,58 @@ class UpscanCallbackService @Inject() (
     fileUploadDetails: Option[FileUploadDetails],
     failureReason: Option[FileUploadFailureReason] = None,
     failureMessage: Option[String] = None
-  ): Future[Boolean] =
+  ): Future[Option[FileUploadStatus]] =
     monthlyReturnRepository.get(zReference, taxYear, month).flatMap {
       case Some(monthlyReturn) if monthlyReturn.nilReturn =>
         logger.warn(
           s"[UpscanCallbackService][tryCompleteUpscanFileUpload] Ignoring upscan callback for zReference [$zReference], taxYear [$taxYear], month [$month], upload reference [$reference] because nilReturn is [true] and file uploads cannot be processed"
         )
-        Future.successful(false)
+        Future.successful(None)
 
       case Some(monthlyReturn) if !monthlyReturn.canCompleteUpscan(reference) =>
         logger.warn(
           s"[UpscanCallbackService][tryCompleteUpscanFileUpload] Ignoring upscan callback for zReference [$zReference], taxYear [$taxYear], month [$month], upload reference [$reference] because no completable CREATED file upload exists with that reference"
         )
-        Future.successful(false)
+        Future.successful(None)
 
-      case _ =>
+      case Some(monthlyReturn) =>
+        val completedStatus =
+          fileUploadDetails match {
+            case Some(details) =>
+              val isDuplicateSuccessfulUpload =
+                status == FileUploadStatus.UpscanSuccess && monthlyReturn
+                  .hasFileUploadMatchingChecksumAndNotMatchingReference(
+                    reference,
+                    details.checksum
+                  )
+
+              if (isDuplicateSuccessfulUpload) {
+                FileUploadStatus.Duplicate
+              } else {
+                status
+              }
+            case _             =>
+              status
+          }
+
         monthlyReturnRepository
           .completeUpscan(
             zReference = zReference,
             taxYear = taxYear,
             month = month,
             reference = reference,
-            status = status,
+            status = completedStatus,
             fileUploadDetails = fileUploadDetails,
             failureReason = failureReason,
             failureMessage = failureMessage
           )
           .map { updated =>
-            logCallbackResult(zReference, taxYear, month, reference, status)(updated)
-            updated
+            logCallbackResult(zReference, taxYear, month, reference, completedStatus)(updated)
+            Option.when(updated)(completedStatus)
           }
+
+      case None =>
+        Future.successful(None)
     }
 
   private def enqueueMonthlyReturnFileUploadWorkItem(

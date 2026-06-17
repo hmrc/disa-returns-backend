@@ -142,6 +142,11 @@ final case class MonthlyReturn(
       }
     }
 
+  def hasFileUploadMatchingChecksumAndNotMatchingReference(reference: String, checksum: String): Boolean =
+    fileUploads.exists { fileUpload =>
+      fileUpload.reference != reference && fileUpload.hasMatchingChecksum(checksum)
+    }
+
   def updateNilReturn(nilReturn: Boolean, updatedOn: Instant): MonthlyReturn =
     if (nilReturn) {
       val updatedReturn = copy(

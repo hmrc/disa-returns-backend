@@ -95,6 +95,7 @@ trait TestConstants {
   protected val upscanQuarantineStatusString  = "UPSCAN_QUARANTINE"
   protected val upscanRejectedStatusString    = "UPSCAN_REJECTED"
   protected val upscanUnknownStatusString     = "UPSCAN_UNKNOWN"
+  protected val duplicateStatusString         = "DUPLICATE"
   protected val validationSuccessStatusString = "VALIDATION_SUCCESS"
   protected val validationFailureStatusString = "VALIDATION_FAILURE"
   protected val unknownFileUploadStatusString = "UNKNOWN_STATUS"

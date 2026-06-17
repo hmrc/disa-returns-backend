@@ -27,7 +27,11 @@ final case class FileUpload(
   fileUploadDetails: Option[FileUploadDetails] = None,
   failureReason: Option[FileUploadFailureReason] = None,
   failureMessage: Option[String] = None
-)
+) {
+
+  def hasMatchingChecksum(checksum: String): Boolean =
+    fileUploadDetails.exists(_.checksum == checksum)
+}
 
 object FileUpload {
   implicit val format: OFormat[FileUpload] = Json.format[FileUpload]
