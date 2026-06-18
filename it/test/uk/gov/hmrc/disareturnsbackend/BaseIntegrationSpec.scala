@@ -17,6 +17,7 @@
 package uk.gov.hmrc.disareturnsbackend
 
 import base.TestConstants
+import com.github.tomakehurst.wiremock.client.WireMock.*
 import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
@@ -25,6 +26,7 @@ import org.scalatestplus.play.guice.GuiceOneServerPerSuite
 import org.mongodb.scala.ObservableFuture
 import org.mongodb.scala.model.Filters
 import play.api.Application
+import play.api.http.Status.CREATED
 import play.api.inject.bind
 import play.api.inject.guice.GuiceApplicationBuilder
 import play.api.libs.json.{JsObject, Json}
@@ -32,6 +34,7 @@ import play.api.libs.ws.WSClient
 import play.api.test.DefaultAwaitTimeout
 import play.api.test.Helpers.await
 import uk.gov.hmrc.disareturnsbackend.utils.RequestUtils
+import uk.gov.hmrc.http.test.WireMockSupport
 import uk.gov.hmrc.mongo.MongoComponent
 import uk.gov.hmrc.play.audit.http.connector.DatastreamMetrics
 
@@ -48,6 +51,7 @@ trait BaseIntegrationSpec
     with DefaultAwaitTimeout
     with ScalaFutures
     with IntegrationPatience
+    with WireMockSupport
     with TestConstants
     with RequestUtils {
 
@@ -63,7 +67,10 @@ trait BaseIntegrationSpec
     Map(
       "auditing.enabled"                    -> false,
       "create-internal-auth-token-on-start" -> false,
-      "mongodb.uri"                         -> "mongodb://localhost:27017/disa-returns-backend-it"
+      "mongodb.uri"                         -> "mongodb://localhost:27017/disa-returns-backend-it",
+      "microservice.services.disa-returns-submission.protocol" -> "http",
+      "microservice.services.disa-returns-submission.host"     -> "localhost",
+      "microservice.services.disa-returns-submission.port"     -> wireMockPort
     )
 
   protected def inject[T: ClassTag]: T =
@@ -74,8 +81,23 @@ trait BaseIntegrationSpec
 
   override protected def beforeEach(): Unit = {
     super.beforeEach()
+    stubReturnsSubmissionCreateMonthlyReturn()
     clearMongoCollections()
   }
+
+  protected def stubReturnsSubmissionCreateMonthlyReturn(
+    status: Int = CREATED,
+    submissionId: String = testSubmissionId.toString
+  ): Unit =
+    stubFor(
+      post(urlPathMatching("/disa-returns-submission/monthly/[^/]+/[^/]+/[^/]+"))
+        .willReturn(
+          aResponse()
+            .withStatus(status)
+            .withHeader("Content-Type", "application/json")
+            .withBody(Json.obj(submissionIdFieldName -> submissionId).toString())
+        )
+    )
 
   def serviceUrl(path: String): String = s"http://localhost:$port$path"
 

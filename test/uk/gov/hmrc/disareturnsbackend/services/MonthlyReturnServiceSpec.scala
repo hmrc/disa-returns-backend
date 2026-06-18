@@ -17,25 +17,26 @@
 package uk.gov.hmrc.disareturnsbackend.services
 
 import base.SpecBase
-import org.mockito.ArgumentMatchers.eq as eqTo
+import org.mockito.ArgumentMatchers.{any, eq as eqTo}
 import org.mockito.Mockito.{reset, verify, verifyNoInteractions, when}
 import org.scalatest.BeforeAndAfterEach
+import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector
+import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector.CreateMonthlyReturnSubmissionResult
 import uk.gov.hmrc.disareturnsbackend.config.AppConfig
 import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository
 import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository.{CreateFileUploadRepositoryResult, DeclareMonthlyReturnRepositoryResult, UpdateNilReturnRepositoryResult}
 import uk.gov.hmrc.disareturnsbackend.services.CreateMonthlyReturnResult.{AlreadyExists, Created}
-import uk.gov.hmrc.disareturnsbackend.utils.UuidGenerator
 
 import java.time.{Clock, Instant, ZoneOffset}
 import scala.concurrent.Future
 
 class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
 
-  private val mockMonthlyReturnRepository = mock[MonthlyReturnRepository]
-  private val appConfig                   = inject[AppConfig]
-  private val mockUuidGenerator           = mock[UuidGenerator]
-  private val service                     = buildService(testCreatedOn)
+  private val mockMonthlyReturnRepository    = mock[MonthlyReturnRepository]
+  private val mockReturnsSubmissionConnector = mock[ReturnsSubmissionConnector]
+  private val appConfig                      = inject[AppConfig]
+  private val service                        = buildService(testCreatedOn)
 
   private val zReference      = testZReference
   private val taxYear         = testTaxYear
@@ -56,7 +57,7 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
   override protected def beforeEach(): Unit = {
     super.beforeEach()
     reset(mockMonthlyReturnRepository)
-    reset(mockUuidGenerator)
+    reset(mockReturnsSubmissionConnector)
   }
 
   "MonthlyReturnService" - {
@@ -82,8 +83,16 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
 
     "create" - {
 
-      "must return Created when the repository creates the MonthlyReturn" in {
-        when(mockUuidGenerator.randomUuid()).thenReturn(testSubmissionId)
+      "must return Created when submission and backend create the MonthlyReturn" in {
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(None))
+        when(
+          mockReturnsSubmissionConnector.createMonthlyReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(true))(
+            any(),
+            any()
+          )
+        )
+          .thenReturn(Future.successful(CreateMonthlyReturnSubmissionResult.Created(testSubmissionId)))
         when(
           mockMonthlyReturnRepository.create(
             eqTo(zReference),
@@ -98,8 +107,49 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
         service.create(zReference, taxYear, month, nilReturn = true).futureValue mustBe Created(testSubmissionId)
       }
 
-      "must return AlreadyExists when the repository rejects the create" in {
-        when(mockUuidGenerator.randomUuid()).thenReturn(testSubmissionId)
+      "must create backend and return Created when submission already has the MonthlyReturn" in {
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(None))
+        when(
+          mockReturnsSubmissionConnector.createMonthlyReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(false))(
+            any(),
+            any()
+          )
+        )
+          .thenReturn(Future.successful(CreateMonthlyReturnSubmissionResult.AlreadyExists(testSubmissionId)))
+        when(
+          mockMonthlyReturnRepository.create(
+            eqTo(zReference),
+            eqTo(taxYear),
+            eqTo(month),
+            eqTo(testSubmissionId),
+            eqTo(false)
+          )
+        )
+          .thenReturn(Future.successful(Some(monthlyReturn)))
+
+        service.create(zReference, taxYear, month, nilReturn = false).futureValue mustBe Created(testSubmissionId)
+      }
+
+      "must return AlreadyExists without calling submission when backend already has the MonthlyReturn" in {
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(Some(monthlyReturn)))
+
+        service.create(zReference, taxYear, month, nilReturn = false).futureValue mustBe AlreadyExists
+
+        verifyNoInteractions(mockReturnsSubmissionConnector)
+      }
+
+      "must return AlreadyExists when the backend repository rejects the create" in {
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(None))
+        when(
+          mockReturnsSubmissionConnector.createMonthlyReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(false))(
+            any(),
+            any()
+          )
+        )
+          .thenReturn(Future.successful(CreateMonthlyReturnSubmissionResult.Created(testSubmissionId)))
         when(
           mockMonthlyReturnRepository.create(
             eqTo(zReference),
@@ -114,10 +164,27 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
         service.create(zReference, taxYear, month, nilReturn = false).futureValue mustBe AlreadyExists
       }
 
-      "must fail when the repository fails" in {
+      "must fail when the repository get fails" in {
         val exception = new RuntimeException(testMongoDownMessage)
 
-        when(mockUuidGenerator.randomUuid()).thenReturn(testSubmissionId)
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.failed(exception))
+
+        service.create(zReference, taxYear, month, nilReturn = false).failed.futureValue mustBe exception
+      }
+
+      "must fail when the backend repository create fails" in {
+        val exception = new RuntimeException(testMongoDownMessage)
+
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(None))
+        when(
+          mockReturnsSubmissionConnector.createMonthlyReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(false))(
+            any(),
+            any()
+          )
+        )
+          .thenReturn(Future.successful(CreateMonthlyReturnSubmissionResult.Created(testSubmissionId)))
         when(
           mockMonthlyReturnRepository.create(
             eqTo(zReference),
@@ -125,6 +192,22 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
             eqTo(month),
             eqTo(testSubmissionId),
             eqTo(false)
+          )
+        )
+          .thenReturn(Future.failed(exception))
+
+        service.create(zReference, taxYear, month, nilReturn = false).failed.futureValue mustBe exception
+      }
+
+      "must fail when submission create fails" in {
+        val exception = new RuntimeException(testMongoDownMessage)
+
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(None))
+        when(
+          mockReturnsSubmissionConnector.createMonthlyReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(false))(
+            any(),
+            any()
           )
         )
           .thenReturn(Future.failed(exception))
@@ -399,8 +482,8 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
   private def buildService(now: Instant): MonthlyReturnService =
     new MonthlyReturnService(
       monthlyReturnRepository = mockMonthlyReturnRepository,
+      returnsSubmissionConnector = mockReturnsSubmissionConnector,
       appConfig = appConfig,
-      clock = Clock.fixed(now, ZoneOffset.UTC),
-      uuidGenerator = mockUuidGenerator
+      clock = Clock.fixed(now, ZoneOffset.UTC)
     )
 }

@@ -34,6 +34,10 @@ script:pre-request {
 }
 
 script:post-response {
+  if (res.status !== 201) {
+    return;
+  }
+  
   const responseBody = res.body ?? res.getBody();
   const body = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
   
@@ -41,7 +45,11 @@ script:post-response {
 }
 
 tests {
-  test("response contains generated submissionId", function() {
+  test("response contains submissionId", function() {
+    if (res.status !== 201) {
+      return;
+    }
+  
     const responseBody = res.body ?? res.getBody();
     const body = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
   

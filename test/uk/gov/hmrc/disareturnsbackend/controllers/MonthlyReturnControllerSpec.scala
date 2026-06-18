@@ -29,7 +29,7 @@ import play.api.test.Helpers.*
 import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.services.CreateFileUploadResult
 import uk.gov.hmrc.disareturnsbackend.services.DeclareMonthlyReturnResult
-import uk.gov.hmrc.disareturnsbackend.services.CreateMonthlyReturnResult.{AlreadyExists, Created}
+import uk.gov.hmrc.disareturnsbackend.services.CreateMonthlyReturnResult.{AlreadyExists, Created, OutsideDeclarationPeriod}
 import uk.gov.hmrc.disareturnsbackend.services.MonthlyReturnService
 import uk.gov.hmrc.disareturnsbackend.services.UpdateNilReturnResult
 
@@ -152,6 +152,26 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
       )
 
       status(result) mustBe CONFLICT
+    }
+
+    "must return UNPROCESSABLE_ENTITY when the declaration period is closed" in {
+      when(
+        mockMonthlyReturnService.create(
+          eqTo(testZReference),
+          eqTo(testTaxYear),
+          eqTo(testMonth),
+          eqTo(false)
+        )
+      )
+        .thenReturn(Future.successful(OutsideDeclarationPeriod))
+
+      val result = controller.createMonthlyReturn(testZReference, testTaxYear, testRouteMonth)(
+        FakeRequest("POST", path).withBody(
+          Json.toJson(CreateMonthlyReturnRequest(nilReturn = false))
+        )
+      )
+
+      status(result) mustBe UNPROCESSABLE_ENTITY
     }
 
     "must return SERVICE_UNAVAILABLE when the service fails" in {

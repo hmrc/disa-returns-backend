@@ -16,6 +16,8 @@ assert {
 
 script:pre-request {
   bru.setVar("validationFileName", "isa-open-valid.xlsx");
+  bru.setVar("upscanReference", "validation-isa-open-valid-xlsx");
+  bru.setVar("callbackZReference", `Z${((Date.now() + Math.floor(Math.random() * 1000)) % 10000).toString().padStart(4, "0")}`);
   bru.setVar("validationMimeType", bru.getEnvVar("xlsxMimeType"));
   bru.setVar("validationChecksum", "cbe7070b04ceb37971da16d0ee70a80e5181779f8de7533e2dd3d743f36ec277");
   bru.setVar("validationFileSize", 3242);
@@ -25,14 +27,16 @@ script:pre-request {
   bru.setVar("expectedValidationErrors", 0);
   bru.setVar("expectedInlineErrors", "[]");
   bru.setVar("expectedErrorsWorkbook", "false");
-
+  
   const response = await bru.runRequest("TestOnly/ValidationHelpers/01-202-ready-validation-callback");
   if (response.status !== 202) {
     throw new Error(`Expected READY callback to respond with 202, got ${response.status}`);
   }
-
-  const delayMs = Number(bru.getEnvVar("validationProcessingDelayMs") ?? 10000);
-  await new Promise(resolve => setTimeout(resolve, delayMs));
+  
+  const waitResponse = await bru.runRequest("TestOnly/ValidationHelpers/02-200-wait-for-validation-processing");
+  if (waitResponse.status !== 200) {
+    throw new Error(`Expected validation processing wait to respond with 200, got ${waitResponse.status}`);
+  }
 }
 
 tests {

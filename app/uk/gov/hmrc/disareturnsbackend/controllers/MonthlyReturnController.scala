@@ -66,9 +66,10 @@ class MonthlyReturnController @Inject() (
           monthlyReturnService
             .create(validZReference, validTaxYear, validMonth, createRequest.nilReturn)
             .map {
-              case CreateMonthlyReturnResult.Created(submissionId) =>
+              case CreateMonthlyReturnResult.Created(submissionId)    =>
                 Created(Json.toJson(CreateMonthlyReturnResponse(submissionId))).withHeaders(LOCATION -> request.path)
-              case CreateMonthlyReturnResult.AlreadyExists         => Conflict
+              case CreateMonthlyReturnResult.AlreadyExists            => Conflict
+              case CreateMonthlyReturnResult.OutsideDeclarationPeriod => UnprocessableEntity
             }
             .recover { case NonFatal(_) => ServiceUnavailable }
         }

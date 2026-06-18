@@ -1,23 +1,23 @@
 meta {
-  name: 02-200-set-clock-outside-declaration-period
+  name: 04-200-set-clock-inside-declaration-period
   type: http
-  seq: 2
+  seq: 4
 }
 
 put {
-  url: {{baseUrl}}{{servicePath}}/test-only/clock/{{outsideDeclarationPeriodDate}}
+  url: {{baseUrl}}{{servicePath}}/test-only/clock/{{declarationPeriodDate}}
   body: none
   auth: none
 }
 
 assert {
   res.status: eq 200
-  res.body.date: eq {{outsideDeclarationPeriodDate}}
+  res.body.date: eq {{declarationPeriodDate}}
 }
 
 script:pre-request {
   const axios = require("axios");
-  const url = `${bru.getEnvVar("submissionBaseUrl")}${bru.getEnvVar("submissionServicePath")}/test-only/clock/${bru.getEnvVar("outsideDeclarationPeriodDate")}`;
+  const url = `${bru.getEnvVar("submissionBaseUrl")}${bru.getEnvVar("submissionServicePath")}/test-only/clock/${bru.getEnvVar("declarationPeriodDate")}`;
   let response;
   
   try {

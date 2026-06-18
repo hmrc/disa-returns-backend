@@ -40,6 +40,8 @@ class AppConfig @Inject() (
   val internalAuthService: String = servicesConfig.baseUrl("internal-auth")
   val internalAuthToken: String   = config.get[String]("internal-auth.token")
 
+  val returnsSubmissionService: String = servicesConfig.baseUrl("disa-returns-submission")
+
   val monthlyReturnFileUploadJobInProgressRetryAfter: Duration = config
     .getOptional[Duration]("monthly-return-file-upload-work-item-job.inProgressRetryAfter")
     .getOrElse(Duration.ofMinutes(5))
