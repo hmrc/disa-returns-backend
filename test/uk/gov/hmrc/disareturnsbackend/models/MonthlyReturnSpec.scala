@@ -514,6 +514,7 @@ class MonthlyReturnSpec extends SpecBase {
       UpscanQuarantine                   -> upscanQuarantineStatusString,
       UpscanRejected                     -> upscanRejectedStatusString,
       UpscanUnknown                      -> upscanUnknownStatusString,
+      Duplicate                          -> duplicateStatusString,
       FileUploadStatus.ValidationSuccess -> validationSuccessStatusString,
       FileUploadStatus.ValidationFailure -> validationFailureStatusString
     ).foreach { case (modelValue, jsonValue) =>

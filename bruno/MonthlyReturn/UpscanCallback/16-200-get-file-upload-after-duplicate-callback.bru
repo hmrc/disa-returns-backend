@@ -1,0 +1,37 @@
+meta {
+  name: 16-200-get-file-upload-after-duplicate-callback
+  type: http
+  seq: 16
+}
+
+get {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{callbackZReference}}/{{taxYear}}/{{month}}/files/{{duplicateUpscanReference}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.reference: eq {{duplicateUpscanReference}}
+  res.body.status: eq DUPLICATE
+  res.body.fileUploadDetails.fileName: eq {{fileName}}
+  res.body.fileUploadDetails.upscanDownloadUrl: eq {{downloadUrl}}
+}
+
+script:pre-request {
+  const response = await bru.runRequest("MonthlyReturn/UpscanCallback/15-202-duplicate-callback");
+  
+  if (response.status !== 202) {
+    throw new Error(`Expected duplicate callback to respond with 202, got ${response.status}`);
+  }
+}
+
+tests {
+  test("file upload resource is marked duplicate after duplicate callback", function() {
+    const responseBody = res.body ?? res.getBody();
+    const body = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
+  
+    expect(body.fileUploadDetails.upscanCompletedOn).to.match(/^\d{4}-\d{2}-\d{2}T.*Z$/);
+    expect(body.fileUploadDetails.checksum).to.equal(bru.getEnvVar("checksum"));
+  });
+}

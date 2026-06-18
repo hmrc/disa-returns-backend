@@ -155,6 +155,7 @@ Request body:
 - If the monthly return is not a nil return, the callback only completes an existing file upload with the same reference in `CREATED` state. Callbacks for missing, deleted, or already-completed references return `202 Accepted` but are not stored.
 - If the monthly return has been declared, a callback can still complete an existing `CREATED` file upload when that upload was created before the declaration time.
 - Completed file uploads include `fileUploadDetails.upscanCompletedOn`, which records when Upscan processing completed, and `fileUploadDetails.upscanDownloadUrl` for the Upscan download URL.
+- If a successful callback has a checksum that already exists on another file upload for the monthly return, the upload is stored with status `DUPLICATE` and is not downloaded or validated.
 - Invalid JSON, unknown `fileStatus` values, or unknown `failureReason` values return `400 Bad Request`.
 - Non-JSON requests return `415 Unsupported Media Type`.
 
@@ -195,6 +196,7 @@ Stored file upload after a successful callback:
 ```
 
 After Upscan success, file upload processing downloads the file, validates it, uploads the original file to object-store as the upload reference, and stores validation metadata under `fileUploadDetails`.
+Uploads stored with status `DUPLICATE` skip this processing.
 
 Stored successful validation example:
 
@@ -260,7 +262,7 @@ Failed upload callback example:
 
 ### File Upload validation
 
-Successful Upscan `READY` callbacks enqueue a file upload work item after the monthly return file upload has been completed successfully.
+Successful Upscan `READY` callbacks enqueue a file upload work item after the monthly return file upload has been completed successfully, unless the callback is stored as `DUPLICATE`.
 The work item contains the monthly return key and upload reference:
 
 ```json
@@ -578,7 +580,7 @@ These Bruno requests clear monthly returns by calling `TestOnly/MonthlyReturns/0
 
 Many later requests run one of these setup requests from their pre-request script, so they can also clear monthly returns indirectly. For example, `MonthlyReturn/Get/01-200-get-existing` runs `MonthlyReturn/Create/01-201-create-nil-return-false`, and `MonthlyReturn/Update/02-200-set-nil-return-false` runs the update setup chain.
 
-Run executable Bruno folders explicitly against a running local service, for example `bru run MonthlyReturn/Get --env Local --bail`. The setup scripts create the data each folder needs. The Upscan callback folder creates a fresh non-nil monthly return with `callbackZReference`, creates a file upload placeholder with `POST /files`, gets that file upload with `GET /files/:reference`, sends a READY callback, then gets the monthly return to confirm the completed file upload was recorded.
+Run executable Bruno folders explicitly against a running local service, for example `bru run MonthlyReturn/Get --env Local --bail`. The setup scripts create the data each folder needs. The Upscan callback folder creates a fresh non-nil monthly return with `callbackZReference`, creates a file upload placeholder with `POST /files`, gets that file upload with `GET /files/:reference`, sends a READY callback, then gets the monthly return to confirm the completed file upload was recorded. It also includes a duplicate callback flow that creates a second upload with the same checksum and asserts the stored status is `DUPLICATE`.
 
 The Validation folder uses the copied monthly file-upload tests as local Upscan downloads. Each validation request creates a fresh file-upload scenario, sends a READY callback with a test-only file URL, waits for `validationProcessingDelayMs`, then asserts the final validation result and object-store locations.
 
@@ -592,7 +594,7 @@ validationProcessingDelayMs: 15000
 
 Generated Bruno `zReference` values are set as runtime variables with `bru.setVar`, not environment variables, so running Bruno should not rewrite `bruno/environments/Local.bru`.
 
-The callback requests return `202 Accepted`. Completed file upload details appear on the GET after the READY callback in the collection run.
+The callback requests return `202 Accepted`. Completed file upload details appear on the GET after the READY callback in the collection run. Duplicate callback details appear on the GET after the duplicate callback with status `DUPLICATE`.
 
 ### Before you commit
 

@@ -1,0 +1,36 @@
+meta {
+  name: 14-201-create-duplicate-file-upload
+  type: http
+  seq: 14
+}
+
+post {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{callbackZReference}}/{{taxYear}}/{{month}}/files
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "reference": "{{duplicateUpscanReference}}"
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.headers.location: eq {{servicePath}}/monthly/{{callbackZReference}}/{{taxYear}}/{{month}}/files/{{duplicateUpscanReference}}
+}
+
+script:pre-request {
+  bru.setVar("duplicateUpscanReference", `${bru.getEnvVar("upscanReference")}-duplicate`);
+  
+  const response = await bru.runRequest("MonthlyReturn/UpscanCallback/03-202-ready-callback");
+  
+  if (response.status !== 202) {
+    throw new Error(`Expected READY callback setup to respond with 202, got ${response.status}`);
+  }
+}

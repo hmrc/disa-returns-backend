@@ -126,6 +126,60 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
       verifyNoMonthlyReturnFileUploadWorkItemEnqueued()
     }
 
+    "must complete a file upload as DUPLICATE and not enqueue processing when the checksum already exists" in {
+      stubGetMonthlyReturn(
+        Future.successful(
+          Some(
+            monthlyReturnWithCreatedUpload.copy(
+              fileUploads = monthlyReturnWithCreatedUpload.fileUploads :+ FileUpload(
+                reference = "existing-reference",
+                status = FileUploadStatus.ValidationSuccess,
+                createdOn = testCreatedOn,
+                fileUploadDetails = Some(expectedFileUploadDetails)
+              )
+            )
+          )
+        )
+      )
+      when(
+        mockMonthlyReturnRepository.completeUpscan(
+          any[String],
+          any[String],
+          any[Int],
+          any[String],
+          any[FileUploadStatus],
+          any[Option[FileUploadDetails]],
+          any[Option[FileUploadFailureReason]],
+          any[Option[String]]
+        )
+      ).thenReturn(Future.successful(true))
+
+      service
+        .monthlyReturnUpscanCallback(
+          zReference,
+          taxYear,
+          month,
+          UpscanSuccess(
+            reference = upscanReference,
+            downloadUrl = upscanDownloadUrl,
+            uploadDetails = uploadDetails
+          )
+        )
+        .futureValue
+
+      verify(mockMonthlyReturnRepository).completeUpscan(
+        eqTo(zReference),
+        eqTo(taxYear),
+        eqTo(month),
+        eqTo(upscanReference),
+        eqTo(FileUploadStatus.Duplicate),
+        eqTo(Some(expectedFileUploadDetails)),
+        eqTo(Option.empty[FileUploadFailureReason]),
+        eqTo(Option.empty[String])
+      )
+      verifyNoMonthlyReturnFileUploadWorkItemEnqueued()
+    }
+
     "must not complete a file upload for a nil return" in {
       stubGetMonthlyReturn(Future.successful(Some(monthlyReturn.copy(nilReturn = true))))
 

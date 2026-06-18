@@ -1,0 +1,42 @@
+meta {
+  name: 15-202-duplicate-callback
+  type: http
+  seq: 15
+}
+
+post {
+  url: {{baseUrl}}{{servicePath}}/monthly/upscan/callback/{{callbackZReference}}/{{taxYear}}/{{month}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "reference": "{{duplicateUpscanReference}}",
+    "fileStatus": "READY",
+    "downloadUrl": "{{downloadUrl}}",
+    "uploadDetails": {
+      "fileName": "{{fileName}}",
+      "fileMimeType": "{{csvMimeType}}",
+      "uploadTimestamp": "{{uploadTimestamp}}",
+      "checksum": "{{checksum}}",
+      "size": {{fileSize}}
+    }
+  }
+}
+
+assert {
+  res.status: eq 202
+}
+
+script:pre-request {
+  const response = await bru.runRequest("MonthlyReturn/UpscanCallback/14-201-create-duplicate-file-upload");
+  
+  if (response.status !== 201) {
+    throw new Error(`Expected duplicate file-upload setup to respond with 201, got ${response.status}`);
+  }
+}

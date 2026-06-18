@@ -18,8 +18,8 @@ package uk.gov.hmrc.disareturnsbackend.controllers
 
 import play.api.http.MimeTypes
 import play.api.http.MimeTypes.JSON
-import play.api.http.Status.{ACCEPTED, BAD_REQUEST, NOT_FOUND, UNSUPPORTED_MEDIA_TYPE}
-import play.api.libs.json.{Json, OWrites}
+import play.api.http.Status.*
+import play.api.libs.json.*
 import play.api.libs.ws.readableAsString
 import uk.gov.hmrc.disareturnsbackend.BaseIntegrationSpec
 import uk.gov.hmrc.disareturnsbackend.models.{
@@ -37,7 +37,11 @@ class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
 
   private val fullCallbackPath = testServicePath + callbackPath
 
+  private val monthlyPath = s"$testServicePath/monthly/$testZReference/$testTaxYear/$testRouteMonth"
+  private val filesPath   = s"$monthlyPath/files"
+
   private val upscanReference = testUploadReference
+  private val duplicateUploadReference = s"$testUploadReference-duplicate"
 
   private val uploadDetails = UpscanDetails(
     fileName = testFileName,
@@ -59,6 +63,22 @@ class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
       val result = postUploadResult(successfulUploadResult)
 
       result.status shouldBe ACCEPTED
+    }
+
+    "set the file upload status to DUPLICATE when the checksum already exists" in {
+      postJson(monthlyPath, nilReturnFalseRequest).status shouldBe CREATED
+      postJson(filesPath, Json.obj(referenceFieldName -> upscanReference)).status shouldBe CREATED
+      postJson(filesPath, Json.obj(referenceFieldName -> duplicateUploadReference)).status shouldBe CREATED
+
+      postUploadResult(successfulUploadResult).status shouldBe ACCEPTED
+
+      val result = postUploadResult(successfulUploadResultFor(duplicateUploadReference))
+
+      result.status shouldBe ACCEPTED
+
+      val monthlyReturn = get(monthlyPath)
+      monthlyReturn.status shouldBe OK
+      (fileUpload(monthlyReturn.json, duplicateUploadReference) \ statusFieldName).as[String] shouldBe duplicateStatusString
     }
 
     "return 202 Accepted for FAILED QUARANTINE callback payload" in {
@@ -141,6 +161,20 @@ class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
         message = message
       )
     )
+
+  private def successfulUploadResultFor(reference: String): UpscanResult =
+    UpscanSuccess(
+      reference = reference,
+      downloadUrl = testDownloadUrl,
+      uploadDetails = uploadDetails
+    )
+
+  private def fileUpload(monthlyReturn: JsValue, reference: String): JsObject =
+    (monthlyReturn \ fileUploadsFieldName)
+      .as[Seq[JsValue]]
+      .find(upload => (upload \ referenceFieldName).as[String] == reference)
+      .getOrElse(fail(s"File upload [$reference] was not found"))
+      .as[JsObject]
 
   private def postUploadResult(body: UpscanResult) =
     postJson(fullCallbackPath, Json.toJson(body))
