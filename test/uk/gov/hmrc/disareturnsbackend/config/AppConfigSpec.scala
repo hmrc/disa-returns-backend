@@ -37,6 +37,7 @@ class AppConfigSpec extends SpecBase {
   private def appConfig(fileUploadMaxInlineErrors: Option[Int]): AppConfig = {
     val servicesConfig = mock[ServicesConfig]
     when(servicesConfig.baseUrl("internal-auth")).thenReturn("http://internal-auth")
+    when(servicesConfig.baseUrl("disa-returns-submission")).thenReturn("http://disa-returns-submission")
 
     val configValues = Map[String, Any](
       "appName"                                                       -> "disa-returns-backend",

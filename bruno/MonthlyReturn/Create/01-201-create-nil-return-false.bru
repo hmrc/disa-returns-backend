@@ -26,6 +26,12 @@ assert {
 }
 
 script:pre-request {
+  const clockResponse = await bru.runRequest("TestOnly/Clock/04-200-set-clock-inside-declaration-period");
+  
+  if (clockResponse.status !== 200) {
+    throw new Error(`Expected clock setup to respond with 200, got ${clockResponse.status}`);
+  }
+  
   const clearResponse = await bru.runRequest("TestOnly/MonthlyReturns/01-204-clear-monthly-returns");
   
   if (clearResponse.status !== 204) {
@@ -45,6 +51,10 @@ script:pre-request {
 }
 
 script:post-response {
+  if (res.status !== 201) {
+    return;
+  }
+  
   const responseBody = res.body ?? res.getBody();
   const body = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
   
@@ -52,7 +62,11 @@ script:post-response {
 }
 
 tests {
-  test("response contains generated submissionId", function() {
+  test("response contains submissionId", function() {
+    if (res.status !== 201) {
+      return;
+    }
+  
     const responseBody = res.body ?? res.getBody();
     const body = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
   

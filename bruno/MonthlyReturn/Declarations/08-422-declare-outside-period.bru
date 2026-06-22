@@ -20,4 +20,10 @@ script:pre-request {
   if (response.status !== 201) {
     throw new Error(`Expected outside-period return setup to respond with 201, got ${response.status}`);
   }
+  
+  const clockResponse = await bru.runRequest("MonthlyReturn/Declarations/06-200-set-clock-outside-period");
+  
+  if (clockResponse.status !== 200) {
+    throw new Error(`Expected outside-period clock setup to respond with 200, got ${clockResponse.status}`);
+  }
 }

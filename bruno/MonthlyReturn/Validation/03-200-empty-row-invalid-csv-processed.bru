@@ -16,6 +16,8 @@ assert {
 
 script:pre-request {
   bru.setVar("validationFileName", "empty-row-invalid.csv");
+  bru.setVar("upscanReference", "validation-empty-row-invalid-csv");
+  bru.setVar("callbackZReference", `Z${((Date.now() + Math.floor(Math.random() * 1000)) % 10000).toString().padStart(4, "0")}`);
   bru.setVar("validationMimeType", bru.getEnvVar("csvMimeType"));
   bru.setVar("validationChecksum", "5fd0c7dd7d7a1a5f255b62ff5f0408ce7e9c25438092b62b11dda572625586c5");
   bru.setVar("validationFileSize", 471);
@@ -25,13 +27,15 @@ script:pre-request {
   bru.setVar("expectedValidationErrors", 11);
   bru.setVar("expectedInlineErrors", '[{"rowNumber":1,"errorCodes":["E010","E020","E030","E050","E060","E070","E090","E100","E120","E130","E160"]}]');
   bru.setVar("expectedErrorsWorkbook", "true");
-
+  
   const response = await bru.runRequest("TestOnly/ValidationHelpers/01-202-ready-validation-callback");
   if (response.status !== 202) {
     throw new Error(`Expected READY callback to respond with 202, got ${response.status}`);
   }
-  const delayMs = Number(bru.getEnvVar("validationProcessingDelayMs") ?? 10000);
-  await new Promise(resolve => setTimeout(resolve, delayMs));
+  const waitResponse = await bru.runRequest("TestOnly/ValidationHelpers/02-200-wait-for-validation-processing");
+  if (waitResponse.status !== 200) {
+    throw new Error(`Expected validation processing wait to respond with 200, got ${waitResponse.status}`);
+  }
 }
 
 tests {

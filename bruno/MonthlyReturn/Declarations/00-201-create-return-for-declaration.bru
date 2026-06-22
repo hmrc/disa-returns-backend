@@ -26,6 +26,12 @@ assert {
 }
 
 script:pre-request {
+  const clockResponse = await bru.runRequest("TestOnly/Clock/04-200-set-clock-inside-declaration-period");
+  
+  if (clockResponse.status !== 200) {
+    throw new Error(`Expected clock setup to respond with 200, got ${clockResponse.status}`);
+  }
+  
   const clearResponse = await bru.runRequest("TestOnly/MonthlyReturns/01-204-clear-monthly-returns");
   
   if (clearResponse.status !== 204) {

@@ -1,18 +1,22 @@
 vars {
   baseUrl: http://localhost:1207
   servicePath: /disa-returns-backend
+  submissionBaseUrl: http://localhost:12103
+  submissionServicePath: /disa-returns-submission
   invalidZReference: 1234
   taxYear: 2026-27
   invalidTaxYear: 2026
   month: 5
   invalidMonth: 13
+  declarationPeriodDate: 2026-05-17
+  outsideDeclarationPeriodDate: 2026-05-20
   upscanReference: 2b4d6f3a-8c1e-4e4b-9c7a-123456789abc
-  downloadUrl: https://fus-outbound-bucket.s3.eu-west-2.amazonaws.com/object-key?X-Amz-Signature=abc
   fileName: return.csv
   csvMimeType: text/csv
   xlsxMimeType: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
   uploadTimestamp: 2026-05-17T12:00:00Z
   checksum: 396f101dd52e8b2ace0dcf5ed09b1d1f030e608938510ce46e7a5c7a4e775100
   fileSize: 1024
-  validationProcessingDelayMs: 10000
+  validationProcessingMaxAttempts: 15
+  validationProcessingPollIntervalMs: 1000
 }

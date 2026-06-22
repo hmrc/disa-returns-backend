@@ -17,13 +17,15 @@
 package uk.gov.hmrc.disareturnsbackend.services
 
 import play.api.Logging
+import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector
+import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector.CreateMonthlyReturnSubmissionResult
 import uk.gov.hmrc.disareturnsbackend.config.AppConfig
 import uk.gov.hmrc.disareturnsbackend.models.{FileUpload, MonthlyReturn}
 import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository
 import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository.{CreateFileUploadRepositoryResult, DeclareMonthlyReturnRepositoryResult, UpdateNilReturnRepositoryResult}
 import uk.gov.hmrc.disareturnsbackend.services.CreateFileUploadResult.*
-import uk.gov.hmrc.disareturnsbackend.services.CreateMonthlyReturnResult.{AlreadyExists, Created}
-import uk.gov.hmrc.disareturnsbackend.utils.UuidGenerator
+import uk.gov.hmrc.disareturnsbackend.services.CreateMonthlyReturnResult.{AlreadyExists, Created, OutsideDeclarationPeriod}
+import uk.gov.hmrc.http.HeaderCarrier
 
 import java.time.{Clock, LocalDate}
 import java.util.UUID
@@ -34,9 +36,9 @@ import scala.util.control.NonFatal
 @Singleton
 class MonthlyReturnService @Inject() (
   monthlyReturnRepository: MonthlyReturnRepository,
+  returnsSubmissionConnector: ReturnsSubmissionConnector,
   appConfig: AppConfig,
-  clock: Clock,
-  uuidGenerator: UuidGenerator
+  clock: Clock
 )(implicit ec: ExecutionContext)
     extends Logging {
 
@@ -70,9 +72,47 @@ class MonthlyReturnService @Inject() (
     taxYear: String,
     month: Int,
     nilReturn: Boolean
-  ): Future[CreateMonthlyReturnResult] = {
-    val submissionId = uuidGenerator.randomUuid()
+  ): Future[CreateMonthlyReturnResult] =
+    monthlyReturnRepository
+      .get(zReference, taxYear, month)
+      .flatMap {
+        case Some(_) =>
+          logger.warn(
+            s"[MonthlyReturnService][create] Monthly return already exists in backend for zReference [$zReference], taxYear [$taxYear], month [$month]"
+          )
+          Future.successful(AlreadyExists)
 
+        case None =>
+          implicit val hc: HeaderCarrier = HeaderCarrier()
+
+          returnsSubmissionConnector
+            .createMonthlyReturn(zReference, taxYear, month, nilReturn)
+            .flatMap {
+              case CreateMonthlyReturnSubmissionResult.Created(submissionId) =>
+                createBackendMonthlyReturn(zReference, taxYear, month, submissionId, nilReturn)
+
+              case CreateMonthlyReturnSubmissionResult.AlreadyExists(submissionId) =>
+                createBackendMonthlyReturn(zReference, taxYear, month, submissionId, nilReturn)
+
+              case CreateMonthlyReturnSubmissionResult.OutsideDeclarationPeriod =>
+                Future.successful(OutsideDeclarationPeriod)
+            }
+      }
+      .recoverWith { case NonFatal(exception) =>
+        logger.error(
+          s"[MonthlyReturnService][create] Failed to create monthly return for zReference [$zReference], taxYear [$taxYear], month [$month], nilReturn [$nilReturn]",
+          exception
+        )
+        Future.failed(exception)
+      }
+
+  private def createBackendMonthlyReturn(
+    zReference: String,
+    taxYear: String,
+    month: Int,
+    submissionId: UUID,
+    nilReturn: Boolean
+  ): Future[CreateMonthlyReturnResult] =
     monthlyReturnRepository
       .create(zReference, taxYear, month, submissionId, nilReturn)
       .map {
@@ -88,14 +128,6 @@ class MonthlyReturnService @Inject() (
           )
           AlreadyExists
       }
-      .recoverWith { case NonFatal(exception) =>
-        logger.error(
-          s"[MonthlyReturnService][create] Failed to create monthly return for zReference [$zReference], taxYear [$taxYear], month [$month], submissionId [$submissionId], nilReturn [$nilReturn]",
-          exception
-        )
-        Future.failed(exception)
-      }
-  }
 
   def updateNilReturn(
     zReference: String,
@@ -281,6 +313,7 @@ sealed trait CreateMonthlyReturnResult
 object CreateMonthlyReturnResult {
   final case class Created(submissionId: UUID) extends CreateMonthlyReturnResult
   case object AlreadyExists extends CreateMonthlyReturnResult
+  case object OutsideDeclarationPeriod extends CreateMonthlyReturnResult
 }
 
 sealed trait CreateFileUploadResult

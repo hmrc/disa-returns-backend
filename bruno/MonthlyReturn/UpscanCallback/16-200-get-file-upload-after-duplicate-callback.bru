@@ -15,7 +15,7 @@ assert {
   res.body.reference: eq {{duplicateUpscanReference}}
   res.body.status: eq DUPLICATE
   res.body.fileUploadDetails.fileName: eq {{fileName}}
-  res.body.fileUploadDetails.upscanDownloadUrl: eq {{downloadUrl}}
+  res.body.fileUploadDetails.upscanDownloadUrl: eq {{baseUrl}}{{servicePath}}/test-only/file-upload/monthly/isa-open-valid.csv
 }
 
 script:pre-request {

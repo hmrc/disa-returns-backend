@@ -21,11 +21,10 @@ import play.api.Application
 import play.api.inject.bind
 import play.api.inject.guice.GuiceApplicationBuilder
 import uk.gov.hmrc.play.audit.http.connector.DatastreamMetrics
-import uk.gov.hmrc.http.test.WireMockSupport
 
 import java.time.Clock
 
-trait WireMockIntegrationSpec extends BaseIntegrationSpec with WireMockSupport with Eventually {
+trait WireMockIntegrationSpec extends BaseIntegrationSpec with Eventually {
 
   override lazy val app: Application = new GuiceApplicationBuilder()
     .configure(config)
