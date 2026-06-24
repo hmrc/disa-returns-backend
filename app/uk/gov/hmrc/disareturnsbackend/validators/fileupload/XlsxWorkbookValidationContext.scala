@@ -37,6 +37,7 @@ final class XlsxWorkbookValidationContext[C <: FileUploadValidationContext](
   private var rowsValidated          = 0L
   private var validationErrors       = 0L
   private var inlineErrors           = Vector.empty[FileUploadValidationError]
+  private var errorVolumes           = Map.empty[String, Long]
 
   def markWorkbookHasSingleSheet(): Unit =
     workbookHasSingleSheet = true
@@ -67,6 +68,9 @@ final class XlsxWorkbookValidationContext[C <: FileUploadValidationContext](
 
       if (rowCellErrors.nonEmpty) {
         validationErrors += rowCellErrors.length
+        errorVolumes = rowCellErrors.foldLeft(errorVolumes) { case (volumes, errorCode) =>
+          volumes.updatedWith(errorCode)(_.map(_ + 1).orElse(Some(1L)))
+        }
         errorWriter.write(rowNumber, rowCellErrors)
 
         val inlineErrorLimitAvailable = inlineErrors.length < inlineErrorLimit
@@ -85,7 +89,8 @@ final class XlsxWorkbookValidationContext[C <: FileUploadValidationContext](
       rowsValidated = rowsValidated,
       validationErrors = validationErrors,
       errorFileWritten = errorWriter.written,
-      inlineErrors = inlineErrors.toList
+      inlineErrors = inlineErrors.toList,
+      errorVolumes = errorVolumes
     )
 }
 

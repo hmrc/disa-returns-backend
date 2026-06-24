@@ -46,11 +46,13 @@ class FileUploadValidationResultsSpec extends SpecBase {
         rowsValidated = 1,
         validationErrors = 1,
         errorFileWritten = true,
-        inlineErrors = inlineErrors
+        inlineErrors = inlineErrors,
+        errorVolumes = Map(validationErrorCode -> 1L)
       )
 
       result.validation.status mustBe FileUploadValidationStatus.ValidationFailed
       result.validation.inlineErrors mustBe inlineErrors
+      result.errorVolumes mustBe Map(validationErrorCode -> 1L)
     }
   }
 }

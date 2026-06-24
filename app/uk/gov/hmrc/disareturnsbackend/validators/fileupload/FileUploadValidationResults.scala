@@ -24,7 +24,8 @@ object FileUploadValidationResults {
     rowsValidated: Long,
     validationErrors: Long,
     errorFileWritten: Boolean,
-    inlineErrors: List[FileUploadValidationError]
+    inlineErrors: List[FileUploadValidationError],
+    errorVolumes: Map[String, Long]
   ): FileUploadValidatorResult =
     FileUploadValidatorResult(
       validation = FileUploadValidationResult(
@@ -33,7 +34,8 @@ object FileUploadValidationResults {
         status = FileUploadValidationStatus.ValidationFailed,
         inlineErrors = inlineErrors
       ),
-      errorFileWritten = errorFileWritten
+      errorFileWritten = errorFileWritten,
+      errorVolumes = errorVolumes
     )
 
   def invalidFile: FileUploadValidatorResult =

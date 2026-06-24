@@ -25,5 +25,6 @@ final case class XlsxWorkbookValidationSummary(
   rowsValidated: Long,
   validationErrors: Long,
   errorFileWritten: Boolean,
-  inlineErrors: List[FileUploadValidationError]
+  inlineErrors: List[FileUploadValidationError],
+  errorVolumes: Map[String, Long]
 )

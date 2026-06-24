@@ -20,5 +20,7 @@ import uk.gov.hmrc.disareturnsbackend.models.FileUploadValidationResult
 
 final case class FileUploadValidatorResult(
   validation: FileUploadValidationResult,
-  errorFileWritten: Boolean
+  errorFileWritten: Boolean,
+  errorVolumes: Map[String, Long] = Map.empty,
+  validationTimeMillis: Long = 0
 )

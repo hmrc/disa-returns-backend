@@ -28,7 +28,7 @@ import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository
 import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository.{CreateFileUploadRepositoryResult, DeclareMonthlyReturnRepositoryResult, UpdateNilReturnRepositoryResult}
 import uk.gov.hmrc.disareturnsbackend.services.CreateMonthlyReturnResult.{AlreadyExists, Created}
 
-import java.time.{Clock, Instant, ZoneOffset}
+import java.time.{Clock, Instant, LocalDate, ZoneOffset}
 import scala.concurrent.Future
 
 class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
@@ -284,8 +284,7 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
       }
 
       "must allow declarations from the configured start day" in {
-        val startOfDeclarationPeriod = Instant.parse("2026-05-06T00:00:00Z")
-        val startDayService          = buildService(startOfDeclarationPeriod)
+        val startDayService = buildService(declarationPeriodStartsAt)
         when(mockMonthlyReturnRepository.declare(eqTo(zReference), eqTo(taxYear), eqTo(month)))
           .thenReturn(
             Future.successful(DeclareMonthlyReturnRepositoryResult.MonthlyReturnDeclared)
@@ -296,7 +295,10 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
       }
 
       "must return OutsideDeclarationPeriod and not call the repository before the configured start day" in {
-        val beforeStartDayService = buildService(Instant.parse("2026-05-05T23:59:59Z"))
+        val beforeStartDayService = buildService(
+          now = Instant.parse("2026-05-05T23:59:59Z"),
+          serviceAppConfig = declarationPeriodAppConfig(startDay = 6, endDay = 19)
+        )
 
         beforeStartDayService.declare(zReference, taxYear, month).futureValue mustBe
           DeclareMonthlyReturnResult.OutsideDeclarationPeriod
@@ -305,8 +307,7 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
       }
 
       "must allow declarations until the end of the configured end day" in {
-        val endOfDeclarationPeriod = Instant.parse("2026-05-19T23:59:59Z")
-        val endDayService          = buildService(endOfDeclarationPeriod)
+        val endDayService = buildService(declarationPeriodEndsAt)
         when(mockMonthlyReturnRepository.declare(eqTo(zReference), eqTo(taxYear), eqTo(month)))
           .thenReturn(
             Future.successful(DeclareMonthlyReturnRepositoryResult.MonthlyReturnDeclared)
@@ -317,7 +318,10 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
       }
 
       "must return OutsideDeclarationPeriod and not call the repository after the configured end day" in {
-        val afterEndDayService = buildService(Instant.parse("2026-05-20T00:00:00Z"))
+        val afterEndDayService = buildService(
+          now = Instant.parse("2026-05-20T00:00:00Z"),
+          serviceAppConfig = declarationPeriodAppConfig(startDay = 6, endDay = 19)
+        )
 
         afterEndDayService.declare(zReference, taxYear, month).futureValue mustBe
           DeclareMonthlyReturnResult.OutsideDeclarationPeriod
@@ -479,11 +483,30 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
     }
   }
 
-  private def buildService(now: Instant): MonthlyReturnService =
+  private def buildService(now: Instant, serviceAppConfig: AppConfig = appConfig): MonthlyReturnService =
     new MonthlyReturnService(
       monthlyReturnRepository = mockMonthlyReturnRepository,
       returnsSubmissionConnector = mockReturnsSubmissionConnector,
-      appConfig = appConfig,
+      appConfig = serviceAppConfig,
       clock = Clock.fixed(now, ZoneOffset.UTC)
     )
+
+  private def declarationPeriodAppConfig(startDay: Int, endDay: Int): AppConfig = {
+    val configuredAppConfig = mock[AppConfig]
+    when(configuredAppConfig.declarationPeriodStart).thenReturn(startDay)
+    when(configuredAppConfig.declarationPeriodEnd).thenReturn(endDay)
+    configuredAppConfig
+  }
+
+  private def declarationPeriodStartsAt: Instant =
+    LocalDate
+      .of(2026, 5, appConfig.declarationPeriodStart)
+      .atStartOfDay(ZoneOffset.UTC)
+      .toInstant
+
+  private def declarationPeriodEndsAt: Instant =
+    LocalDate
+      .of(2026, 5, appConfig.declarationPeriodEnd)
+      .atTime(23, 59, 59)
+      .toInstant(ZoneOffset.UTC)
 }
