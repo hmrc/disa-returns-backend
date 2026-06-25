@@ -120,7 +120,7 @@ abstract class BaseFileUploadProcessingService[R, C <: FileUploadValidationConte
                                              returnRecord,
                                              uploadReference,
                                              validationOutcome,
-                                             objectStoreFileLocation,
+                                             Some(objectStoreFileLocation),
                                              objectStoreFileErrorsLocation,
                                              context
                                            )
@@ -137,7 +137,7 @@ abstract class BaseFileUploadProcessingService[R, C <: FileUploadValidationConte
           Future.successful(
             FileUploadProcessingResult.Processed(
               validation = validationOutcome.validation,
-              objectStoreFileLocation = objectStoreFileLocation,
+              objectStoreFileLocation = Some(objectStoreFileLocation),
               objectStoreFileErrorsLocation = objectStoreFileErrorsLocation
             )
           )
@@ -216,7 +216,7 @@ abstract class BaseFileUploadProcessingService[R, C <: FileUploadValidationConte
     filePath: Path,
     details: FileUploadDetails,
     context: String
-  )(implicit hc: HeaderCarrier): Future[Option[String]] = {
+  )(implicit hc: HeaderCarrier): Future[String] = {
     logger.info(s"${logPrefix(uploadReference)} Original file object-store upload started for $context")
     objectStoreConnector
       .putFile(
@@ -228,7 +228,7 @@ abstract class BaseFileUploadProcessingService[R, C <: FileUploadValidationConte
         logger.info(
           s"${logPrefix(uploadReference)} Original file object-store upload completed for $context, object-store location [$location]"
         )
-        Some(location)
+        location
       }
   }
 

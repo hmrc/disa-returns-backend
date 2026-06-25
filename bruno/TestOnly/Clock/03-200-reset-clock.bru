@@ -15,12 +15,11 @@ assert {
 }
 
 script:pre-request {
-  const axios = require("axios");
   const url = `${bru.getEnvVar("submissionBaseUrl")}${bru.getEnvVar("submissionServicePath")}/test-only/clock`;
   let response;
   
   try {
-    response = await axios.delete(url, { timeout: 3000 });
+    response = await bru.sendRequest({ method: "DELETE", url, timeout: 3000 });
   } catch (error) {
     response = error.response;
   }

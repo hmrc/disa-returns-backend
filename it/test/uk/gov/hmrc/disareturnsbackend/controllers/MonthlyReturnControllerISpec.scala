@@ -91,6 +91,14 @@ class MonthlyReturnControllerISpec extends BaseIntegrationSpec {
       result.status shouldBe CONFLICT
     }
 
+    "return 409 Conflict when disa-returns-submission already has a declared MonthlyReturn" in {
+      stubReturnsSubmissionGetMonthlyReturn(declaredSubmissionMonthlyReturn)
+
+      val result = postJson(monthlyPath, nilReturnFalseRequest)
+
+      result.status shouldBe CONFLICT
+    }
+
     "return 400 Bad Request when nilReturn is not a boolean" in {
       val result = postJson(monthlyPath, invalidNilReturnRequest)
 
@@ -137,6 +145,16 @@ class MonthlyReturnControllerISpec extends BaseIntegrationSpec {
     "return 422 Unprocessable Entity when the MonthlyReturn has already been declared" in {
       postJson(monthlyPath, nilReturnFalseRequest).status shouldBe CREATED
       postJson(declarationsPath, Json.obj()).status shouldBe NO_CONTENT
+      stubReturnsSubmissionGetMonthlyReturn(declaredSubmissionMonthlyReturn)
+
+      val result = putJson(nilReturnPath, nilReturnValueTrueRequest)
+
+      result.status shouldBe UNPROCESSABLE_ENTITY
+    }
+
+    "return 422 Unprocessable Entity when disa-returns-submission already has a declared MonthlyReturn" in {
+      postJson(monthlyPath, nilReturnFalseRequest).status shouldBe CREATED
+      stubReturnsSubmissionGetMonthlyReturn(declaredSubmissionMonthlyReturn)
 
       val result = putJson(nilReturnPath, nilReturnValueTrueRequest)
 
@@ -165,14 +183,28 @@ class MonthlyReturnControllerISpec extends BaseIntegrationSpec {
 
       result.status shouldBe NO_CONTENT
 
+      stubReturnsSubmissionGetMonthlyReturn(declaredSubmissionMonthlyReturn)
+
       val getResult = get(monthlyPath)
       (getResult.json \ declaredOnFieldName).as[String]   shouldBe testCreatedOnString
-      (getResult.json \ lastUpdatedFieldName).as[String] shouldBe testCreatedOnString
     }
 
     "return 409 Conflict when the MonthlyReturn has already been declared" in {
       postJson(monthlyPath, nilReturnFalseRequest)
       postJson(declarationsPath, Json.obj()).status shouldBe NO_CONTENT
+      stubReturnsSubmissionGetMonthlyReturn(declaredSubmissionMonthlyReturn)
+
+      val result = postJson(declarationsPath, Json.obj())
+
+      result.status shouldBe CONFLICT
+
+      val getResult = get(monthlyPath)
+      (getResult.json \ declaredOnFieldName).as[String] shouldBe testCreatedOnString
+    }
+
+    "return 409 Conflict when disa-returns-submission already has a declared MonthlyReturn" in {
+      postJson(monthlyPath, nilReturnFalseRequest)
+      stubReturnsSubmissionGetMonthlyReturn(declaredSubmissionMonthlyReturn)
 
       val result = postJson(declarationsPath, Json.obj())
 
@@ -223,6 +255,16 @@ class MonthlyReturnControllerISpec extends BaseIntegrationSpec {
     "return 422 Unprocessable Entity when the MonthlyReturn has already been declared" in {
       postJson(monthlyPath, nilReturnFalseRequest)
       postJson(declarationsPath, Json.obj()).status shouldBe NO_CONTENT
+      stubReturnsSubmissionGetMonthlyReturn(declaredSubmissionMonthlyReturn)
+
+      val result = postJson(filesPath, createFileUploadRequest)
+
+      result.status shouldBe UNPROCESSABLE_ENTITY
+    }
+
+    "return 422 Unprocessable Entity when disa-returns-submission already has a declared MonthlyReturn" in {
+      postJson(monthlyPath, nilReturnFalseRequest)
+      stubReturnsSubmissionGetMonthlyReturn(declaredSubmissionMonthlyReturn)
 
       val result = postJson(filesPath, createFileUploadRequest)
 
@@ -280,4 +322,13 @@ class MonthlyReturnControllerISpec extends BaseIntegrationSpec {
       result.status shouldBe NOT_FOUND
     }
   }
+
+  private val declaredSubmissionMonthlyReturn = Json.obj(
+    zReferenceFieldName -> testZReference,
+    submissionIdFieldName -> testSubmissionId,
+    taxYearFieldName -> testTaxYear,
+    monthFieldName -> testMonth,
+    declaredOnFieldName -> testCreatedOnString,
+    lastUpdatedFieldName -> testCreatedOnString
+  )
 }

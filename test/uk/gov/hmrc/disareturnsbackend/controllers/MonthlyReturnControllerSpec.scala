@@ -17,8 +17,8 @@
 package uk.gov.hmrc.disareturnsbackend.controllers
 
 import base.SpecBase
-import org.mockito.ArgumentMatchers.eq as eqTo
-import org.mockito.Mockito.{reset, verify, when}
+import org.mockito.ArgumentMatchers.{any, eq as eqTo}
+import org.mockito.Mockito.{never, reset, verify, when}
 import org.scalatest.BeforeAndAfterEach
 import play.api.Application
 import play.api.http.HeaderNames.LOCATION
@@ -26,6 +26,7 @@ import play.api.inject.bind
 import play.api.libs.json.Json
 import play.api.test.FakeRequest
 import play.api.test.Helpers.*
+import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector
 import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.services.CreateFileUploadResult
 import uk.gov.hmrc.disareturnsbackend.services.DeclareMonthlyReturnResult
@@ -37,11 +38,13 @@ import scala.concurrent.Future
 
 class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
 
-  private val mockMonthlyReturnService = mock[MonthlyReturnService]
+  private val mockMonthlyReturnService       = mock[MonthlyReturnService]
+  private val mockReturnsSubmissionConnector = mock[ReturnsSubmissionConnector]
 
   override lazy val app: Application = applicationBuilder(
     Seq(
-      bind[MonthlyReturnService].toInstance(mockMonthlyReturnService)
+      bind[MonthlyReturnService].toInstance(mockMonthlyReturnService),
+      bind[ReturnsSubmissionConnector].toInstance(mockReturnsSubmissionConnector)
     )
   ).build()
 
@@ -67,24 +70,30 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
   override protected def beforeEach(): Unit = {
     super.beforeEach()
     reset(mockMonthlyReturnService)
+    reset(mockReturnsSubmissionConnector)
+    when(mockReturnsSubmissionConnector.getMonthlyReturn(any[String](), any[String](), any[Int]())(any(), any()))
+      .thenReturn(Future.successful(None))
   }
 
   "MonthlyReturnController.getMonthlyReturn" - {
 
     "must return OK when the MonthlyReturn exists" in {
-      when(mockMonthlyReturnService.get(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth)))
-        .thenReturn(Future.successful(Some(monthlyReturn)))
+      val response = MonthlyReturnResponse(monthlyReturn, declaredOn = None)
+      when(mockMonthlyReturnService.getWithDeclaration(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth))(any()))
+        .thenReturn(Future.successful(Some(response)))
 
       val result =
         controller.getMonthlyReturn(lowercaseTestZReference, testTaxYear, testRouteMonth)(FakeRequest("GET", path))
 
       status(result) mustBe OK
-      contentAsJson(result) mustBe Json.toJson(monthlyReturn)
-      verify(mockMonthlyReturnService).get(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth))
+      contentAsJson(result) mustBe Json.toJson(response)
+      verify(mockMonthlyReturnService).getWithDeclaration(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth))(
+        any()
+      )
     }
 
     "must return NOT_FOUND when the MonthlyReturn does not exist" in {
-      when(mockMonthlyReturnService.get(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth)))
+      when(mockMonthlyReturnService.getWithDeclaration(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth))(any()))
         .thenReturn(Future.successful(None))
 
       val result = controller.getMonthlyReturn(testZReference, testTaxYear, testRouteMonth)(FakeRequest("GET", path))
@@ -93,7 +102,7 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
     }
 
     "must return SERVICE_UNAVAILABLE when the service fails" in {
-      when(mockMonthlyReturnService.get(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth)))
+      when(mockMonthlyReturnService.getWithDeclaration(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth))(any()))
         .thenReturn(Future.failed(new RuntimeException(testMongoDownMessage)))
 
       val result = controller.getMonthlyReturn(testZReference, testTaxYear, testRouteMonth)(FakeRequest("GET", path))
@@ -119,7 +128,7 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
           eqTo(testTaxYear),
           eqTo(testMonth),
           eqTo(true)
-        )
+        )(any())
       )
         .thenReturn(Future.successful(Created(testSubmissionId)))
 
@@ -141,7 +150,7 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
           eqTo(testTaxYear),
           eqTo(testMonth),
           eqTo(false)
-        )
+        )(any())
       )
         .thenReturn(Future.successful(AlreadyExists))
 
@@ -154,6 +163,25 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
       status(result) mustBe CONFLICT
     }
 
+    "must return CONFLICT when disa-returns-submission already has a declared MonthlyReturn" in {
+      when(
+        mockReturnsSubmissionConnector.getMonthlyReturn(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth))(
+          any(),
+          any()
+        )
+      )
+        .thenReturn(Future.successful(Some(Json.obj(declaredOnFieldName -> testCreatedOnString))))
+
+      val result = controller.createMonthlyReturn(testZReference, testTaxYear, testRouteMonth)(
+        FakeRequest("POST", path).withBody(
+          Json.toJson(CreateMonthlyReturnRequest(nilReturn = false))
+        )
+      )
+
+      status(result) mustBe CONFLICT
+      verify(mockMonthlyReturnService, never()).create(any[String](), any[String](), any[Int](), any[Boolean]())(any())
+    }
+
     "must return UNPROCESSABLE_ENTITY when the declaration period is closed" in {
       when(
         mockMonthlyReturnService.create(
@@ -161,7 +189,7 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
           eqTo(testTaxYear),
           eqTo(testMonth),
           eqTo(false)
-        )
+        )(any())
       )
         .thenReturn(Future.successful(OutsideDeclarationPeriod))
 
@@ -181,7 +209,7 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
           eqTo(testTaxYear),
           eqTo(testMonth),
           eqTo(false)
-        )
+        )(any())
       )
         .thenReturn(Future.failed(new RuntimeException(testMongoDownMessage)))
 
@@ -236,17 +264,22 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
       status(result) mustBe NOT_FOUND
     }
 
-    "must return UNPROCESSABLE_ENTITY when the MonthlyReturn has already been declared" in {
+    "must return UNPROCESSABLE_ENTITY when disa-returns-submission already has a declared MonthlyReturn" in {
       when(
-        mockMonthlyReturnService.updateNilReturn(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth), eqTo(true))
+        mockReturnsSubmissionConnector.getMonthlyReturn(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth))(
+          any(),
+          any()
+        )
       )
-        .thenReturn(Future.successful(UpdateNilReturnResult.MonthlyReturnAlreadyDeclared))
+        .thenReturn(Future.successful(Some(Json.obj(declaredOnFieldName -> testCreatedOnString))))
 
       val result = controller.updateNilReturn(testZReference, testTaxYear, testRouteMonth)(
         FakeRequest("PUT", nilReturnPath).withBody(Json.obj(valueFieldName -> true))
       )
 
       status(result) mustBe UNPROCESSABLE_ENTITY
+      verify(mockMonthlyReturnService, never())
+        .updateNilReturn(any[String](), any[String](), any[Int](), any[Boolean]())
     }
 
     "must return SERVICE_UNAVAILABLE when the service fails" in {
@@ -282,7 +315,7 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
   "MonthlyReturnController.declareMonthlyReturn" - {
 
     "must return NO_CONTENT when the MonthlyReturn is declared" in {
-      when(mockMonthlyReturnService.declare(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth)))
+      when(mockMonthlyReturnService.declare(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth))(any()))
         .thenReturn(Future.successful(DeclareMonthlyReturnResult.Declared))
 
       val result = controller.declareMonthlyReturn(lowercaseTestZReference, testTaxYear, testRouteMonth)(
@@ -290,11 +323,11 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
       )
 
       status(result) mustBe NO_CONTENT
-      verify(mockMonthlyReturnService).declare(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth))
+      verify(mockMonthlyReturnService).declare(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth))(any())
     }
 
     "must return CONFLICT when the MonthlyReturn has already been declared" in {
-      when(mockMonthlyReturnService.declare(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth)))
+      when(mockMonthlyReturnService.declare(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth))(any()))
         .thenReturn(Future.successful(DeclareMonthlyReturnResult.AlreadyDeclared))
 
       val result = controller.declareMonthlyReturn(testZReference, testTaxYear, testRouteMonth)(
@@ -304,8 +337,25 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
       status(result) mustBe CONFLICT
     }
 
+    "must return CONFLICT when disa-returns-submission already has a declared MonthlyReturn" in {
+      when(
+        mockReturnsSubmissionConnector.getMonthlyReturn(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth))(
+          any(),
+          any()
+        )
+      )
+        .thenReturn(Future.successful(Some(Json.obj(declaredOnFieldName -> testCreatedOnString))))
+
+      val result = controller.declareMonthlyReturn(testZReference, testTaxYear, testRouteMonth)(
+        FakeRequest("POST", declarationsPath)
+      )
+
+      status(result) mustBe CONFLICT
+      verify(mockMonthlyReturnService, never()).declare(any[String](), any[String](), any[Int]())(any())
+    }
+
     "must return NOT_FOUND when the MonthlyReturn does not exist" in {
-      when(mockMonthlyReturnService.declare(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth)))
+      when(mockMonthlyReturnService.declare(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth))(any()))
         .thenReturn(Future.successful(DeclareMonthlyReturnResult.MonthlyReturnNotFound))
 
       val result = controller.declareMonthlyReturn(testZReference, testTaxYear, testRouteMonth)(
@@ -316,7 +366,7 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
     }
 
     "must return UNPROCESSABLE_ENTITY when the declaration period is closed" in {
-      when(mockMonthlyReturnService.declare(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth)))
+      when(mockMonthlyReturnService.declare(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth))(any()))
         .thenReturn(Future.successful(DeclareMonthlyReturnResult.OutsideDeclarationPeriod))
 
       val result = controller.declareMonthlyReturn(testZReference, testTaxYear, testRouteMonth)(
@@ -327,7 +377,7 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
     }
 
     "must return SERVICE_UNAVAILABLE when the service fails" in {
-      when(mockMonthlyReturnService.declare(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth)))
+      when(mockMonthlyReturnService.declare(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth))(any()))
         .thenReturn(Future.failed(new RuntimeException(testMongoDownMessage)))
 
       val result = controller.declareMonthlyReturn(testZReference, testTaxYear, testRouteMonth)(
@@ -414,22 +464,22 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
       status(result) mustBe CONFLICT
     }
 
-    "must return UNPROCESSABLE_ENTITY when the MonthlyReturn has already been declared" in {
+    "must return UNPROCESSABLE_ENTITY when disa-returns-submission already has a declared MonthlyReturn" in {
       when(
-        mockMonthlyReturnService.createFileUpload(
-          eqTo(testZReference),
-          eqTo(testTaxYear),
-          eqTo(testMonth),
-          eqTo(testUploadReference)
+        mockReturnsSubmissionConnector.getMonthlyReturn(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth))(
+          any(),
+          any()
         )
       )
-        .thenReturn(Future.successful(CreateFileUploadResult.MonthlyReturnAlreadyDeclared))
+        .thenReturn(Future.successful(Some(Json.obj(declaredOnFieldName -> testCreatedOnString))))
 
       val result = controller.createFileUpload(testZReference, testTaxYear, testRouteMonth)(
         FakeRequest("POST", filesPath).withBody(Json.toJson(CreateFileUploadRequest(testUploadReference)))
       )
 
       status(result) mustBe UNPROCESSABLE_ENTITY
+      verify(mockMonthlyReturnService, never())
+        .createFileUpload(any[String](), any[String](), any[Int](), any[String]())
     }
 
     "must return SERVICE_UNAVAILABLE when the service fails" in {

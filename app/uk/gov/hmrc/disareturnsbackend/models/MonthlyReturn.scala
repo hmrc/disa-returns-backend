@@ -42,27 +42,14 @@ final case class MonthlyReturn(
   createdOn: Instant,
   nilReturn: Boolean = false,
   fileUploads: List[FileUpload],
-  declaredOn: Option[Instant] = None,
   lastUpdated: Instant
 ) {
-
-  def hasDeclaration: Boolean = declaredOn.isDefined
 
   def getFileUpload(reference: String): Option[FileUpload] =
     fileUploads.find(_.reference == reference)
 
-  def declare(declaredOn: Instant): MonthlyReturn =
-    if (hasDeclaration) {
-      this
-    } else {
-      copy(
-        declaredOn = Some(declaredOn),
-        lastUpdated = declaredOn
-      )
-    }
-
   def createFileUpload(reference: String, createdOn: Instant): MonthlyReturn = {
-    val cannotAcceptFileUpload = nilReturn || hasDeclaration || fileUploads.exists(_.reference == reference)
+    val cannotAcceptFileUpload = nilReturn || fileUploads.exists(_.reference == reference)
 
     if (cannotAcceptFileUpload) {
       this
@@ -133,12 +120,10 @@ final case class MonthlyReturn(
       false
     } else {
       fileUploads.exists { fileUpload =>
-        val hasMatchingReference        = fileUpload.reference == reference
-        val hasCreatedStatus            = fileUpload.status == FileUploadStatus.Created
-        val wasCreatedBeforeDeclaration =
-          declaredOn.forall(d => fileUpload.createdOn.isBefore(d))
+        val hasMatchingReference = fileUpload.reference == reference
+        val hasCreatedStatus     = fileUpload.status == FileUploadStatus.Created
 
-        hasMatchingReference && hasCreatedStatus && wasCreatedBeforeDeclaration
+        hasMatchingReference && hasCreatedStatus
       }
     }
 

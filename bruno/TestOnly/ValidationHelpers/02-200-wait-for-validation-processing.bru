@@ -15,7 +15,6 @@ assert {
 }
 
 script:pre-request {
-  const axios = require("axios");
   const maxAttempts = 15;
   const pollIntervalMs = Number(bru.getEnvVar("validationProcessingPollIntervalMs") ?? 1000);
   const expectedStatus = bru.getVar("expectedUploadStatus");
@@ -29,7 +28,7 @@ script:pre-request {
   
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      const response = await axios.get(url, { timeout: 3000 });
+      const response = await bru.sendRequest({ method: "GET", url, timeout: 3000 });
       lastStatus = response.data?.status ?? "missing status";
   
       if (lastStatus === expectedStatus) {

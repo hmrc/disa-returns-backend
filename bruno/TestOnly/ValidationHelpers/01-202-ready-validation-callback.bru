@@ -30,7 +30,6 @@ body:json {
 }
 
 script:pre-request {
-  const axios = require("axios");
   const baseUrl = bru.getEnvVar("baseUrl");
   const servicePath = bru.getEnvVar("servicePath");
   const zReference = bru.getVar("callbackZReference");
@@ -58,7 +57,7 @@ script:pre-request {
   
   const returnUrl = `${baseUrl}${servicePath}/monthly/${zReference}/${taxYear}/${month}`;
   bru.setVar("validationSetupReturnUrl", returnUrl);
-  const returnResponse = await axios.post(returnUrl, { nilReturn: false }, { timeout: 3000 });
+  const returnResponse = await bru.sendRequest({ method: "POST", url: returnUrl, headers: { "Content-Type": "application/json" }, data: { nilReturn: false }, timeout: 3000 });
   bru.setVar("validationSetupReturnStatus", String(returnResponse.status));
   
   if (returnResponse.status !== 201) {
@@ -67,7 +66,7 @@ script:pre-request {
   
   const fileUploadUrl = `${returnUrl}/files`;
   bru.setVar("validationSetupFileUploadUrl", fileUploadUrl);
-  const response = await axios.post(fileUploadUrl, { reference: uploadReference }, { timeout: 3000 });
+  const response = await bru.sendRequest({ method: "POST", url: fileUploadUrl, headers: { "Content-Type": "application/json" }, data: { reference: uploadReference }, timeout: 3000 });
   bru.setVar("validationSetupFileUploadStatus", String(response.status));
   
   if (response.status !== 201) {

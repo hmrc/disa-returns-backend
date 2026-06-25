@@ -26,7 +26,7 @@ import org.scalatestplus.play.guice.GuiceOneServerPerSuite
 import org.mongodb.scala.ObservableFuture
 import org.mongodb.scala.model.Filters
 import play.api.Application
-import play.api.http.Status.CREATED
+import play.api.http.Status.{CREATED, OK}
 import play.api.inject.bind
 import play.api.inject.guice.GuiceApplicationBuilder
 import play.api.libs.json.{JsObject, Json}
@@ -82,6 +82,7 @@ trait BaseIntegrationSpec
   override protected def beforeEach(): Unit = {
     super.beforeEach()
     stubReturnsSubmissionCreateMonthlyReturn()
+    stubReturnsSubmissionDeclareMonthlyReturn()
     clearMongoCollections()
   }
 
@@ -97,6 +98,25 @@ trait BaseIntegrationSpec
             .withHeader("Content-Type", "application/json")
             .withBody(Json.obj(submissionIdFieldName -> submissionId).toString())
         )
+    )
+
+  protected def stubReturnsSubmissionGetMonthlyReturn(body: JsObject): Unit =
+    stubFor(
+      com.github.tomakehurst.wiremock.client.WireMock.get(
+        urlPathMatching("/disa-returns-submission/monthly/[^/]+/[^/]+/[^/]+")
+      )
+        .willReturn(
+          aResponse()
+            .withStatus(OK)
+            .withHeader("Content-Type", "application/json")
+            .withBody(body.toString())
+        )
+    )
+
+  protected def stubReturnsSubmissionDeclareMonthlyReturn(status: Int = OK): Unit =
+    stubFor(
+      post(urlPathMatching("/disa-returns-submission/monthly/[^/]+/[^/]+/[^/]+/declarations"))
+        .willReturn(aResponse().withStatus(status))
     )
 
   def serviceUrl(path: String): String = s"http://localhost:$port$path"

@@ -22,6 +22,8 @@ import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.repositories.*
 
 import javax.inject.{Inject, Singleton}
+import java.time.{Clock, Instant}
+import java.time.temporal.ChronoUnit
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
 
@@ -29,7 +31,8 @@ import scala.util.control.NonFatal
 class UpscanCallbackService @Inject() (
   monthlyReturnRepository: MonthlyReturnRepository,
   monthlyReturnFileUploadWorkItemRepository: MonthlyReturnFileUploadWorkItemRepository,
-  upscanCallbackMapper: UpscanCallbackMapper
+  upscanCallbackMapper: UpscanCallbackMapper,
+  clock: Clock
 )(implicit ec: ExecutionContext)
     extends Logging {
 
@@ -142,17 +145,23 @@ class UpscanCallbackService @Inject() (
               status
           }
 
-        monthlyReturnRepository
-          .completeUpscan(
-            zReference = zReference,
-            taxYear = taxYear,
-            month = month,
-            reference = reference,
-            status = completedStatus,
-            fileUploadDetails = fileUploadDetails,
-            failureReason = failureReason,
-            failureMessage = failureMessage
-          )
+        val updatedMonthlyReturn = monthlyReturn.completeUpscan(
+          reference = reference,
+          status = completedStatus,
+          upscanCompletedOn = now(),
+          fileUploadDetails = fileUploadDetails,
+          failureReason = failureReason,
+          failureMessage = failureMessage
+        )
+
+        val persistUpdate =
+          if (updatedMonthlyReturn == monthlyReturn) {
+            Future.successful(false)
+          } else {
+            monthlyReturnRepository.upsert(updatedMonthlyReturn)
+          }
+
+        persistUpdate
           .map { updated =>
             logCallbackResult(zReference, taxYear, month, reference, completedStatus)(updated)
             Option.when(updated)(completedStatus)
@@ -226,5 +235,7 @@ class UpscanCallbackService @Inject() (
       s"[UpscanCallbackService][logEnqueueMonthlyReturnFileUploadWorkItemFailure] Failed to add monthly return file upload work item for zReference [$zReference], taxYear [$taxYear], month [$month], upload reference [$reference]",
       exception
     )
+
+  private def now(): Instant = Instant.now(clock).truncatedTo(ChronoUnit.MILLIS)
 
 }

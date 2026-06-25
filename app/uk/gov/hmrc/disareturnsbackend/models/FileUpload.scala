@@ -31,6 +31,9 @@ final case class FileUpload(
 
   def hasMatchingChecksum(checksum: String): Boolean =
     fileUploadDetails.exists(_.checksum == checksum)
+
+  def hasFileUploadDetails: Boolean =
+    fileUploadDetails.isDefined
 }
 
 object FileUpload {

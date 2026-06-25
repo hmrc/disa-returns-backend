@@ -18,15 +18,15 @@ package uk.gov.hmrc.disareturnsbackend.services
 
 import base.SpecBase
 import org.mockito.ArgumentMatchers.{any, eq as eqTo}
-import org.mockito.Mockito.{reset, verify, verifyNoInteractions, when}
+import org.mockito.Mockito.{never, reset, verify, verifyNoInteractions, when}
 import org.scalatest.BeforeAndAfterEach
 import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector
-import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector.CreateMonthlyReturnSubmissionResult
+import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector.{CreateMonthlyReturnSubmissionResult, DeclareMonthlyReturnSubmissionResult}
 import uk.gov.hmrc.disareturnsbackend.config.AppConfig
 import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository
-import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository.{CreateFileUploadRepositoryResult, DeclareMonthlyReturnRepositoryResult, UpdateNilReturnRepositoryResult}
 import uk.gov.hmrc.disareturnsbackend.services.CreateMonthlyReturnResult.{AlreadyExists, Created}
+import uk.gov.hmrc.http.HeaderCarrier
 
 import java.time.{Clock, Instant, LocalDate, ZoneOffset}
 import scala.concurrent.Future
@@ -38,10 +38,14 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
   private val appConfig                      = inject[AppConfig]
   private val service                        = buildService(testCreatedOn)
 
-  private val zReference      = testZReference
-  private val taxYear         = testTaxYear
-  private val month           = testMonth
-  private val uploadReference = testUploadReference
+  private implicit val hc: HeaderCarrier = HeaderCarrier()
+
+  private val zReference       = testZReference
+  private val taxYear          = testTaxYear
+  private val month            = testMonth
+  private val uploadReference  = testUploadReference
+  private val rowsValidated    = 1
+  private val validationErrors = 0
 
   private val monthlyReturn = MonthlyReturn(
     zReference = zReference,
@@ -218,38 +222,56 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
 
     "updateNilReturn" - {
 
-      "must return the repository result" in {
-        val updatedReturn = monthlyReturn.copy(nilReturn = true)
+      "must update the MonthlyReturn and persist it" in {
+        val expectedUpdatedReturn = monthlyReturn.copy(
+          nilReturn = true,
+          fileUploads = Nil,
+          lastUpdated = testCreatedOn
+        )
 
-        when(mockMonthlyReturnRepository.updateNilReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(true)))
-          .thenReturn(Future.successful(UpdateNilReturnRepositoryResult.NilReturnUpdated(updatedReturn)))
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(Some(monthlyReturn.copy(fileUploads = List(createdFileUpload())))))
+        when(mockMonthlyReturnRepository.upsert(eqTo(expectedUpdatedReturn))).thenReturn(Future.successful(true))
 
         service.updateNilReturn(zReference, taxYear, month, nilReturn = true).futureValue mustBe
-          UpdateNilReturnResult.NilReturnUpdated(updatedReturn)
+          UpdateNilReturnResult.NilReturnUpdated(expectedUpdatedReturn)
 
-        verify(mockMonthlyReturnRepository).updateNilReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(true))
+        verify(mockMonthlyReturnRepository).upsert(eqTo(expectedUpdatedReturn))
       }
 
-      "must return MonthlyReturnAlreadyDeclared when the repository rejects a declared return" in {
-        when(mockMonthlyReturnRepository.updateNilReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(true)))
-          .thenReturn(Future.successful(UpdateNilReturnRepositoryResult.MonthlyReturnAlreadyDeclared))
+      "must not persist when nilReturn is unchanged" in {
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(Some(monthlyReturn)))
 
-        service.updateNilReturn(zReference, taxYear, month, nilReturn = true).futureValue mustBe
-          UpdateNilReturnResult.MonthlyReturnAlreadyDeclared
+        service.updateNilReturn(zReference, taxYear, month, nilReturn = false).futureValue mustBe
+          UpdateNilReturnResult.NilReturnUpdated(monthlyReturn)
+
+        verify(mockMonthlyReturnRepository, never()).upsert(any[MonthlyReturn])
       }
 
       "must return MonthlyReturnNotFound when the repository cannot find the MonthlyReturn" in {
-        when(mockMonthlyReturnRepository.updateNilReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(true)))
-          .thenReturn(Future.successful(UpdateNilReturnRepositoryResult.MonthlyReturnNotFound))
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(None))
 
         service.updateNilReturn(zReference, taxYear, month, nilReturn = true).futureValue mustBe
           UpdateNilReturnResult.MonthlyReturnNotFound
       }
 
-      "must fail when the repository fails" in {
+      "must fail when the repository get fails" in {
         val exception = new RuntimeException(testMongoDownMessage)
 
-        when(mockMonthlyReturnRepository.updateNilReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(true)))
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.failed(exception))
+
+        service.updateNilReturn(zReference, taxYear, month, nilReturn = true).failed.futureValue mustBe exception
+      }
+
+      "must fail when the repository upsert fails" in {
+        val exception = new RuntimeException(testMongoDownMessage)
+
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(Some(monthlyReturn)))
+        when(mockMonthlyReturnRepository.upsert(any[MonthlyReturn]))
           .thenReturn(Future.failed(exception))
 
         service.updateNilReturn(zReference, taxYear, month, nilReturn = true).failed.futureValue mustBe exception
@@ -258,37 +280,62 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
 
     "declare" - {
 
-      "must return Declared when the repository declares the MonthlyReturn" in {
-        when(mockMonthlyReturnRepository.declare(eqTo(zReference), eqTo(taxYear), eqTo(month)))
-          .thenReturn(
-            Future.successful(DeclareMonthlyReturnRepositoryResult.MonthlyReturnDeclared)
-          )
+      "must return Declared when submission declares the MonthlyReturn" in {
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(Some(monthlyReturn)))
+        when(
+          mockReturnsSubmissionConnector
+            .declareMonthlyReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), any())(any(), any())
+        )
+          .thenReturn(Future.successful(DeclareMonthlyReturnSubmissionResult.Declared))
 
         service.declare(zReference, taxYear, month).futureValue mustBe DeclareMonthlyReturnResult.Declared
 
-        verify(mockMonthlyReturnRepository).declare(eqTo(zReference), eqTo(taxYear), eqTo(month))
+        verify(mockReturnsSubmissionConnector)
+          .declareMonthlyReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), any())(any(), any())
       }
 
-      "must return AlreadyDeclared when the repository rejects a duplicate declaration" in {
-        when(mockMonthlyReturnRepository.declare(eqTo(zReference), eqTo(taxYear), eqTo(month)))
-          .thenReturn(Future.successful(DeclareMonthlyReturnRepositoryResult.MonthlyReturnAlreadyDeclared))
+      "must return AlreadyDeclared when submission rejects a duplicate declaration" in {
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(Some(monthlyReturn)))
+        when(
+          mockReturnsSubmissionConnector
+            .declareMonthlyReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), any())(any(), any())
+        )
+          .thenReturn(Future.successful(DeclareMonthlyReturnSubmissionResult.AlreadyDeclared))
 
         service.declare(zReference, taxYear, month).futureValue mustBe DeclareMonthlyReturnResult.AlreadyDeclared
       }
 
       "must return MonthlyReturnNotFound when the repository cannot find the MonthlyReturn" in {
-        when(mockMonthlyReturnRepository.declare(eqTo(zReference), eqTo(taxYear), eqTo(month)))
-          .thenReturn(Future.successful(DeclareMonthlyReturnRepositoryResult.MonthlyReturnNotFound))
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(None))
+
+        service.declare(zReference, taxYear, month).futureValue mustBe DeclareMonthlyReturnResult.MonthlyReturnNotFound
+      }
+
+      "must return MonthlyReturnNotFound when submission cannot find the MonthlyReturn" in {
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(Some(monthlyReturn)))
+        when(
+          mockReturnsSubmissionConnector
+            .declareMonthlyReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), any())(any(), any())
+        )
+          .thenReturn(Future.successful(DeclareMonthlyReturnSubmissionResult.MonthlyReturnNotFound))
 
         service.declare(zReference, taxYear, month).futureValue mustBe DeclareMonthlyReturnResult.MonthlyReturnNotFound
       }
 
       "must allow declarations from the configured start day" in {
+        val nilReturn       = false
         val startDayService = buildService(declarationPeriodStartsAt)
-        when(mockMonthlyReturnRepository.declare(eqTo(zReference), eqTo(taxYear), eqTo(month)))
-          .thenReturn(
-            Future.successful(DeclareMonthlyReturnRepositoryResult.MonthlyReturnDeclared)
-          )
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(Some(monthlyReturn)))
+        when(
+          mockReturnsSubmissionConnector
+            .declareMonthlyReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(nilReturn))(any(), any())
+        )
+          .thenReturn(Future.successful(DeclareMonthlyReturnSubmissionResult.Declared))
 
         startDayService.declare(zReference, taxYear, month).futureValue mustBe
           DeclareMonthlyReturnResult.Declared
@@ -308,10 +355,13 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
 
       "must allow declarations until the end of the configured end day" in {
         val endDayService = buildService(declarationPeriodEndsAt)
-        when(mockMonthlyReturnRepository.declare(eqTo(zReference), eqTo(taxYear), eqTo(month)))
-          .thenReturn(
-            Future.successful(DeclareMonthlyReturnRepositoryResult.MonthlyReturnDeclared)
-          )
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(Some(monthlyReturn)))
+        when(
+          mockReturnsSubmissionConnector
+            .declareMonthlyReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), any())(any(), any())
+        )
+          .thenReturn(Future.successful(DeclareMonthlyReturnSubmissionResult.Declared))
 
         endDayService.declare(zReference, taxYear, month).futureValue mustBe
           DeclareMonthlyReturnResult.Declared
@@ -332,7 +382,21 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
       "must fail when the repository fails" in {
         val exception = new RuntimeException(testMongoDownMessage)
 
-        when(mockMonthlyReturnRepository.declare(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.failed(exception))
+
+        service.declare(zReference, taxYear, month).failed.futureValue mustBe exception
+      }
+
+      "must fail when submission declare fails" in {
+        val exception = new RuntimeException(testMongoDownMessage)
+
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(Some(monthlyReturn)))
+        when(
+          mockReturnsSubmissionConnector
+            .declareMonthlyReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), any())(any(), any())
+        )
           .thenReturn(Future.failed(exception))
 
         service.declare(zReference, taxYear, month).failed.futureValue mustBe exception
@@ -341,7 +405,7 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
 
     "createFileUpload" - {
 
-      "must return the repository result" in {
+      "must create a file upload and persist it" in {
         val updatedReturn = monthlyReturn.copy(
           fileUploads = List(
             FileUpload(
@@ -352,52 +416,59 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
           )
         )
 
-        when(
-          mockMonthlyReturnRepository
-            .createFileUpload(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(uploadReference))
-        )
-          .thenReturn(Future.successful(CreateFileUploadRepositoryResult.FileUploadCreated(updatedReturn)))
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(Some(monthlyReturn)))
+        when(mockMonthlyReturnRepository.upsert(eqTo(updatedReturn))).thenReturn(Future.successful(true))
 
         service.createFileUpload(zReference, taxYear, month, uploadReference).futureValue mustBe
           CreateFileUploadResult.FileUploadCreated(updatedReturn)
 
-        verify(mockMonthlyReturnRepository).createFileUpload(
-          eqTo(zReference),
-          eqTo(taxYear),
-          eqTo(month),
-          eqTo(uploadReference)
-        )
+        verify(mockMonthlyReturnRepository).upsert(eqTo(updatedReturn))
       }
 
-      "must return FileUploadAlreadyExists when the repository rejects a duplicate reference" in {
-        when(
-          mockMonthlyReturnRepository
-            .createFileUpload(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(uploadReference))
-        )
-          .thenReturn(Future.successful(CreateFileUploadRepositoryResult.FileUploadAlreadyExists))
+      "must return FileUploadAlreadyExists when the reference already exists" in {
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(Some(monthlyReturn.copy(fileUploads = List(createdFileUpload())))))
 
         service.createFileUpload(zReference, taxYear, month, uploadReference).futureValue mustBe
           CreateFileUploadResult.FileUploadAlreadyExists
+
+        verify(mockMonthlyReturnRepository, never()).upsert(any[MonthlyReturn])
       }
 
-      "must return MonthlyReturnAlreadyDeclared when the repository rejects a declared return" in {
-        when(
-          mockMonthlyReturnRepository
-            .createFileUpload(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(uploadReference))
-        )
-          .thenReturn(Future.successful(CreateFileUploadRepositoryResult.MonthlyReturnAlreadyDeclared))
+      "must return MonthlyReturnNotFound when the MonthlyReturn is a nil return" in {
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(Some(monthlyReturn.copy(nilReturn = true))))
 
         service.createFileUpload(zReference, taxYear, month, uploadReference).futureValue mustBe
-          CreateFileUploadResult.MonthlyReturnAlreadyDeclared
+          CreateFileUploadResult.MonthlyReturnNotFound
+
+        verify(mockMonthlyReturnRepository, never()).upsert(any[MonthlyReturn])
       }
 
-      "must fail when the repository fails" in {
+      "must return MonthlyReturnNotFound when the MonthlyReturn does not exist" in {
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(None))
+
+        service.createFileUpload(zReference, taxYear, month, uploadReference).futureValue mustBe
+          CreateFileUploadResult.MonthlyReturnNotFound
+      }
+
+      "must fail when the repository get fails" in {
         val exception = new RuntimeException(testMongoDownMessage)
 
-        when(
-          mockMonthlyReturnRepository
-            .createFileUpload(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(uploadReference))
-        )
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.failed(exception))
+
+        service.createFileUpload(zReference, taxYear, month, uploadReference).failed.futureValue mustBe exception
+      }
+
+      "must fail when the repository upsert fails" in {
+        val exception = new RuntimeException(testMongoDownMessage)
+
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(Some(monthlyReturn)))
+        when(mockMonthlyReturnRepository.upsert(any[MonthlyReturn]))
           .thenReturn(Future.failed(exception))
 
         service.createFileUpload(zReference, taxYear, month, uploadReference).failed.futureValue mustBe exception
@@ -406,34 +477,33 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
 
     "getFileUpload" - {
 
-      "must return the repository result" in {
-        val fileUpload = FileUpload(
-          reference = uploadReference,
-          status = FileUploadStatus.Created,
-          createdOn = testCreatedOn
-        )
+      "must return the file upload from the MonthlyReturn" in {
+        val fileUpload = createdFileUpload()
 
-        when(
-          mockMonthlyReturnRepository.getFileUpload(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(uploadReference))
-        )
-          .thenReturn(Future.successful(Some(fileUpload)))
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(Some(monthlyReturn.copy(fileUploads = List(fileUpload)))))
 
         service.getFileUpload(zReference, taxYear, month, uploadReference).futureValue mustBe Some(fileUpload)
+      }
 
-        verify(mockMonthlyReturnRepository).getFileUpload(
-          eqTo(zReference),
-          eqTo(taxYear),
-          eqTo(month),
-          eqTo(uploadReference)
-        )
+      "must return None when the MonthlyReturn does not exist" in {
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(None))
+
+        service.getFileUpload(zReference, taxYear, month, uploadReference).futureValue mustBe None
+      }
+
+      "must return None when the file upload does not exist" in {
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(Some(monthlyReturn)))
+
+        service.getFileUpload(zReference, taxYear, month, uploadReference).futureValue mustBe None
       }
 
       "must fail when the repository fails" in {
         val exception = new RuntimeException(testMongoDownMessage)
 
-        when(
-          mockMonthlyReturnRepository.getFileUpload(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(uploadReference))
-        )
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
           .thenReturn(Future.failed(exception))
 
         service.getFileUpload(zReference, taxYear, month, uploadReference).failed.futureValue mustBe exception
@@ -442,43 +512,128 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
 
     "deleteFileUpload" - {
 
-      "must return the repository result" in {
-        when(
-          mockMonthlyReturnRepository
-            .deleteFileUpload(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(uploadReference))
-        )
-          .thenReturn(Future.successful(true))
+      "must delete the file upload and persist the MonthlyReturn" in {
+        val returnWithUpload = monthlyReturn.copy(fileUploads = List(createdFileUpload()))
+        val updatedReturn    = returnWithUpload.copy(fileUploads = Nil, lastUpdated = testCreatedOn)
+
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(Some(returnWithUpload)))
+        when(mockMonthlyReturnRepository.upsert(eqTo(updatedReturn))).thenReturn(Future.successful(true))
 
         service.deleteFileUpload(zReference, taxYear, month, uploadReference).futureValue mustBe true
 
-        verify(mockMonthlyReturnRepository).deleteFileUpload(
-          eqTo(zReference),
-          eqTo(taxYear),
-          eqTo(month),
-          eqTo(uploadReference)
-        )
+        verify(mockMonthlyReturnRepository).upsert(eqTo(updatedReturn))
       }
 
-      "must return false when the repository cannot delete a file upload" in {
-        when(
-          mockMonthlyReturnRepository
-            .deleteFileUpload(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(uploadReference))
-        )
-          .thenReturn(Future.successful(false))
+      "must return false when the file upload does not exist" in {
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(Some(monthlyReturn)))
+
+        service.deleteFileUpload(zReference, taxYear, month, uploadReference).futureValue mustBe false
+
+        verify(mockMonthlyReturnRepository, never()).upsert(any[MonthlyReturn])
+      }
+
+      "must return false when the MonthlyReturn does not exist" in {
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(None))
 
         service.deleteFileUpload(zReference, taxYear, month, uploadReference).futureValue mustBe false
       }
 
-      "must fail when the repository fails" in {
+      "must fail when the repository get fails" in {
         val exception = new RuntimeException(testMongoDownMessage)
 
-        when(
-          mockMonthlyReturnRepository
-            .deleteFileUpload(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(uploadReference))
-        )
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
           .thenReturn(Future.failed(exception))
 
         service.deleteFileUpload(zReference, taxYear, month, uploadReference).failed.futureValue mustBe exception
+      }
+
+      "must fail when the repository upsert fails" in {
+        val exception        = new RuntimeException(testMongoDownMessage)
+        val returnWithUpload = monthlyReturn.copy(fileUploads = List(createdFileUpload()))
+
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(Some(returnWithUpload)))
+        when(mockMonthlyReturnRepository.upsert(any[MonthlyReturn]))
+          .thenReturn(Future.failed(exception))
+
+        service.deleteFileUpload(zReference, taxYear, month, uploadReference).failed.futureValue mustBe exception
+      }
+    }
+
+    "updateFileUploadProcessingDetails" - {
+
+      "must update processing details and persist the MonthlyReturn" in {
+        val validation         =
+          FileUploadValidationResult(rowsValidated, validationErrors, FileUploadValidationStatus.ValidationSuccess)
+        val returnWithUpload   = monthlyReturn.copy(fileUploads = List(completedFileUpload()))
+        val expectedFileUpload = completedFileUpload().copy(
+          status = FileUploadStatus.ValidationSuccess,
+          fileUploadDetails = Some(
+            fileUploadDetails.copy(
+              objectStoreFileLocation = Some("original-location"),
+              objectStoreFileErrorsLocation = Some("errors-location"),
+              validation = Some(validation)
+            )
+          )
+        )
+        val expectedReturn     = returnWithUpload.copy(fileUploads = List(expectedFileUpload), lastUpdated = testCreatedOn)
+
+        when(mockMonthlyReturnRepository.upsert(eqTo(expectedReturn))).thenReturn(Future.successful(true))
+
+        service
+          .updateFileUploadProcessingDetails(
+            monthlyReturn = returnWithUpload,
+            reference = uploadReference,
+            validation = validation,
+            objectStoreFileLocation = Some("original-location"),
+            objectStoreFileErrorsLocation = Some("errors-location")
+          )
+          .futureValue mustBe true
+      }
+
+      "must return false when processing details are unchanged" in {
+        val validation       =
+          FileUploadValidationResult(rowsValidated, validationErrors, FileUploadValidationStatus.ValidationSuccess)
+        val returnWithUpload = monthlyReturn.copy(
+          fileUploads = List(
+            completedFileUpload().copy(
+              status = FileUploadStatus.ValidationSuccess,
+              fileUploadDetails = Some(fileUploadDetails.copy(validation = Some(validation)))
+            )
+          )
+        )
+
+        service
+          .updateFileUploadProcessingDetails(
+            monthlyReturn = returnWithUpload,
+            reference = uploadReference,
+            validation = validation,
+            objectStoreFileLocation = None,
+            objectStoreFileErrorsLocation = None
+          )
+          .futureValue mustBe false
+
+        verify(mockMonthlyReturnRepository, never()).upsert(any[MonthlyReturn])
+      }
+
+      "must return false when the file upload has no details" in {
+        val validation =
+          FileUploadValidationResult(rowsValidated, validationErrors, FileUploadValidationStatus.ValidationSuccess)
+
+        service
+          .updateFileUploadProcessingDetails(
+            monthlyReturn = monthlyReturn.copy(fileUploads = List(createdFileUpload())),
+            reference = uploadReference,
+            validation = validation,
+            objectStoreFileLocation = Some("original-location"),
+            objectStoreFileErrorsLocation = None
+          )
+          .futureValue mustBe false
+
+        verify(mockMonthlyReturnRepository, never()).upsert(any[MonthlyReturn])
       }
     }
   }
@@ -509,4 +664,28 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
       .of(2026, 5, appConfig.declarationPeriodEnd)
       .atTime(23, 59, 59)
       .toInstant(ZoneOffset.UTC)
+
+  private def createdFileUpload(): FileUpload =
+    FileUpload(
+      reference = uploadReference,
+      status = FileUploadStatus.Created,
+      createdOn = testCreatedOn
+    )
+
+  private def completedFileUpload(): FileUpload =
+    FileUpload(
+      reference = uploadReference,
+      status = FileUploadStatus.UpscanSuccess,
+      createdOn = testCreatedOn,
+      fileUploadDetails = Some(fileUploadDetails)
+    )
+
+  private val fileUploadDetails = FileUploadDetails(
+    fileName = testFileName,
+    fileMimeType = testFileMimeType,
+    uploadTimestamp = testCreatedOn,
+    checksum = testChecksum,
+    size = testFileSize,
+    upscanDownloadUrl = testDownloadUrl
+  )
 }

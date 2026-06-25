@@ -18,12 +18,13 @@ package uk.gov.hmrc.disareturnsbackend.connectors
 
 import com.typesafe.config.Config
 import org.apache.pekko.actor.ActorSystem
-import play.api.http.Status.{CONFLICT, CREATED, UNPROCESSABLE_ENTITY}
-import play.api.libs.json.Json
+import play.api.http.Status.{CONFLICT, CREATED, NOT_FOUND, OK, UNPROCESSABLE_ENTITY}
+import play.api.libs.json.{JsValue, Json}
 import play.api.libs.ws.writeableOf_JsValue
 import uk.gov.hmrc.disareturnsbackend.config.AppConfig
-import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector.CreateMonthlyReturnSubmissionResult
+import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector.{CreateMonthlyReturnSubmissionResult, DeclareMonthlyReturnSubmissionResult}
 import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector.CreateMonthlyReturnSubmissionResult.*
+import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector.DeclareMonthlyReturnSubmissionResult.*
 import uk.gov.hmrc.disareturnsbackend.models.CreateMonthlyReturnResponse
 import uk.gov.hmrc.http.HttpReads.Implicits.readRaw
 import uk.gov.hmrc.http.client.HttpClientV2
@@ -63,6 +64,47 @@ class ReturnsSubmissionConnector @Inject() (
         }
     }
 
+  def getMonthlyReturn(
+    zReference: String,
+    taxYear: String,
+    month: Int
+  )(implicit hc: HeaderCarrier, ec: ExecutionContext): Future[Option[JsValue]] =
+    retryFor[Option[JsValue]]("get monthly return from disa-returns-submission")(retryCondition) {
+      httpClient
+        .get(url"${appConfig.returnsSubmissionService}/disa-returns-submission/monthly/$zReference/$taxYear/$month")
+        .execute
+        .flatMap { response =>
+          response.status match {
+            case OK        => Future.successful(Some(response.json))
+            case NOT_FOUND => Future.successful(None)
+            case status    => Future.failed(UpstreamErrorResponse(response.body, status))
+          }
+        }
+    }
+
+  def declareMonthlyReturn(
+    zReference: String,
+    taxYear: String,
+    month: Int,
+    nilReturn: Boolean
+  )(implicit hc: HeaderCarrier, ec: ExecutionContext): Future[DeclareMonthlyReturnSubmissionResult] =
+    retryFor[DeclareMonthlyReturnSubmissionResult]("declare monthly return in disa-returns-submission")(retryCondition) {
+      httpClient
+        .post(
+          url"${appConfig.returnsSubmissionService}/disa-returns-submission/monthly/$zReference/$taxYear/$month/declarations"
+        )
+        .withBody(Json.obj("nilReturn" -> nilReturn))
+        .execute
+        .flatMap { response =>
+          response.status match {
+            case OK                   => Future.successful(Declared)
+            case NOT_FOUND            => Future.successful(MonthlyReturnNotFound)
+            case UNPROCESSABLE_ENTITY => Future.successful(AlreadyDeclared)
+            case status               => Future.failed(UpstreamErrorResponse(response.body, status))
+          }
+        }
+    }
+
   private def readSubmissionId(response: CreateMonthlyReturnResponse): UUID =
     response.submissionId
 }
@@ -75,5 +117,13 @@ object ReturnsSubmissionConnector {
     final case class Created(submissionId: UUID) extends CreateMonthlyReturnSubmissionResult
     final case class AlreadyExists(submissionId: UUID) extends CreateMonthlyReturnSubmissionResult
     case object OutsideDeclarationPeriod extends CreateMonthlyReturnSubmissionResult
+  }
+
+  sealed trait DeclareMonthlyReturnSubmissionResult
+
+  object DeclareMonthlyReturnSubmissionResult {
+    case object Declared extends DeclareMonthlyReturnSubmissionResult
+    case object AlreadyDeclared extends DeclareMonthlyReturnSubmissionResult
+    case object MonthlyReturnNotFound extends DeclareMonthlyReturnSubmissionResult
   }
 }
