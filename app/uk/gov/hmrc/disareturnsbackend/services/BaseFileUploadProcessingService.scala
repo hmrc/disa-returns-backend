@@ -29,6 +29,7 @@ import uk.gov.hmrc.disareturnsbackend.validators.fileupload.*
 import uk.gov.hmrc.http.HeaderCarrier
 
 import java.nio.file.Path
+import scala.concurrent.duration.NANOSECONDS
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Failure
 import scala.util.control.NonFatal
@@ -287,7 +288,7 @@ abstract class BaseFileUploadProcessingService[R, C <: FileUploadValidationConte
     )
 
   private def elapsedMillis(startedAtNanos: Long): Long =
-    java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAtNanos)
+    NANOSECONDS.toMillis(System.nanoTime() - startedAtNanos)
 
   private def submitFileUploadValidationAudit(
     returnRecord: R,

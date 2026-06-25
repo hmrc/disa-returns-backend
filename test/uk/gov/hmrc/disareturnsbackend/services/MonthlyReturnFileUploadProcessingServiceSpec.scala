@@ -87,7 +87,7 @@ class MonthlyReturnFileUploadProcessingServiceSpec extends SpecBase {
         eqTo(Some("original-location")),
         eqTo(None)
       )
-      verify(fixture.auditService).audit(
+      verify(fixture.monthlyReturnAuditService).audit(
         eqTo(fixture.monthlyReturn),
         eqTo(testUploadReference),
         eqTo(fileUploadDetails),
@@ -208,7 +208,7 @@ class MonthlyReturnFileUploadProcessingServiceSpec extends SpecBase {
         .process(fixture.monthlyReturn, testUploadReference)
         .futureValue mustBe FileUploadProcessingResult.MonthlyReturnUpdateFailed
 
-      verify(fixture.auditService, never()).audit(any, any, any, any)
+      verify(fixture.monthlyReturnAuditService, never()).audit(any, any, any, any)
     }
 
     "must not wait for audit delivery before completing processing" in {
@@ -218,7 +218,7 @@ class MonthlyReturnFileUploadProcessingServiceSpec extends SpecBase {
       fixture.service.process(fixture.monthlyReturn, testUploadReference).futureValue mustBe
         FileUploadProcessingResult.Processed(validationSuccess, Some("original-location"), None)
 
-      verify(fixture.auditService).audit(
+      verify(fixture.monthlyReturnAuditService).audit(
         eqTo(fixture.monthlyReturn),
         eqTo(testUploadReference),
         eqTo(fileUploadDetails),
@@ -252,7 +252,7 @@ class MonthlyReturnFileUploadProcessingServiceSpec extends SpecBase {
     val selector: MonthlyReturnFileValidatorSelector                             = mock[MonthlyReturnFileValidatorSelector]
     val objectStoreConnector: ObjectStoreConnector                               = mock[ObjectStoreConnector]
     val repository: MonthlyReturnRepository                                      = mock[MonthlyReturnRepository]
-    val auditService: AuditService                                               = mock[AuditService]
+    val monthlyReturnAuditService: MonthlyReturnAuditService                     = mock[MonthlyReturnAuditService]
 
     when(upscanConnector.downloadFile(any[String])(any, any, any))
       .thenReturn(Future.successful(downloadSource))
@@ -265,7 +265,10 @@ class MonthlyReturnFileUploadProcessingServiceSpec extends SpecBase {
       .thenReturn(errorsUpload)
     when(repository.updateFileUploadProcessingDetails(any[String], any[String], any[Int], any[String], any, any, any))
       .thenReturn(Future.successful(repositoryUpdate))
-    when(auditService.audit(any[MonthlyReturn], any[String], any[FileUploadDetails], any[FileUploadValidatorResult]))
+    when(
+      monthlyReturnAuditService
+        .audit(any[MonthlyReturn], any[String], any[FileUploadDetails], any[FileUploadValidatorResult])
+    )
       .thenReturn(auditResult)
 
     val service = new MonthlyReturnFileUploadProcessingServiceImpl(
@@ -274,7 +277,7 @@ class MonthlyReturnFileUploadProcessingServiceSpec extends SpecBase {
       monthlyReturnFileValidatorSelector = selector,
       objectStoreConnector = objectStoreConnector,
       monthlyReturnRepository = repository,
-      auditService = auditService
+      monthlyReturnAuditService = monthlyReturnAuditService
     )(ec, inject[Materializer])
   }
 

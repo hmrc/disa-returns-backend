@@ -38,7 +38,7 @@ class MonthlyReturnFileUploadProcessingServiceImpl @Inject() (
   monthlyReturnFileValidatorSelector: MonthlyReturnFileValidatorSelector,
   objectStoreConnector: ObjectStoreConnector,
   monthlyReturnRepository: MonthlyReturnRepository,
-  auditService: AuditService
+  monthlyReturnAuditService: MonthlyReturnAuditService
 )(implicit ec: ExecutionContext, materializer: Materializer)
     extends BaseFileUploadProcessingService[MonthlyReturn, MonthlyReturnFileUploadValidationContext](
       temporaryFileCreator = temporaryFileCreator,
@@ -83,7 +83,7 @@ class MonthlyReturnFileUploadProcessingServiceImpl @Inject() (
     fileUploadDetails: FileUploadDetails,
     validationOutcome: FileUploadValidatorResult
   ): Future[Unit] =
-    auditService.audit(
+    monthlyReturnAuditService.audit(
       monthlyReturn = monthlyReturn,
       fileUploadReference = fileUploadReference,
       fileUploadDetails = fileUploadDetails,

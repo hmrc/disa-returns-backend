@@ -21,7 +21,7 @@ import play.api.{Configuration, Environment}
 import play.api.inject.{Binding, Module as AppModule, bind as binding}
 import uk.gov.hmrc.disareturnsbackend.jobs.MonthlyReturnWorkItemJob
 import uk.gov.hmrc.disareturnsbackend.mappers.{UpscanCallbackMapper, UpscanCallbackMapperImpl}
-import uk.gov.hmrc.disareturnsbackend.services.{AuditService, MonthlyReturnFileUploadProcessingService, MonthlyReturnFileUploadProcessingServiceImpl}
+import uk.gov.hmrc.disareturnsbackend.services.{MonthlyReturnAuditService, MonthlyReturnFileUploadProcessingService, MonthlyReturnFileUploadProcessingServiceImpl}
 import uk.gov.hmrc.disareturnsbackend.testOnly.MutableClock
 
 import java.time.{Clock, ZoneOffset}
@@ -61,7 +61,7 @@ class Module extends AppModule:
     Seq(
       binding[MonthlyReturnWorkItemJob].toSelf,
       binding[MonthlyReturnFileUploadProcessingService].to[MonthlyReturnFileUploadProcessingServiceImpl],
-      binding[AuditService].toSelf,
+      binding[MonthlyReturnAuditService].toSelf,
       binding[UpscanCallbackMapper].to[UpscanCallbackMapperImpl],
       binding[AppInitialiser].toSelf.eagerly()
     ) ++ clockBindings ++ authTokenInitialiserBindings

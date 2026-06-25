@@ -18,8 +18,8 @@ package uk.gov.hmrc.disareturnsbackend.services
 
 import play.api.Logging
 import play.api.libs.json.{JsObject, Json}
-import uk.gov.hmrc.disareturnsbackend.config.AppConfig
 import uk.gov.hmrc.disareturnsbackend.models.*
+import uk.gov.hmrc.disareturnsbackend.config.AppConfig
 import uk.gov.hmrc.disareturnsbackend.validators.fileupload.FileUploadValidatorResult
 import uk.gov.hmrc.play.audit.http.connector.AuditResult.{Disabled, Failure, Success}
 import uk.gov.hmrc.play.audit.http.connector.{AuditConnector, AuditResult}
@@ -32,13 +32,13 @@ import javax.inject.{Inject, Singleton}
 import scala.concurrent.{ExecutionContext, Future}
 
 @Singleton
-class AuditService @Inject() (
+class MonthlyReturnAuditService @Inject() (
   auditConnector: AuditConnector,
   appConfig: AppConfig
 )(implicit ec: ExecutionContext)
     extends Logging {
 
-  import AuditService.*
+  import MonthlyReturnAuditService.*
 
   def audit(
     monthlyReturn: MonthlyReturn,
@@ -51,7 +51,7 @@ class AuditService @Inject() (
       failureDetail(validation, validationOutcome.errorVolumes)
     val event      = ExtendedDataEvent(
       auditSource = appConfig.appName,
-      auditType = FileUploadValidation,
+      auditType = fileUploadValidation,
       detail = detail
     )
 
@@ -67,18 +67,18 @@ class AuditService @Inject() (
     validationOutcome: FileUploadValidatorResult
   ): JsObject =
     Json.obj(
-      InternalReturnIdField   -> monthlyReturn.submissionId.toString,
-      FileUploadStatusField   -> fileUploadStatus(validationOutcome.validation.status),
-      DownloadTimeField       -> fileUploadDetails.upscanCompletedOn
+      internalReturnIdField   -> monthlyReturn.submissionId.toString,
+      fileUploadStatusField   -> fileUploadStatus(validationOutcome.validation.status),
+      downloadTimeField       -> fileUploadDetails.upscanCompletedOn
         .getOrElse(fileUploadDetails.uploadTimestamp)
         .toEpochMilli
         .toString,
-      FileSizeField           -> fileUploadDetails.size.toString,
-      FileValidationTimeField -> validationOutcome.validationTimeMillis.toString,
-      NumberOfEntriesField    -> validationOutcome.validation.rowsValidated.toString,
-      FileReferenceField      -> fileUploadReference,
-      FileNameField           -> fileUploadDetails.fileName,
-      PeriodField             -> reportingPeriod(monthlyReturn)
+      fileSizeField           -> fileUploadDetails.size.toString,
+      fileValidationTimeField -> validationOutcome.validationTimeMillis.toString,
+      numberOfEntriesField    -> validationOutcome.validation.rowsValidated.toString,
+      fileReferenceField      -> fileUploadReference,
+      fileNameField           -> fileUploadDetails.fileName,
+      periodField             -> reportingPeriod(monthlyReturn)
     )
 
   private def failureDetail(validation: FileUploadValidationResult, errorVolumes: Map[String, Long]): JsObject =
@@ -87,22 +87,22 @@ class AuditService @Inject() (
     } else {
       val auditErrorVolumes =
         if (validation.status == FileUploadValidationStatus.InvalidFile) {
-          Map(InvalidFileErrorType -> 1L)
+          Map(invalidFileErrorType -> 1L)
         } else {
           errorVolumes
         }
 
       Json.obj(
-        ErrorDetailsField -> auditErrorVolumes.toSeq.sortBy(_._1).map { case (errorType, volume) =>
-          Json.obj(ErrorTypeField -> errorType, VolumeField -> volume)
+        errorDetailsField -> auditErrorVolumes.toSeq.sortBy(_._1).map { case (errorType, volume) =>
+          Json.obj(errorTypeField -> errorType, volumeField -> volume)
         }
       )
     }
 
   private def fileUploadStatus(validationStatus: FileUploadValidationStatus): String =
     validationStatus match {
-      case FileUploadValidationStatus.ValidationSuccess => SuccessStatusValue
-      case _                                            => FailureStatusValue
+      case FileUploadValidationStatus.ValidationSuccess => successStatusValue
+      case _                                            => failureStatusValue
     }
 
   private def reportingPeriod(monthlyReturn: MonthlyReturn): String = {
@@ -112,36 +112,36 @@ class AuditService @Inject() (
     YearMonth
       .of(reportingWindowYear, monthlyReturn.month)
       .minusMonths(1)
-      .format(ReportingPeriodFormatter)
+      .format(reportingPeriodFormatter)
   }
 
   private def logResult(result: AuditResult): Unit =
     result match {
-      case Success         => logger.info(s"$FileUploadValidation audit successful")
-      case Failure(err, _) => logger.warn(s"$FileUploadValidation audit failed: $err")
-      case Disabled        => logger.warn(s"$FileUploadValidation audit skipped because auditing is disabled")
+      case Success         => logger.info(s"$fileUploadValidation audit successful")
+      case Failure(err, _) => logger.warn(s"$fileUploadValidation audit failed: $err")
+      case Disabled        => logger.warn(s"$fileUploadValidation audit skipped because auditing is disabled")
     }
 }
 
-object AuditService {
-  val FileUploadValidation = "FileUploadValidation"
+object MonthlyReturnAuditService {
+  val fileUploadValidation = "FileUploadValidation"
 
-  val InternalReturnIdField   = "internalReturnId"
-  val FileUploadStatusField   = "fileUploadStatus"
-  val DownloadTimeField       = "downloadTime"
-  val FileSizeField           = "fileSize"
-  val FileValidationTimeField = "fileValidationTime"
-  val NumberOfEntriesField    = "numberOfEntries"
-  val FileReferenceField      = "fileReference"
-  val FileNameField           = "fileName"
-  val PeriodField             = "period"
-  val ErrorDetailsField       = "errorDetails"
-  val ErrorTypeField          = "errorType"
-  val VolumeField             = "volume"
-  val InvalidFileErrorType    = "InvalidFile"
+  val internalReturnIdField   = "internalReturnId"
+  val fileUploadStatusField   = "fileUploadStatus"
+  val downloadTimeField       = "downloadTime"
+  val fileSizeField           = "fileSize"
+  val fileValidationTimeField = "fileValidationTime"
+  val numberOfEntriesField    = "numberOfEntries"
+  val fileReferenceField      = "fileReference"
+  val fileNameField           = "fileName"
+  val periodField             = "period"
+  val errorDetailsField       = "errorDetails"
+  val errorTypeField          = "errorType"
+  val volumeField             = "volume"
+  val invalidFileErrorType    = "InvalidFile"
 
-  val SuccessStatusValue = "Success"
-  val FailureStatusValue = "Failure"
+  val successStatusValue = "Success"
+  val failureStatusValue = "Failure"
 
-  val ReportingPeriodFormatter = DateTimeFormatter.ofPattern("MMMM uuuu", Locale.UK)
+  val reportingPeriodFormatter = DateTimeFormatter.ofPattern("MMMM uuuu", Locale.UK)
 }

@@ -30,7 +30,7 @@ import uk.gov.hmrc.play.audit.model.ExtendedDataEvent
 
 import scala.concurrent.Future
 
-class AuditServiceSpec extends SpecBase {
+class MonthlyReturnAuditServiceSpec extends SpecBase {
 
   private val fileUploadDetails = FileUploadDetails(
     fileName = testFileName,
@@ -52,7 +52,7 @@ class AuditServiceSpec extends SpecBase {
     lastUpdated = testCreatedOn
   )
 
-  "AuditService" - {
+  "MonthlyReturnAuditService" - {
 
     "must send a success event after validation" in {
       val fixture           = new Fixture
@@ -70,7 +70,7 @@ class AuditServiceSpec extends SpecBase {
       val detail = event.detail.as[JsObject]
 
       event.auditSource mustBe fixture.appName
-      event.auditType mustBe AuditService.FileUploadValidation
+      event.auditType mustBe MonthlyReturnAuditService.fileUploadValidation
       (detail \ "internalReturnId").as[String] mustBe testSubmissionId.toString
       (detail \ "fileUploadStatus").as[String] mustBe "Success"
       (detail \ "downloadTime").as[String] mustBe testUpscanCompletedOn.toEpochMilli.toString
@@ -131,7 +131,7 @@ class AuditServiceSpec extends SpecBase {
 
     private val auditConnector = mock[AuditConnector]
     private val appConfig      = mock[AppConfig]
-    val service                = new AuditService(auditConnector, appConfig)
+    val service                = new MonthlyReturnAuditService(auditConnector, appConfig)
 
     when(appConfig.appName).thenReturn(appName)
     when(auditConnector.sendExtendedEvent(any[ExtendedDataEvent])(any, any))
