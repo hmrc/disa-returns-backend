@@ -571,11 +571,7 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
   private def monthlyReturnWithCreatedUpload: MonthlyReturn =
     monthlyReturn.copy(
       fileUploads = List(
-        FileUpload(
-          reference = upscanReference,
-          status = FileUploadStatus.Created,
-          createdOn = testCreatedOn
-        )
+        createdFileUpload
       )
     )
 
