@@ -20,7 +20,6 @@ import org.apache.pekko.stream.Materializer
 import play.api.libs.Files.TemporaryFileCreator
 import uk.gov.hmrc.disareturnsbackend.connectors.*
 import uk.gov.hmrc.disareturnsbackend.models.*
-import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository
 import uk.gov.hmrc.disareturnsbackend.validators.fileupload.FileUploadValidatorResult
 import uk.gov.hmrc.disareturnsbackend.validators.fileupload.monthly.*
 
@@ -37,7 +36,7 @@ class MonthlyReturnFileUploadProcessingServiceImpl @Inject() (
   upscanConnector: UpscanConnector,
   monthlyReturnFileValidatorSelector: MonthlyReturnFileValidatorSelector,
   objectStoreConnector: ObjectStoreConnector,
-  monthlyReturnRepository: MonthlyReturnRepository,
+  monthlyReturnService: MonthlyReturnService,
   monthlyReturnAuditService: MonthlyReturnAuditService
 )(implicit ec: ExecutionContext, materializer: Materializer)
     extends BaseFileUploadProcessingService[MonthlyReturn, MonthlyReturnFileUploadValidationContext](
@@ -67,10 +66,8 @@ class MonthlyReturnFileUploadProcessingServiceImpl @Inject() (
     objectStoreFileLocation: Option[String],
     objectStoreFileErrorsLocation: Option[String]
   ): Future[Boolean] =
-    monthlyReturnRepository.updateFileUploadProcessingDetails(
-      zReference = monthlyReturn.zReference,
-      taxYear = monthlyReturn.taxYear,
-      month = monthlyReturn.month,
+    monthlyReturnService.updateFileUploadProcessingDetails(
+      monthlyReturn = monthlyReturn,
       reference = fileUploadReference,
       validation = validation,
       objectStoreFileLocation = objectStoreFileLocation,

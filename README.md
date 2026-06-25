@@ -36,6 +36,7 @@ Request body:
 
 - Returns `201 Created` with the generated `submissionId` and the resource path in the `Location` header.
 - Returns `409 Conflict` when a monthly return already exists for the same `zReference`, `taxYear`, and `month`.
+- Returns `409 Conflict` when `disa-returns-submission` already has a declared monthly return for the same `zReference`, `taxYear`, and `month`.
 - Returns `503 Service Unavailable` when MongoDB is unavailable.
 - `submissionId` is returned by `disa-returns-submission` at creation time and is stored by the backend for later updates.
 - A monthly return created with `"nilReturn": true` is created without file uploads.
@@ -53,11 +54,12 @@ Example response:
 `POST /disa-returns-backend/monthly/:zReference/:taxYear/:month/declarations`
 
 - Returns `204 No Content` when the record exists and has not already been declared.
-- Returns `409 Conflict` when the monthly return has already been declared.
+- Returns `409 Conflict` when `disa-returns-submission` already has a declared monthly return for the same `zReference`, `taxYear`, and `month`.
 - Returns `404 Not Found` when the monthly return does not exist.
 - Returns `422 Unprocessable Entity` when the request is outside the declaration period.
 - Returns `503 Service Unavailable` when MongoDB is unavailable.
 - The declaration period is from 00:00 on the configured start day to the end of the configured end day, inclusive.
+- Declarations are recorded in `disa-returns-submission`; this service does not store declaration state locally.
 
 ### Create File Upload
 
@@ -74,7 +76,7 @@ Request body:
 - Returns `201 Created` with the file upload resource path in the `Location` header when the file upload placeholder is created.
 - Returns `409 Conflict` when a file upload already exists with the same `reference`.
 - Returns `404 Not Found` when the monthly return does not exist or cannot accept file uploads.
-- Returns `422 Unprocessable Entity` when the monthly return has already been declared for the period.
+- Returns `422 Unprocessable Entity` when `disa-returns-submission` already has a declared monthly return for the period.
 - Returns `503 Service Unavailable` when MongoDB is unavailable.
 
 ### Get File Upload
@@ -111,6 +113,7 @@ Example response:
 - Returns `200 OK` with the monthly return when the record exists.
 - Returns `404 Not Found` when the monthly return does not exist.
 - Returns `503 Service Unavailable` when MongoDB is unavailable.
+- The response `declaredOn` value is read from `disa-returns-submission`, which is the source of truth for monthly return declarations.
 
 Example response:
 
@@ -145,7 +148,7 @@ Request body:
 - Setting `value` to `false` updates `nilReturn` to `false` and leaves file uploads empty.
 - Missing or non-boolean `value` fields return `400 Bad Request`.
 - Returns `404 Not Found` when the monthly return does not exist.
-- Returns `422 Unprocessable Entity` when the monthly return has already been declared for the period.
+- Returns `422 Unprocessable Entity` when `disa-returns-submission` already has a declared monthly return for the period.
 - Returns `503 Service Unavailable` when MongoDB is unavailable.
 
 ### Monthly Upscan Callback
@@ -153,7 +156,6 @@ Request body:
 - The endpoint accepts Upscan `READY` and `FAILED` callback payloads and returns `202 Accepted` when the payload is valid.
 - If the monthly return is a nil return, the callback still returns `202 Accepted` but the file result is not stored.
 - If the monthly return is not a nil return, the callback only completes an existing file upload with the same reference in `CREATED` state. Callbacks for missing, deleted, or already-completed references return `202 Accepted` but are not stored.
-- If the monthly return has been declared, a callback can still complete an existing `CREATED` file upload when that upload was created before the declaration time.
 - Completed file uploads include `fileUploadDetails.upscanCompletedOn`, which records when Upscan processing completed, and `fileUploadDetails.upscanDownloadUrl` for the Upscan download URL.
 - If a successful callback has a checksum that already exists on another file upload for the monthly return, the upload is stored with status `DUPLICATE` and is not downloaded or validated.
 - Invalid JSON, unknown `fileStatus` values, or unknown `failureReason` values return `400 Bad Request`.
@@ -464,7 +466,7 @@ curl -X DELETE http://localhost:1207/disa-returns-backend/test-only/clock
 
 For example, set the clock to `2026-05-20` to test declaration attempts outside the configured declaration period.
 
-Use the monthly returns cleanup route to remove all monthly returns from the local database before automation runs:
+Use the monthly returns cleanup route to remove all backend monthly returns from the local database before automation runs:
 
 ```bash
 curl -X DELETE http://localhost:1207/disa-returns-backend/test-only/monthly-returns
@@ -502,9 +504,11 @@ Otherwise the routes will not be available.
 | `GET /disa-returns-backend/test-only/clock` | `bruno/TestOnly/Clock` | Inspect the app clock used by declaration-period logic. |
 | `PUT /disa-returns-backend/test-only/clock/:date` | `bruno/TestOnly/Clock` | Set the app date in `yyyy-MM-dd` format for declaration-period testing. |
 | `DELETE /disa-returns-backend/test-only/clock` | `bruno/TestOnly/Clock` | Reset the app clock back to the system UTC clock. |
-| `DELETE /disa-returns-backend/test-only/monthly-returns` | `bruno/TestOnly/MonthlyReturns` | Remove all monthly returns from the local database before automation runs. |
+| `DELETE /disa-returns-backend/test-only/monthly-returns` | `bruno/TestOnly/MonthlyReturns` | Remove all backend monthly returns from the local database before automation runs. |
 | `DELETE /disa-returns-backend/test-only/monthly-return-file-upload-work-items` | `bruno/TestOnly/MonthlyReturnFileUploadWorkItems` | Delete queued or failed local file-upload validation work-item documents from `monthlyReturnFileUploadWorkItems`. |
 | `GET /disa-returns-backend/test-only/file-upload/monthly/:filename` | `bruno/MonthlyReturn/Validation` | Serve copied local validation tests from `conf/test-only/file-upload/monthly` so Bruno can use them as Upscan `downloadUrl` values. |
+
+`bruno/TestOnly/MonthlyReturns/01-204-clear-monthly-returns` also clears monthly returns from `disa-returns-submission` before calling the backend cleanup route, so Bruno scenarios start from a clean declaration source of truth.
 
 The monthly file-upload test endpoint only serves simple `.csv` and `.xlsx` filenames copied into `conf/test-only/file-upload/monthly`. The files are runtime resources so they are available when running locally or through service-manager with the test-only router enabled.
 
@@ -565,17 +569,21 @@ The Bruno collection is under `bruno/MonthlyReturn` and is organised into:
 - `UpscanCallback`
 - `Validation`
 
-Monthly return Bruno setup requests call the test-only cleanup route before generating `Zxxxx` references. This avoids collisions with old local data while keeping generated references inside the allowed zReference format. Upscan callback setup also clears monthly return file-upload work items before creating a fresh callback scenario. Do not run these Bruno folders in parallel, because cleanup requests delete all monthly returns and monthly return file-upload work items from the local database.
+Monthly return Bruno setup requests call the test-only cleanup route before generating `Zxxxx` references. This avoids collisions with old backend and `disa-returns-submission` data while keeping generated references inside the allowed zReference format. Upscan callback setup also clears monthly return file-upload work items before creating a fresh callback scenario. Do not run these Bruno folders in parallel, because cleanup requests delete monthly returns from the backend and `disa-returns-submission`, and delete monthly return file-upload work items from the local database.
 
 These Bruno requests clear monthly returns by calling `TestOnly/MonthlyReturns/01-204-clear-monthly-returns` in their pre-request script:
 
 | Request | Why it clears monthly returns |
 | --- | --- |
 | `MonthlyReturn/Create/01-201-create-nil-return-false` | Creates a clean baseline return and generates `zReference`, `nilZReference`, and `missingZReference`. |
+| `MonthlyReturn/Create/05-409-create-after-submission-declaration` | Creates and declares a return directly in `disa-returns-submission`, then verifies backend create is blocked. |
 | `MonthlyReturn/Declarations/00-201-create-return-for-declaration` | Creates a clean return to declare and generates declaration references. |
 | `MonthlyReturn/Declarations/04-404-declare-missing` | Ensures the declaration reference is missing. |
 | `MonthlyReturn/Declarations/06-200-set-clock-outside-period` | Creates a clean outside-period scenario and generates `outsidePeriodZReference`. |
+| `MonthlyReturn/Declarations/11-409-declare-after-submission-declaration` | Creates a backend return, declares it directly in `disa-returns-submission`, then verifies backend declaration is blocked. |
+| `MonthlyReturn/Declarations/12-422-create-file-after-submission-declaration` | Creates a backend return, declares it directly in `disa-returns-submission`, then verifies file creation is blocked. |
 | `MonthlyReturn/Delete/00-201-create-return-for-delete` | Creates a clean return for file delete tests and generates `deleteZReference`. |
+| `MonthlyReturn/Update/07-422-update-after-submission-declaration` | Creates a backend return, declares it directly in `disa-returns-submission`, then verifies nil-return updates are blocked. |
 | `MonthlyReturn/UpscanCallback/00-201-create-return-for-success-callback` | Clears monthly return file-upload work items, creates a clean return for callback tests, and generates `callbackZReference`. |
 
 Many later requests run one of these setup requests from their pre-request script, so they can also clear monthly returns indirectly. For example, `MonthlyReturn/Get/01-200-get-existing` runs `MonthlyReturn/Create/01-201-create-nil-return-false`, and `MonthlyReturn/Update/02-200-set-nil-return-false` runs the update setup chain.

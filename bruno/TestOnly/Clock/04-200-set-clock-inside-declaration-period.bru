@@ -16,12 +16,11 @@ assert {
 }
 
 script:pre-request {
-  const axios = require("axios");
   const url = `${bru.getEnvVar("submissionBaseUrl")}${bru.getEnvVar("submissionServicePath")}/test-only/clock/${bru.getEnvVar("declarationPeriodDate")}`;
   let response;
   
   try {
-    response = await axios.put(url, undefined, { timeout: 3000 });
+    response = await bru.sendRequest({ method: "PUT", url, timeout: 3000 });
   } catch (error) {
     response = error.response;
   }

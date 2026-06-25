@@ -39,8 +39,7 @@ class UpscanCallbackControllerSpec extends SpecBase with BeforeAndAfterEach {
     Seq(
       bind[UpscanCallbackService].toInstance(mockUpscanCallbackService)
     )
-  ).configure("play.http.router" -> "prod.Routes")
-    .build()
+  ).build()
 
   private lazy val controller = inject[UpscanCallbackController]
 

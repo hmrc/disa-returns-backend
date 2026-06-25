@@ -22,7 +22,7 @@ import org.scalatest.BeforeAndAfterEach
 import play.api.Application
 import play.api.http.Status.*
 import play.api.libs.json.Json
-import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector.CreateMonthlyReturnSubmissionResult
+import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector.{CreateMonthlyReturnSubmissionResult, DeclareMonthlyReturnSubmissionResult}
 import uk.gov.hmrc.http.{HeaderCarrier, UpstreamErrorResponse}
 import uk.gov.hmrc.http.test.WireMockSupport
 
@@ -40,7 +40,8 @@ class ReturnsSubmissionConnectorSpec extends SpecBase with WireMockSupport with 
 
   private implicit val hc: HeaderCarrier = HeaderCarrier()
 
-  private val path = s"/disa-returns-submission/monthly/$testZReference/$testTaxYear/$testMonth"
+  private val path            = s"/disa-returns-submission/monthly/$testZReference/$testTaxYear/$testMonth"
+  private val declarationPath = s"$path/declarations"
 
   "ReturnsSubmissionConnector.createMonthlyReturn" - {
 
@@ -77,6 +78,80 @@ class ReturnsSubmissionConnectorSpec extends SpecBase with WireMockSupport with 
 
       connector
         .createMonthlyReturn(testZReference, testTaxYear, testMonth, nilReturn = false)
+        .failed
+        .futureValue mustBe a[UpstreamErrorResponse]
+    }
+  }
+
+  "ReturnsSubmissionConnector.getMonthlyReturn" - {
+
+    "must return the monthly return JSON when submission returns OK" in {
+      val responseJson = Json.obj(
+        zReferenceFieldName   -> testZReference,
+        submissionIdFieldName -> testSubmissionId,
+        taxYearFieldName      -> testTaxYear,
+        monthFieldName        -> testMonth,
+        declaredOnFieldName   -> testCreatedOnString
+      )
+      stubFor(
+        get(urlEqualTo(path))
+          .willReturn(
+            aResponse()
+              .withStatus(OK)
+              .withHeader("Content-Type", "application/json")
+              .withBody(responseJson.toString())
+          )
+      )
+
+      connector.getMonthlyReturn(testZReference, testTaxYear, testMonth).futureValue mustBe Some(responseJson)
+    }
+
+    "must return None when submission returns NOT_FOUND" in {
+      stubFor(get(urlEqualTo(path)).willReturn(aResponse().withStatus(NOT_FOUND)))
+
+      connector.getMonthlyReturn(testZReference, testTaxYear, testMonth).futureValue mustBe None
+    }
+
+    "must fail when submission returns an unexpected response" in {
+      stubFor(get(urlEqualTo(path)).willReturn(aResponse().withStatus(BAD_REQUEST)))
+
+      connector
+        .getMonthlyReturn(testZReference, testTaxYear, testMonth)
+        .failed
+        .futureValue mustBe a[UpstreamErrorResponse]
+    }
+  }
+
+  "ReturnsSubmissionConnector.declareMonthlyReturn" - {
+
+    val testNilReturn = false
+
+    "must return Declared when submission declares the monthly return" in {
+      stubFor(post(urlEqualTo(declarationPath)).willReturn(aResponse().withStatus(OK)))
+
+      connector.declareMonthlyReturn(testZReference, testTaxYear, testMonth, testNilReturn).futureValue mustBe
+        DeclareMonthlyReturnSubmissionResult.Declared
+    }
+
+    "must return MonthlyReturnNotFound when submission cannot find the monthly return" in {
+      stubFor(post(urlEqualTo(declarationPath)).willReturn(aResponse().withStatus(NOT_FOUND)))
+
+      connector.declareMonthlyReturn(testZReference, testTaxYear, testMonth, testNilReturn).futureValue mustBe
+        DeclareMonthlyReturnSubmissionResult.MonthlyReturnNotFound
+    }
+
+    "must return AlreadyDeclared when submission rejects the declaration" in {
+      stubFor(post(urlEqualTo(declarationPath)).willReturn(aResponse().withStatus(UNPROCESSABLE_ENTITY)))
+
+      connector.declareMonthlyReturn(testZReference, testTaxYear, testMonth, testNilReturn).futureValue mustBe
+        DeclareMonthlyReturnSubmissionResult.AlreadyDeclared
+    }
+
+    "must fail when submission returns an unexpected response" in {
+      stubFor(post(urlEqualTo(declarationPath)).willReturn(aResponse().withStatus(BAD_REQUEST)))
+
+      connector
+        .declareMonthlyReturn(testZReference, testTaxYear, testMonth, testNilReturn)
         .failed
         .futureValue mustBe a[UpstreamErrorResponse]
     }

@@ -19,52 +19,58 @@ package uk.gov.hmrc.disareturnsbackend.controllers
 import play.api.http.HeaderNames.LOCATION
 import play.api.Logging
 import play.api.libs.json.{JsValue, Json}
-import play.api.mvc.{Action, AnyContent, ControllerComponents, Result}
+import play.api.mvc.{Action, AnyContent, ControllerComponents}
+import uk.gov.hmrc.disareturnsbackend.controllers.actions.{MonthlyReturnNotDeclaredAction, ValidatedMonthlyReturnAction}
 import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.services.*
-import uk.gov.hmrc.disareturnsbackend.validators.ValidationHelper
+import uk.gov.hmrc.http.HeaderCarrier
 import uk.gov.hmrc.play.bootstrap.backend.controller.BackendController
 import uk.gov.hmrc.play.bootstrap.controller.WithJsonBody
+import uk.gov.hmrc.play.http.HeaderCarrierConverter
 
 import javax.inject.Inject
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
 import scala.util.control.NonFatal
 
 class MonthlyReturnController @Inject() (
   cc: ControllerComponents,
-  monthlyReturnService: MonthlyReturnService
+  monthlyReturnService: MonthlyReturnService,
+  validatedMonthlyReturnAction: ValidatedMonthlyReturnAction,
+  monthlyReturnNotDeclaredAction: MonthlyReturnNotDeclaredAction
 )(implicit ec: ExecutionContext)
     extends BackendController(cc)
     with WithJsonBody
     with Logging {
 
   def getMonthlyReturn(zReference: String, taxYear: String, month: String): Action[AnyContent] =
-    Action.async {
+    validatedMonthlyReturnAction(zReference, taxYear, month).async { implicit request =>
       logger.info(
         s"[MonthlyReturnController][getMonthlyReturn] Get monthly return request for zReference [$zReference], taxYear [$taxYear], month [$month]"
       )
 
-      withValidMonthlyReturnParams(zReference, taxYear, month) { (validZReference, validTaxYear, validMonth) =>
-        monthlyReturnService
-          .get(validZReference, validTaxYear, validMonth)
-          .map {
-            case Some(monthlyReturn) => Ok(Json.toJson(monthlyReturn))
-            case None                => NotFound
-          }
-          .recover { case NonFatal(_) => ServiceUnavailable }
-      }
+      implicit val hc: HeaderCarrier = HeaderCarrierConverter.fromRequest(request)
+
+      monthlyReturnService
+        .getWithDeclaration(request.zReference, request.taxYear, request.month)
+        .map {
+          case Some(monthlyReturn) => Ok(Json.toJson(monthlyReturn))
+          case None                => NotFound
+        }
+        .recover { case NonFatal(_) => ServiceUnavailable }
     }
 
   def createMonthlyReturn(zReference: String, taxYear: String, month: String): Action[JsValue] =
-    Action.async(parse.json) { implicit request =>
-      withValidMonthlyReturnParams(zReference, taxYear, month) { (validZReference, validTaxYear, validMonth) =>
+    (validatedMonthlyReturnAction(zReference, taxYear, month) andThen monthlyReturnNotDeclaredAction(Conflict))
+      .async(parse.json) { implicit request =>
         withJsonBody[CreateMonthlyReturnRequest] { createRequest =>
+          implicit val hc: HeaderCarrier = HeaderCarrierConverter.fromRequest(request)
+
           logger.info(
-            s"[MonthlyReturnController][createMonthlyReturn] Create monthly return request for zReference [$validZReference], taxYear [$validTaxYear], month [$validMonth], nilReturn [${createRequest.nilReturn}]"
+            s"[MonthlyReturnController][createMonthlyReturn] Create monthly return request for zReference [${request.zReference}], taxYear [${request.taxYear}], month [${request.month}], nilReturn [${createRequest.nilReturn}]"
           )
 
           monthlyReturnService
-            .create(validZReference, validTaxYear, validMonth, createRequest.nilReturn)
+            .create(request.zReference, request.taxYear, request.month, createRequest.nilReturn)
             .map {
               case CreateMonthlyReturnResult.Created(submissionId)    =>
                 Created(Json.toJson(CreateMonthlyReturnResponse(submissionId))).withHeaders(LOCATION -> request.path)
@@ -74,37 +80,38 @@ class MonthlyReturnController @Inject() (
             .recover { case NonFatal(_) => ServiceUnavailable }
         }
       }
-    }
 
   def updateNilReturn(zReference: String, taxYear: String, month: String): Action[JsValue] =
-    Action.async(parse.json) { implicit request =>
-      withValidMonthlyReturnParams(zReference, taxYear, month) { (validZReference, validTaxYear, validMonth) =>
+    (validatedMonthlyReturnAction(zReference, taxYear, month) andThen monthlyReturnNotDeclaredAction(
+      UnprocessableEntity
+    ))
+      .async(parse.json) { implicit request =>
         withJsonBody[UpdateNilReturnRequest] { updateRequest =>
           logger.info(
-            s"[MonthlyReturnController][updateNilReturn] Update nilReturn request for zReference [$validZReference], taxYear [$validTaxYear], month [$validMonth], value [${updateRequest.value}]"
+            s"[MonthlyReturnController][updateNilReturn] Update nilReturn request for zReference [${request.zReference}], taxYear [${request.taxYear}], month [${request.month}], value [${updateRequest.value}]"
           )
 
           monthlyReturnService
-            .updateNilReturn(validZReference, validTaxYear, validMonth, updateRequest.value)
+            .updateNilReturn(request.zReference, request.taxYear, request.month, updateRequest.value)
             .map {
               case UpdateNilReturnResult.NilReturnUpdated(monthlyReturn) => Ok(Json.toJson(monthlyReturn))
-              case UpdateNilReturnResult.MonthlyReturnAlreadyDeclared    => UnprocessableEntity
               case UpdateNilReturnResult.MonthlyReturnNotFound           => NotFound
             }
             .recover { case NonFatal(_) => ServiceUnavailable }
         }
       }
-    }
 
   def declareMonthlyReturn(zReference: String, taxYear: String, month: String): Action[AnyContent] =
-    Action.async {
-      logger.info(
-        s"[MonthlyReturnController][declareMonthlyReturn] Declare monthly return request for zReference [$zReference], taxYear [$taxYear], month [$month]"
-      )
+    (validatedMonthlyReturnAction(zReference, taxYear, month) andThen monthlyReturnNotDeclaredAction(Conflict)).async {
+      implicit request =>
+        logger.info(
+          s"[MonthlyReturnController][declareMonthlyReturn] Declare monthly return request for zReference [$zReference], taxYear [$taxYear], month [$month]"
+        )
 
-      withValidMonthlyReturnParams(zReference, taxYear, month) { (validZReference, validTaxYear, validMonth) =>
+        implicit val hc: HeaderCarrier = HeaderCarrierConverter.fromRequest(request)
+
         monthlyReturnService
-          .declare(validZReference, validTaxYear, validMonth)
+          .declare(request.zReference, request.taxYear, request.month)
           .map {
             case DeclareMonthlyReturnResult.Declared                 => NoContent
             case DeclareMonthlyReturnResult.AlreadyDeclared          => Conflict
@@ -112,78 +119,57 @@ class MonthlyReturnController @Inject() (
             case DeclareMonthlyReturnResult.OutsideDeclarationPeriod => UnprocessableEntity
           }
           .recover { case NonFatal(_) => ServiceUnavailable }
-      }
     }
 
   def createFileUpload(zReference: String, taxYear: String, month: String): Action[JsValue] =
-    Action.async(parse.json) { implicit request =>
-      withValidMonthlyReturnParams(zReference, taxYear, month) { (validZReference, validTaxYear, validMonth) =>
+    (validatedMonthlyReturnAction(zReference, taxYear, month) andThen monthlyReturnNotDeclaredAction(
+      UnprocessableEntity
+    ))
+      .async(parse.json) { implicit request =>
         withJsonBody[CreateFileUploadRequest] { createRequest =>
           logger.info(
-            s"[MonthlyReturnController][createFileUpload] Create file upload request for zReference [$validZReference], taxYear [$validTaxYear], month [$validMonth], upload reference [${createRequest.reference}]"
+            s"[MonthlyReturnController][createFileUpload] Create file upload request for zReference [${request.zReference}], taxYear [${request.taxYear}], month [${request.month}], upload reference [${createRequest.reference}]"
           )
 
           monthlyReturnService
-            .createFileUpload(validZReference, validTaxYear, validMonth, createRequest.reference)
+            .createFileUpload(request.zReference, request.taxYear, request.month, createRequest.reference)
             .map {
-              case CreateFileUploadResult.FileUploadCreated(_)         =>
+              case CreateFileUploadResult.FileUploadCreated(_)    =>
                 Created.withHeaders(LOCATION -> s"${request.path}/${createRequest.reference}")
-              case CreateFileUploadResult.FileUploadAlreadyExists      => Conflict
-              case CreateFileUploadResult.MonthlyReturnAlreadyDeclared => UnprocessableEntity
-              case CreateFileUploadResult.MonthlyReturnNotFound        => NotFound
+              case CreateFileUploadResult.FileUploadAlreadyExists => Conflict
+              case CreateFileUploadResult.MonthlyReturnNotFound   => NotFound
             }
             .recover { case NonFatal(_) => ServiceUnavailable }
         }
       }
-    }
 
   def getFileUpload(zReference: String, taxYear: String, month: String, reference: String): Action[AnyContent] =
-    Action.async {
+    validatedMonthlyReturnAction(zReference, taxYear, month).async { implicit request =>
       logger.info(
         s"[MonthlyReturnController][getFileUpload] Get file upload request for zReference [$zReference], taxYear [$taxYear], month [$month], upload reference [$reference]"
       )
 
-      withValidMonthlyReturnParams(zReference, taxYear, month) { (validZReference, validTaxYear, validMonth) =>
-        monthlyReturnService
-          .getFileUpload(validZReference, validTaxYear, validMonth, reference)
-          .map {
-            case Some(fileUpload) => Ok(Json.toJson(fileUpload))
-            case None             => NotFound
-          }
-          .recover { case NonFatal(_) => ServiceUnavailable }
-      }
+      monthlyReturnService
+        .getFileUpload(request.zReference, request.taxYear, request.month, reference)
+        .map {
+          case Some(fileUpload) => Ok(Json.toJson(fileUpload))
+          case None             => NotFound
+        }
+        .recover { case NonFatal(_) => ServiceUnavailable }
     }
 
   def deleteFileUpload(zReference: String, taxYear: String, month: String, reference: String): Action[AnyContent] =
-    Action.async {
+    validatedMonthlyReturnAction(zReference, taxYear, month).async { implicit request =>
       logger.info(
         s"[MonthlyReturnController][deleteFileUpload] Delete file upload request for zReference [$zReference], taxYear [$taxYear], month [$month], upload reference [$reference]"
       )
 
-      withValidMonthlyReturnParams(zReference, taxYear, month) { (validZReference, validTaxYear, validMonth) =>
-        monthlyReturnService
-          .deleteFileUpload(validZReference, validTaxYear, validMonth, reference)
-          .map {
-            case true  => NoContent
-            case false => NotFound
-          }
-          .recover { case NonFatal(_) => ServiceUnavailable }
-      }
-    }
-
-  private def withValidMonthlyReturnParams(
-    zReference: String,
-    taxYear: String,
-    month: String
-  )(block: (String, String, Int) => Future[Result]): Future[Result] =
-    ValidationHelper.validateParams(zReference, taxYear, month) match {
-      case Right((validZReference, validTaxYear, validMonth)) =>
-        block(validZReference, validTaxYear, validMonth)
-
-      case Left(errorMessage) =>
-        logger.warn(
-          s"[MonthlyReturnController][withValidMonthlyReturnParams] Invalid monthly return request parameters for zReference [$zReference], taxYear [$taxYear], month [$month]: [$errorMessage]"
-        )
-        Future.successful(BadRequest(Json.obj("message" -> errorMessage)))
+      monthlyReturnService
+        .deleteFileUpload(request.zReference, request.taxYear, request.month, reference)
+        .map {
+          case true  => NoContent
+          case false => NotFound
+        }
+        .recover { case NonFatal(_) => ServiceUnavailable }
     }
 }

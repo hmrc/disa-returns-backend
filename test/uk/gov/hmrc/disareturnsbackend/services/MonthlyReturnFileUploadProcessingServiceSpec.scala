@@ -26,7 +26,6 @@ import org.mockito.Mockito.{never, verify, when}
 import play.api.libs.Files.TemporaryFileCreator
 import uk.gov.hmrc.disareturnsbackend.connectors.{ObjectStoreConnector, UpscanConnector}
 import uk.gov.hmrc.disareturnsbackend.models.*
-import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository
 import uk.gov.hmrc.disareturnsbackend.validators.fileupload.*
 import uk.gov.hmrc.disareturnsbackend.validators.fileupload.monthly.{MonthlyReturnFileUploadValidationContext, MonthlyReturnFileValidatorSelector}
 
@@ -35,7 +34,10 @@ import scala.concurrent.{Future, Promise}
 
 class MonthlyReturnFileUploadProcessingServiceSpec extends SpecBase {
 
-  private val validationSuccess = FileUploadValidationResult(1, 0, FileUploadValidationStatus.ValidationSuccess)
+  private val rowsValidated     = 1
+  private val validationErrors  = 0
+  private val validationSuccess =
+    FileUploadValidationResult(rowsValidated, validationErrors, FileUploadValidationStatus.ValidationSuccess)
   private val validationFailed  = FileUploadValidationResult(1, 2, FileUploadValidationStatus.ValidationFailed)
   private val invalidFile       = FileUploadValidationResult(0, 0, FileUploadValidationStatus.InvalidFile)
 
@@ -78,10 +80,8 @@ class MonthlyReturnFileUploadProcessingServiceSpec extends SpecBase {
       verify(fixture.objectStoreConnector).putFile(eqTo(testUploadReference), any[Path], eqTo(testFileMimeType))(any)
       verify(fixture.objectStoreConnector, never())
         .putFile(eqTo(s"$testUploadReference-errors"), any[Path], any[String])(any)
-      verify(fixture.repository).updateFileUploadProcessingDetails(
-        eqTo(testZReference),
-        eqTo(yearOnlyTestTaxYear),
-        eqTo(testMonth),
+      verify(fixture.monthlyReturnService).updateFileUploadProcessingDetails(
+        eqTo(fixture.monthlyReturn),
         eqTo(testUploadReference),
         eqTo(validationSuccess),
         eqTo(Some("original-location")),
@@ -105,8 +105,8 @@ class MonthlyReturnFileUploadProcessingServiceSpec extends SpecBase {
       verify(fixture.selector, never()).select(any[String])
       verify(fixture.validator, never()).validate(any[Path], any[Path], any[MonthlyReturnFileUploadValidationContext])
       verify(fixture.objectStoreConnector, never()).putFile(any[String], any[Path], any[String])(any)
-      verify(fixture.repository, never())
-        .updateFileUploadProcessingDetails(any[String], any[String], any[Int], any[String], any, any, any)
+      verify(fixture.monthlyReturnService, never())
+        .updateFileUploadProcessingDetails(any[MonthlyReturn], any[String], any, any, any)
     }
 
     "must process a validation failure and persist the errors location" in {
@@ -117,10 +117,8 @@ class MonthlyReturnFileUploadProcessingServiceSpec extends SpecBase {
         FileUploadProcessingResult.Processed(validationFailed, Some("original-location"), Some("errors-location"))
 
       verify(fixture.objectStoreConnector).putFile(eqTo(s"$testUploadReference-errors"), any[Path], any[String])(any)
-      verify(fixture.repository).updateFileUploadProcessingDetails(
-        eqTo(testZReference),
-        eqTo(yearOnlyTestTaxYear),
-        eqTo(testMonth),
+      verify(fixture.monthlyReturnService).updateFileUploadProcessingDetails(
+        eqTo(fixture.monthlyReturn),
         eqTo(testUploadReference),
         eqTo(validationFailed),
         eqTo(Some("original-location")),
@@ -147,10 +145,8 @@ class MonthlyReturnFileUploadProcessingServiceSpec extends SpecBase {
           Some("errors-location")
         )
 
-      verify(fixture.repository).updateFileUploadProcessingDetails(
-        eqTo(testZReference),
-        eqTo(yearOnlyTestTaxYear),
-        eqTo(testMonth),
+      verify(fixture.monthlyReturnService).updateFileUploadProcessingDetails(
+        eqTo(fixture.monthlyReturn),
         eqTo(testUploadReference),
         eqTo(validationWithInlineErrors),
         eqTo(Some("original-location")),
@@ -167,10 +163,8 @@ class MonthlyReturnFileUploadProcessingServiceSpec extends SpecBase {
       fixture.service.process(fixture.monthlyReturn, testUploadReference).futureValue mustBe
         FileUploadProcessingResult.Processed(invalidFile, Some("original-location"), None)
 
-      verify(fixture.repository).updateFileUploadProcessingDetails(
-        eqTo(testZReference),
-        eqTo(yearOnlyTestTaxYear),
-        eqTo(testMonth),
+      verify(fixture.monthlyReturnService).updateFileUploadProcessingDetails(
+        eqTo(fixture.monthlyReturn),
         eqTo(testUploadReference),
         eqTo(invalidFile),
         eqTo(Some("original-location")),
@@ -251,8 +245,8 @@ class MonthlyReturnFileUploadProcessingServiceSpec extends SpecBase {
     val upscanConnector: UpscanConnector                                         = mock[UpscanConnector]
     val selector: MonthlyReturnFileValidatorSelector                             = mock[MonthlyReturnFileValidatorSelector]
     val objectStoreConnector: ObjectStoreConnector                               = mock[ObjectStoreConnector]
-    val repository: MonthlyReturnRepository                                      = mock[MonthlyReturnRepository]
     val monthlyReturnAuditService: MonthlyReturnAuditService                     = mock[MonthlyReturnAuditService]
+    val monthlyReturnService: MonthlyReturnService                               = mock[MonthlyReturnService]
 
     when(upscanConnector.downloadFile(any[String])(any, any, any))
       .thenReturn(Future.successful(downloadSource))
@@ -263,7 +257,7 @@ class MonthlyReturnFileUploadProcessingServiceSpec extends SpecBase {
       .thenReturn(originalUpload)
     when(objectStoreConnector.putFile(eqTo(s"$testUploadReference-errors"), any[Path], any[String])(any))
       .thenReturn(errorsUpload)
-    when(repository.updateFileUploadProcessingDetails(any[String], any[String], any[Int], any[String], any, any, any))
+    when(monthlyReturnService.updateFileUploadProcessingDetails(any[MonthlyReturn], any[String], any, any, any))
       .thenReturn(Future.successful(repositoryUpdate))
     when(
       monthlyReturnAuditService
@@ -276,7 +270,7 @@ class MonthlyReturnFileUploadProcessingServiceSpec extends SpecBase {
       upscanConnector = upscanConnector,
       monthlyReturnFileValidatorSelector = selector,
       objectStoreConnector = objectStoreConnector,
-      monthlyReturnRepository = repository,
+      monthlyReturnService = monthlyReturnService,
       monthlyReturnAuditService = monthlyReturnAuditService
     )(ec, inject[Materializer])
   }

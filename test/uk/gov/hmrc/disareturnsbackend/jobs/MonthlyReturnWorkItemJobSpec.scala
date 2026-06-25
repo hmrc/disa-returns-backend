@@ -35,8 +35,11 @@ import scala.concurrent.{Future, Promise}
 
 class MonthlyReturnWorkItemJobSpec extends SpecBase {
 
-  private val now        = Instant.parse("2026-06-08T12:00:00Z")
-  private val validation = FileUploadValidationResult(1, 0, FileUploadValidationStatus.ValidationSuccess)
+  private val now              = Instant.parse("2026-06-08T12:00:00Z")
+  private val rowsValidated    = 1
+  private val validationErrors = 0
+  private val validation       =
+    FileUploadValidationResult(rowsValidated, validationErrors, FileUploadValidationStatus.ValidationSuccess)
 
   "processWorkItem" - {
 

@@ -31,7 +31,10 @@ class MonthlyReturnSpec extends SpecBase {
     size = testFileSize,
     upscanDownloadUrl = testDownloadUrl
   )
-  private val validation         = FileUploadValidationResult(1, 0, FileUploadValidationStatus.ValidationSuccess)
+  private val rowsValidated      = 1
+  private val validationErrors   = 0
+  private val validation         =
+    FileUploadValidationResult(rowsValidated, validationErrors, FileUploadValidationStatus.ValidationSuccess)
   private val inlineErrors       = List(
     FileUploadValidationError(
       rowNumber = 1,
@@ -88,20 +91,17 @@ class MonthlyReturnSpec extends SpecBase {
     }
 
     "must write instants as ISO strings for API JSON" in {
-      val json = Json.toJson(emptyMonthlyReturn.copy(declaredOn = Some(testCreatedOn)))
+      val json = Json.toJson(emptyMonthlyReturn)
 
       (json \ createdOnFieldName).as[JsString] mustBe JsString(testExistingUpdatedOnString)
-      (json \ declaredOnFieldName).as[JsString] mustBe JsString(testCreatedOnString)
       (json \ lastUpdatedFieldName).as[JsString] mustBe JsString(testExistingUpdatedOnString)
     }
 
     "must write instants as Mongo date objects for Mongo JSON" in {
-      val json = Json.toJson(emptyMonthlyReturn.copy(declaredOn = Some(testCreatedOn)))(MonthlyReturn.mongoFormat)
+      val json = Json.toJson(emptyMonthlyReturn)(MonthlyReturn.mongoFormat)
 
       ((json \ createdOnFieldName) \ mongoDateFieldName \ mongoNumberLongFieldName).as[JsString] mustBe
         JsString(testExistingUpdatedOnEpochMillis)
-      ((json \ declaredOnFieldName) \ mongoDateFieldName \ mongoNumberLongFieldName).as[JsString] mustBe
-        JsString(testCreatedOn.toEpochMilli.toString)
       ((json \ lastUpdatedFieldName) \ mongoDateFieldName \ mongoNumberLongFieldName).as[JsString] mustBe
         JsString(testExistingUpdatedOnEpochMillis)
     }
@@ -123,28 +123,6 @@ class MonthlyReturnSpec extends SpecBase {
         Json.toJson(emptyMonthlyReturn)(MonthlyReturn.mongoFormat).as[JsObject] - createdOnFieldName
 
       jsonWithoutCreatedOn.as[MonthlyReturn](MonthlyReturn.mongoFormat) mustBe emptyMonthlyReturn
-    }
-  }
-
-  "declare" - {
-
-    "must report whether the return has a declaration" in {
-      emptyMonthlyReturn.hasDeclaration mustBe false
-      emptyMonthlyReturn.copy(declaredOn = Some(testCreatedOn)).hasDeclaration mustBe true
-    }
-
-    "must set declaredOn and update lastUpdated" in {
-      val result = emptyMonthlyReturn.declare(testCreatedOn)
-
-      result.declaredOn mustBe Some(testCreatedOn)
-      result.createdOn mustBe testExistingUpdatedOn
-      result.lastUpdated mustBe testCreatedOn
-    }
-
-    "must leave an already declared return unchanged" in {
-      val declaredMonthlyReturn = emptyMonthlyReturn.copy(declaredOn = Some(testExistingUpdatedOn))
-
-      declaredMonthlyReturn.declare(testCreatedOn) mustBe declaredMonthlyReturn
     }
   }
 
@@ -176,11 +154,6 @@ class MonthlyReturnSpec extends SpecBase {
       monthlyReturn.createFileUpload(testUploadReference, testCreatedOn) mustBe monthlyReturn
     }
 
-    "must not add a file upload to a declared return" in {
-      val monthlyReturn = emptyMonthlyReturn.copy(declaredOn = Some(testExistingUpdatedOn))
-
-      monthlyReturn.createFileUpload(testUploadReference, testCreatedOn) mustBe monthlyReturn
-    }
   }
 
   "deleteFileUpload" - {
@@ -321,11 +294,8 @@ class MonthlyReturnSpec extends SpecBase {
       ) mustBe monthlyReturn
     }
 
-    "must complete an existing CREATED file upload after declaration when it was created before declaration" in {
-      val declaredOn    = testCreatedOn.plusSeconds(1)
-      val monthlyReturn = emptyMonthlyReturn
-        .createFileUpload(testUploadReference, testCreatedOn)
-        .copy(declaredOn = Some(declaredOn), lastUpdated = declaredOn)
+    "must complete an existing CREATED file upload" in {
+      val monthlyReturn = emptyMonthlyReturn.createFileUpload(testUploadReference, testCreatedOn)
 
       val result = monthlyReturn.completeUpscan(
         reference = testUploadReference,
@@ -342,54 +312,7 @@ class MonthlyReturnSpec extends SpecBase {
           fileUploadDetails = Some(fileUploadDetails.copy(upscanCompletedOn = Some(testUpscanCompletedOn)))
         )
       )
-      result.declaredOn mustBe Some(declaredOn)
       result.lastUpdated mustBe testUpscanCompletedOn
-    }
-
-    "must not complete an existing CREATED file upload after declaration when it was created at declaration time" in {
-      val monthlyReturn = emptyMonthlyReturn
-        .createFileUpload(testUploadReference, testCreatedOn)
-        .copy(declaredOn = Some(testCreatedOn), lastUpdated = testCreatedOn)
-
-      monthlyReturn.completeUpscan(
-        reference = testUploadReference,
-        status = FileUploadStatus.UpscanSuccess,
-        upscanCompletedOn = testUpscanCompletedOn,
-        fileUploadDetails = Some(fileUploadDetails)
-      ) mustBe monthlyReturn
-    }
-
-    "must not add a completed file upload after declaration when the reference does not exist" in {
-      val declaredOn    = testCreatedOn.plusSeconds(1)
-      val monthlyReturn = emptyMonthlyReturn.copy(declaredOn = Some(declaredOn), lastUpdated = declaredOn)
-
-      monthlyReturn.completeUpscan(
-        reference = missingUploadReference,
-        status = FileUploadStatus.UpscanSuccess,
-        upscanCompletedOn = testUpscanCompletedOn,
-        fileUploadDetails = Some(fileUploadDetails)
-      ) mustBe monthlyReturn
-    }
-
-    "must not complete a file upload after declaration when it is not in CREATED state" in {
-      val declaredOn    = testCreatedOn.plusSeconds(1)
-      val monthlyReturn = emptyMonthlyReturn
-        .completeUpscan(
-          reference = testUploadReference,
-          status = FileUploadStatus.UpscanSuccess,
-          upscanCompletedOn = testCreatedOn,
-          fileUploadDetails = Some(fileUploadDetails)
-        )
-        .copy(declaredOn = Some(declaredOn), lastUpdated = declaredOn)
-
-      monthlyReturn.completeUpscan(
-        reference = testUploadReference,
-        status = UpscanRejected,
-        upscanCompletedOn = testUpscanCompletedOn,
-        fileUploadDetails = None,
-        failureReason = Some(Rejected),
-        failureMessage = Some(testDuplicateFileMessage)
-      ) mustBe monthlyReturn
     }
 
     "must leave the return unchanged when it is a nil return" in {

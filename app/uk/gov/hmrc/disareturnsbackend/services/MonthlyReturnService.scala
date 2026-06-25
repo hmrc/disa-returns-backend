@@ -17,17 +17,18 @@
 package uk.gov.hmrc.disareturnsbackend.services
 
 import play.api.Logging
+import play.api.libs.json.JsValue
 import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector
-import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector.CreateMonthlyReturnSubmissionResult
+import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector.{CreateMonthlyReturnSubmissionResult, DeclareMonthlyReturnSubmissionResult}
 import uk.gov.hmrc.disareturnsbackend.config.AppConfig
-import uk.gov.hmrc.disareturnsbackend.models.{FileUpload, MonthlyReturn}
+import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository
-import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository.{CreateFileUploadRepositoryResult, DeclareMonthlyReturnRepositoryResult, UpdateNilReturnRepositoryResult}
 import uk.gov.hmrc.disareturnsbackend.services.CreateFileUploadResult.*
 import uk.gov.hmrc.disareturnsbackend.services.CreateMonthlyReturnResult.{AlreadyExists, Created, OutsideDeclarationPeriod}
 import uk.gov.hmrc.http.HeaderCarrier
 
-import java.time.{Clock, LocalDate}
+import java.time.{Clock, Instant, LocalDate}
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 import javax.inject.{Inject, Singleton}
 import scala.concurrent.{ExecutionContext, Future}
@@ -59,6 +60,22 @@ class MonthlyReturnService @Inject() (
 
         maybeMonthlyReturn
       }
+
+  def getWithDeclaration(zReference: String, taxYear: String, month: Int)(implicit
+    hc: HeaderCarrier
+  ): Future[Option[MonthlyReturnResponse]] =
+    get(zReference, taxYear, month)
+      .flatMap {
+        case Some(monthlyReturn) =>
+          returnsSubmissionConnector
+            .getMonthlyReturn(zReference, taxYear, month)
+            .map(submissionMonthlyReturn =>
+              Some(MonthlyReturnResponse(monthlyReturn, submissionMonthlyReturn.flatMap(declaredOn)))
+            )
+
+        case None =>
+          Future.successful(None)
+      }
       .recoverWith { case NonFatal(exception) =>
         logger.error(
           s"[MonthlyReturnService][get] Failed to get monthly return for zReference [$zReference], taxYear [$taxYear], month [$month]",
@@ -72,7 +89,7 @@ class MonthlyReturnService @Inject() (
     taxYear: String,
     month: Int,
     nilReturn: Boolean
-  ): Future[CreateMonthlyReturnResult] =
+  )(implicit hc: HeaderCarrier): Future[CreateMonthlyReturnResult] =
     monthlyReturnRepository
       .get(zReference, taxYear, month)
       .flatMap {
@@ -83,8 +100,6 @@ class MonthlyReturnService @Inject() (
           Future.successful(AlreadyExists)
 
         case None =>
-          implicit val hc: HeaderCarrier = HeaderCarrier()
-
           returnsSubmissionConnector
             .createMonthlyReturn(zReference, taxYear, month, nilReturn)
             .flatMap {
@@ -136,25 +151,31 @@ class MonthlyReturnService @Inject() (
     nilReturn: Boolean
   ): Future[UpdateNilReturnResult] =
     monthlyReturnRepository
-      .updateNilReturn(zReference, taxYear, month, nilReturn)
-      .map {
-        case UpdateNilReturnRepositoryResult.NilReturnUpdated(monthlyReturn) =>
+      .get(zReference, taxYear, month)
+      .flatMap {
+        case Some(monthlyReturn) =>
+          val updatedMonthlyReturn = monthlyReturn.updateNilReturn(nilReturn, now())
+          val persistUpdate        =
+            if (updatedMonthlyReturn == monthlyReturn) {
+              Future.successful(true)
+            } else {
+              monthlyReturnRepository.upsert(updatedMonthlyReturn)
+            }
+
+          persistUpdate.map { _ =>
+            val result = if (updatedMonthlyReturn == monthlyReturn) monthlyReturn else updatedMonthlyReturn
+
+            logger.info(
+              s"[MonthlyReturnService][updateNilReturn] Updated nilReturn to [$nilReturn] for zReference [$zReference], taxYear [$taxYear], month [$month]"
+            )
+            UpdateNilReturnResult.NilReturnUpdated(result)
+          }
+
+        case None =>
           logger.info(
-            s"[MonthlyReturnService][updateNilReturn] Updated nilReturn to [$nilReturn] for zReference [$zReference], taxYear [$taxYear], month [$month]"
-          )
-          UpdateNilReturnResult.NilReturnUpdated(monthlyReturn)
-
-        case UpdateNilReturnRepositoryResult.MonthlyReturnAlreadyDeclared =>
-          logger.warn(
-            s"[MonthlyReturnService][updateNilReturn] Monthly return already declared for zReference [$zReference], taxYear [$taxYear], month [$month]"
-          )
-          UpdateNilReturnResult.MonthlyReturnAlreadyDeclared
-
-        case UpdateNilReturnRepositoryResult.MonthlyReturnNotFound =>
-          logger.warn(
             s"[MonthlyReturnService][updateNilReturn] No monthly return found for zReference [$zReference], taxYear [$taxYear], month [$month]"
           )
-          UpdateNilReturnResult.MonthlyReturnNotFound
+          Future.successful(UpdateNilReturnResult.MonthlyReturnNotFound)
       }
       .recoverWith { case NonFatal(exception) =>
         logger.error(
@@ -164,7 +185,9 @@ class MonthlyReturnService @Inject() (
         Future.failed(exception)
       }
 
-  def declare(zReference: String, taxYear: String, month: Int): Future[DeclareMonthlyReturnResult] =
+  def declare(zReference: String, taxYear: String, month: Int)(implicit
+    hc: HeaderCarrier
+  ): Future[DeclareMonthlyReturnResult] =
     if (!isWithinDeclarationPeriod) {
       logger.warn(
         s"[MonthlyReturnService][declare] Declaration period is closed for zReference [$zReference], taxYear [$taxYear], month [$month]"
@@ -172,25 +195,34 @@ class MonthlyReturnService @Inject() (
       Future.successful(DeclareMonthlyReturnResult.OutsideDeclarationPeriod)
     } else {
       monthlyReturnRepository
-        .declare(zReference, taxYear, month)
-        .map {
-          case DeclareMonthlyReturnRepositoryResult.MonthlyReturnDeclared =>
-            logger.info(
-              s"[MonthlyReturnService][declare] Declared monthly return for zReference [$zReference], taxYear [$taxYear], month [$month]"
-            )
-            DeclareMonthlyReturnResult.Declared
+        .get(zReference, taxYear, month)
+        .flatMap {
+          case Some(monthlyReturn) =>
+            returnsSubmissionConnector.declareMonthlyReturn(zReference, taxYear, month, monthlyReturn.nilReturn).map {
+              case DeclareMonthlyReturnSubmissionResult.Declared =>
+                logger.info(
+                  s"[MonthlyReturnService][declare] Declared monthly return for zReference [$zReference], taxYear [$taxYear], month [$month]"
+                )
+                DeclareMonthlyReturnResult.Declared
 
-          case DeclareMonthlyReturnRepositoryResult.MonthlyReturnAlreadyDeclared =>
-            logger.warn(
-              s"[MonthlyReturnService][declare] Monthly return already declared for zReference [$zReference], taxYear [$taxYear], month [$month]"
-            )
-            DeclareMonthlyReturnResult.AlreadyDeclared
+              case DeclareMonthlyReturnSubmissionResult.AlreadyDeclared =>
+                logger.warn(
+                  s"[MonthlyReturnService][declare] Monthly return already declared in submission for zReference [$zReference], taxYear [$taxYear], month [$month]"
+                )
+                DeclareMonthlyReturnResult.AlreadyDeclared
 
-          case DeclareMonthlyReturnRepositoryResult.MonthlyReturnNotFound =>
+              case DeclareMonthlyReturnSubmissionResult.MonthlyReturnNotFound =>
+                logger.warn(
+                  s"[MonthlyReturnService][declare] No monthly return found in submission for zReference [$zReference], taxYear [$taxYear], month [$month]"
+                )
+                DeclareMonthlyReturnResult.MonthlyReturnNotFound
+            }
+
+          case None =>
             logger.warn(
               s"[MonthlyReturnService][declare] No monthly return found for zReference [$zReference], taxYear [$taxYear], month [$month]"
             )
-            DeclareMonthlyReturnResult.MonthlyReturnNotFound
+            Future.successful(DeclareMonthlyReturnResult.MonthlyReturnNotFound)
         }
         .recoverWith { case NonFatal(exception) =>
           logger.error(
@@ -208,31 +240,35 @@ class MonthlyReturnService @Inject() (
     reference: String
   ): Future[CreateFileUploadResult] =
     monthlyReturnRepository
-      .createFileUpload(zReference, taxYear, month, reference)
-      .map {
-        case CreateFileUploadRepositoryResult.FileUploadCreated(monthlyReturn) =>
-          logger.info(
-            s"[MonthlyReturnService][createFileUpload] Created file upload for zReference [$zReference], taxYear [$taxYear], month [$month], upload reference [$reference]"
-          )
-          FileUploadCreated(monthlyReturn)
-
-        case CreateFileUploadRepositoryResult.FileUploadAlreadyExists =>
-          logger.warn(
-            s"[MonthlyReturnService][createFileUpload] File upload already exists for zReference [$zReference], taxYear [$taxYear], month [$month], upload reference [$reference]"
-          )
-          FileUploadAlreadyExists
-
-        case CreateFileUploadRepositoryResult.MonthlyReturnAlreadyDeclared =>
-          logger.warn(
-            s"[MonthlyReturnService][createFileUpload] Monthly return already declared for zReference [$zReference], taxYear [$taxYear], month [$month], upload reference [$reference]"
-          )
-          MonthlyReturnAlreadyDeclared
-
-        case CreateFileUploadRepositoryResult.MonthlyReturnNotFound =>
+      .get(zReference, taxYear, month)
+      .flatMap {
+        case Some(monthlyReturn) if monthlyReturn.nilReturn =>
           logger.warn(
             s"[MonthlyReturnService][createFileUpload] No writable monthly return found for zReference [$zReference], taxYear [$taxYear], month [$month], upload reference [$reference]"
           )
-          MonthlyReturnNotFound
+          Future.successful(MonthlyReturnNotFound)
+
+        case Some(monthlyReturn) if monthlyReturn.fileUploads.exists(_.reference == reference) =>
+          logger.warn(
+            s"[MonthlyReturnService][createFileUpload] File upload already exists for zReference [$zReference], taxYear [$taxYear], month [$month], upload reference [$reference]"
+          )
+          Future.successful(FileUploadAlreadyExists)
+
+        case Some(monthlyReturn) =>
+          val updatedMonthlyReturn = monthlyReturn.createFileUpload(reference = reference, createdOn = now())
+
+          monthlyReturnRepository.upsert(updatedMonthlyReturn).map { _ =>
+            logger.info(
+              s"[MonthlyReturnService][createFileUpload] Created file upload for zReference [$zReference], taxYear [$taxYear], month [$month], upload reference [$reference]"
+            )
+            FileUploadCreated(updatedMonthlyReturn)
+          }
+
+        case None =>
+          logger.info(
+            s"[MonthlyReturnService][createFileUpload] No writable monthly return found for zReference [$zReference], taxYear [$taxYear], month [$month], upload reference [$reference]"
+          )
+          Future.successful(MonthlyReturnNotFound)
       }
       .recoverWith { case NonFatal(exception) =>
         logger.error(
@@ -249,7 +285,8 @@ class MonthlyReturnService @Inject() (
     reference: String
   ): Future[Option[FileUpload]] =
     monthlyReturnRepository
-      .getFileUpload(zReference, taxYear, month, reference)
+      .get(zReference, taxYear, month)
+      .map(_.flatMap(_.getFileUpload(reference)))
       .map { maybeFileUpload =>
         maybeFileUpload match {
           case Some(_) =>
@@ -279,19 +316,38 @@ class MonthlyReturnService @Inject() (
     reference: String
   ): Future[Boolean] =
     monthlyReturnRepository
-      .deleteFileUpload(zReference, taxYear, month, reference)
-      .map {
-        case true =>
-          logger.info(
-            s"[MonthlyReturnService][deleteFileUpload] Deleted file upload for zReference [$zReference], taxYear [$taxYear], month [$month], upload reference [$reference]"
-          )
-          true
+      .get(zReference, taxYear, month)
+      .flatMap {
+        case Some(monthlyReturn) =>
+          val updatedMonthlyReturn = monthlyReturn.deleteFileUpload(reference, now())
 
-        case false =>
-          logger.warn(
+          val fileUploadDeleted = updatedMonthlyReturn != monthlyReturn
+
+          val persistUpdate =
+            if (fileUploadDeleted) {
+              monthlyReturnRepository.upsert(updatedMonthlyReturn)
+            } else {
+              Future.successful(false)
+            }
+
+          persistUpdate.map { _ =>
+            if (fileUploadDeleted) {
+              logger.info(
+                s"[MonthlyReturnService][deleteFileUpload] Deleted file upload for zReference [$zReference], taxYear [$taxYear], month [$month], upload reference [$reference]"
+              )
+            } else {
+              logger.warn(
+                s"[MonthlyReturnService][deleteFileUpload] No file upload found to delete for zReference [$zReference], taxYear [$taxYear], month [$month], upload reference [$reference]"
+              )
+            }
+            fileUploadDeleted
+          }
+
+        case None =>
+          logger.info(
             s"[MonthlyReturnService][deleteFileUpload] No file upload found to delete for zReference [$zReference], taxYear [$taxYear], month [$month], upload reference [$reference]"
           )
-          false
+          Future.successful(false)
       }
       .recoverWith { case NonFatal(exception) =>
         logger.error(
@@ -301,11 +357,43 @@ class MonthlyReturnService @Inject() (
         Future.failed(exception)
       }
 
-  private def isWithinDeclarationPeriod: Boolean = {
-    val dayOfMonth = LocalDate.now(clock).getDayOfMonth
+  def updateFileUploadProcessingDetails(
+    monthlyReturn: MonthlyReturn,
+    reference: String,
+    validation: FileUploadValidationResult,
+    objectStoreFileLocation: Option[String],
+    objectStoreFileErrorsLocation: Option[String]
+  ): Future[Boolean] =
+    if (monthlyReturn.getFileUpload(reference).exists(_.hasFileUploadDetails)) {
+      val updatedMonthlyReturn = monthlyReturn.updateFileUploadProcessingDetails(
+        reference = reference,
+        validation = validation,
+        objectStoreFileLocation = objectStoreFileLocation,
+        objectStoreFileErrorsLocation = objectStoreFileErrorsLocation,
+        updatedOn = now()
+      )
 
-    dayOfMonth >= appConfig.declarationPeriodStart && dayOfMonth <= appConfig.declarationPeriodEnd
+      if (updatedMonthlyReturn == monthlyReturn) {
+        Future.successful(false)
+      } else {
+        monthlyReturnRepository.upsert(updatedMonthlyReturn)
+      }
+    } else {
+      Future.successful(false)
+    }
+
+  private def isWithinDeclarationPeriod: Boolean = {
+    val dayOfMonth                        = LocalDate.now(clock).getDayOfMonth
+    val isOnOrAfterDeclarationPeriodStart = dayOfMonth >= appConfig.declarationPeriodStart
+    val isOnOrBeforeDeclarationPeriodEnd  = dayOfMonth <= appConfig.declarationPeriodEnd
+
+    isOnOrAfterDeclarationPeriodStart && isOnOrBeforeDeclarationPeriodEnd
   }
+
+  private def declaredOn(monthlyReturn: JsValue): Option[Instant] =
+    (monthlyReturn \ "declaredOn").asOpt[Instant]
+
+  private def now(): Instant = Instant.now(clock).truncatedTo(ChronoUnit.MILLIS)
 }
 
 sealed trait CreateMonthlyReturnResult
@@ -321,7 +409,6 @@ sealed trait CreateFileUploadResult
 object CreateFileUploadResult {
   final case class FileUploadCreated(monthlyReturn: MonthlyReturn) extends CreateFileUploadResult
   case object FileUploadAlreadyExists extends CreateFileUploadResult
-  case object MonthlyReturnAlreadyDeclared extends CreateFileUploadResult
   case object MonthlyReturnNotFound extends CreateFileUploadResult
 }
 
@@ -329,7 +416,6 @@ sealed trait UpdateNilReturnResult
 
 object UpdateNilReturnResult {
   final case class NilReturnUpdated(monthlyReturn: MonthlyReturn) extends UpdateNilReturnResult
-  case object MonthlyReturnAlreadyDeclared extends UpdateNilReturnResult
   case object MonthlyReturnNotFound extends UpdateNilReturnResult
 }
 
