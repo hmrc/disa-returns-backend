@@ -31,7 +31,7 @@ import uk.gov.hmrc.disareturnsbackend.validators.fileupload.*
 import uk.gov.hmrc.disareturnsbackend.validators.fileupload.monthly.{MonthlyReturnFileUploadValidationContext, MonthlyReturnFileValidatorSelector}
 
 import java.nio.file.Path
-import scala.concurrent.Future
+import scala.concurrent.{Future, Promise}
 
 class MonthlyReturnFileUploadProcessingServiceSpec extends SpecBase {
 
@@ -86,6 +86,12 @@ class MonthlyReturnFileUploadProcessingServiceSpec extends SpecBase {
         eqTo(validationSuccess),
         eqTo(Some("original-location")),
         eqTo(None)
+      )
+      verify(fixture.monthlyReturnAuditService).audit(
+        eqTo(fixture.monthlyReturn),
+        eqTo(testUploadReference),
+        eqTo(fileUploadDetails),
+        any[FileUploadValidatorResult]
       )
     }
 
@@ -201,6 +207,23 @@ class MonthlyReturnFileUploadProcessingServiceSpec extends SpecBase {
       fixture.service
         .process(fixture.monthlyReturn, testUploadReference)
         .futureValue mustBe FileUploadProcessingResult.MonthlyReturnUpdateFailed
+
+      verify(fixture.monthlyReturnAuditService, never()).audit(any, any, any, any)
+    }
+
+    "must not wait for audit delivery before completing processing" in {
+      val auditCompletion = Promise[Unit]()
+      val fixture         = new Fixture(auditResult = auditCompletion.future)
+
+      fixture.service.process(fixture.monthlyReturn, testUploadReference).futureValue mustBe
+        FileUploadProcessingResult.Processed(validationSuccess, Some("original-location"), None)
+
+      verify(fixture.monthlyReturnAuditService).audit(
+        eqTo(fixture.monthlyReturn),
+        eqTo(testUploadReference),
+        eqTo(fileUploadDetails),
+        any[FileUploadValidatorResult]
+      )
     }
   }
 
@@ -215,7 +238,8 @@ class MonthlyReturnFileUploadProcessingServiceSpec extends SpecBase {
     originalUpload: Future[String] = Future.successful("original-location"),
     errorsUpload: Future[String] = Future.successful("errors-location"),
     repositoryUpdate: Boolean = true,
-    downloadSource: Source[ByteString, ?] = Source.single(ByteString("file-content"))
+    downloadSource: Source[ByteString, ?] = Source.single(ByteString("file-content")),
+    auditResult: Future[Unit] = Future.successful(())
   ) {
     val validator: FileUploadValidator[MonthlyReturnFileUploadValidationContext] =
       selectValidator.getOrElse(mock[FileUploadValidator[MonthlyReturnFileUploadValidationContext]])
@@ -228,6 +252,7 @@ class MonthlyReturnFileUploadProcessingServiceSpec extends SpecBase {
     val selector: MonthlyReturnFileValidatorSelector                             = mock[MonthlyReturnFileValidatorSelector]
     val objectStoreConnector: ObjectStoreConnector                               = mock[ObjectStoreConnector]
     val repository: MonthlyReturnRepository                                      = mock[MonthlyReturnRepository]
+    val monthlyReturnAuditService: MonthlyReturnAuditService                     = mock[MonthlyReturnAuditService]
 
     when(upscanConnector.downloadFile(any[String])(any, any, any))
       .thenReturn(Future.successful(downloadSource))
@@ -240,13 +265,19 @@ class MonthlyReturnFileUploadProcessingServiceSpec extends SpecBase {
       .thenReturn(errorsUpload)
     when(repository.updateFileUploadProcessingDetails(any[String], any[String], any[Int], any[String], any, any, any))
       .thenReturn(Future.successful(repositoryUpdate))
+    when(
+      monthlyReturnAuditService
+        .audit(any[MonthlyReturn], any[String], any[FileUploadDetails], any[FileUploadValidatorResult])
+    )
+      .thenReturn(auditResult)
 
     val service = new MonthlyReturnFileUploadProcessingServiceImpl(
       temporaryFileCreator = inject[TemporaryFileCreator],
       upscanConnector = upscanConnector,
       monthlyReturnFileValidatorSelector = selector,
       objectStoreConnector = objectStoreConnector,
-      monthlyReturnRepository = repository
+      monthlyReturnRepository = repository,
+      monthlyReturnAuditService = monthlyReturnAuditService
     )(ec, inject[Materializer])
   }
 

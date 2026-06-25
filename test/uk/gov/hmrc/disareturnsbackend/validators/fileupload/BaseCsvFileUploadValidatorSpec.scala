@@ -147,6 +147,7 @@ class BaseCsvFileUploadValidatorSpec extends SpecBase {
           FileUploadValidationError(2, List(columnARequiredErrorCode))
         )
         result.validation.validationErrors mustBe 4
+        result.errorVolumes mustBe Map(columnARequiredErrorCode -> 3L, columnBRequiredErrorCode -> 1L)
         workbookErrorRows(errorsFile) mustBe 3
       } finally Files.deleteIfExists(errorsFile)
     }

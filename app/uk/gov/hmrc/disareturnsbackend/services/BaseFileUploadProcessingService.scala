@@ -29,8 +29,10 @@ import uk.gov.hmrc.disareturnsbackend.validators.fileupload.*
 import uk.gov.hmrc.http.HeaderCarrier
 
 import java.nio.file.Path
+import scala.concurrent.duration.NANOSECONDS
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Failure
+import scala.util.control.NonFatal
 
 abstract class BaseFileUploadProcessingService[R, C <: FileUploadValidationContext](
   override protected val temporaryFileCreator: TemporaryFileCreator,
@@ -54,6 +56,13 @@ abstract class BaseFileUploadProcessingService[R, C <: FileUploadValidationConte
     objectStoreFileLocation: Option[String],
     objectStoreFileErrorsLocation: Option[String]
   ): Future[Boolean]
+
+  protected def auditFileUploadValidation(
+    returnRecord: R,
+    fileUploadReference: String,
+    fileUploadDetails: FileUploadDetails,
+    validationOutcome: FileUploadValidatorResult
+  ): Future[Unit]
 
   protected def describeReturn(returnRecord: R): String
 
@@ -115,18 +124,27 @@ abstract class BaseFileUploadProcessingService[R, C <: FileUploadValidationConte
                                              objectStoreFileErrorsLocation,
                                              context
                                            )
-        } yield
-          if (fileUploadUpdated) {
-            logger.info(s"${logPrefix(uploadReference)} Processing completed successfully for $context")
+        } yield (
+          fileUploadUpdated,
+          validationOutcome,
+          objectStoreFileLocation,
+          objectStoreFileErrorsLocation
+        )
+      }.flatMap { case (fileUploadUpdated, validationOutcome, objectStoreFileLocation, objectStoreFileErrorsLocation) =>
+        if (fileUploadUpdated) {
+          logger.info(s"${logPrefix(uploadReference)} Processing completed successfully for $context")
+          submitFileUploadValidationAudit(returnRecord, uploadReference, details, validationOutcome, context)
+          Future.successful(
             FileUploadProcessingResult.Processed(
               validation = validationOutcome.validation,
               objectStoreFileLocation = objectStoreFileLocation,
               objectStoreFileErrorsLocation = objectStoreFileErrorsLocation
             )
-          } else {
-            logger.warn(s"${logPrefix(uploadReference)} Repository update returned false for $context")
-            FileUploadProcessingResult.MonthlyReturnUpdateFailed
-          }
+          )
+        } else {
+          logger.warn(s"${logPrefix(uploadReference)} Repository update returned false for $context")
+          Future.successful(FileUploadProcessingResult.MonthlyReturnUpdateFailed)
+        }
       }
     }
   }
@@ -162,6 +180,7 @@ abstract class BaseFileUploadProcessingService[R, C <: FileUploadValidationConte
   ): Future[FileUploadValidatorResult] =
     fileValidatorSelector.select(details.fileMimeType) match {
       case Right(validator) =>
+        val validationStartedAt = System.nanoTime()
         logger.info(
           s"${logPrefix(uploadReference)} Validator selected for $context, MIME type [${details.fileMimeType}], validator [${validator.getClass.getSimpleName}]"
         )
@@ -172,10 +191,13 @@ abstract class BaseFileUploadProcessingService[R, C <: FileUploadValidationConte
             context = validationContext(returnRecord)
           )
           .map { validationOutcome =>
-            logger.info(
-              s"${logPrefix(uploadReference)} Validation completed for $context, status [${validationOutcome.validation.status}], rows validated [${validationOutcome.validation.rowsValidated}], validation errors [${validationOutcome.validation.validationErrors}], errors file written [${validationOutcome.errorFileWritten}]"
+            val timedValidationOutcome = validationOutcome.copy(
+              validationTimeMillis = elapsedMillis(validationStartedAt)
             )
-            validationOutcome
+            logger.info(
+              s"${logPrefix(uploadReference)} Validation completed for $context, status [${timedValidationOutcome.validation.status}], rows validated [${timedValidationOutcome.validation.rowsValidated}], validation errors [${timedValidationOutcome.validation.validationErrors}], errors file written [${timedValidationOutcome.errorFileWritten}], validation time milliseconds [${timedValidationOutcome.validationTimeMillis}]"
+            )
+            timedValidationOutcome
           }
 
       case Left(unsupportedMimeType) =>
@@ -264,6 +286,30 @@ abstract class BaseFileUploadProcessingService[R, C <: FileUploadValidationConte
       ),
       errorFileWritten = false
     )
+
+  private def elapsedMillis(startedAtNanos: Long): Long =
+    NANOSECONDS.toMillis(System.nanoTime() - startedAtNanos)
+
+  private def submitFileUploadValidationAudit(
+    returnRecord: R,
+    uploadReference: String,
+    details: FileUploadDetails,
+    validationOutcome: FileUploadValidatorResult,
+    context: String
+  ): Unit =
+    try {
+      auditFileUploadValidation(returnRecord, uploadReference, details, validationOutcome)
+        .recover { case NonFatal(exception) =>
+          logger.error(s"${logPrefix(uploadReference)} FileUploadValidation audit failed for $context", exception)
+        }
+      ()
+    } catch {
+      case NonFatal(exception) =>
+        logger.error(
+          s"${logPrefix(uploadReference)} FileUploadValidation audit could not be submitted for $context",
+          exception
+        )
+    }
 
   private def logPrefix(fileUploadReference: String): String =
     s"[$serviceName][process][fileUploadReference=$fileUploadReference]"

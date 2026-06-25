@@ -146,7 +146,8 @@ abstract class BaseXlsxFileUploadValidator[C <: FileUploadValidationContext](
         rowsValidated = summary.rowsValidated,
         validationErrors = summary.validationErrors,
         errorFileWritten = summary.errorFileWritten,
-        inlineErrors = summary.inlineErrors
+        inlineErrors = summary.inlineErrors,
+        errorVolumes = summary.errorVolumes
       )
     }
   }

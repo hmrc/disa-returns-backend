@@ -128,7 +128,8 @@ abstract class BaseCsvFileUploadValidator[C <: FileUploadValidationContext](
         rowsValidated = accumulator.rowsValidated,
         validationErrors = accumulator.validationErrors,
         errorFileWritten = errorWriter.written,
-        inlineErrors = accumulator.inlineErrors.toList
+        inlineErrors = accumulator.inlineErrors.toList,
+        errorVolumes = accumulator.errorVolumes
       )
     }
   }
@@ -136,11 +137,12 @@ abstract class BaseCsvFileUploadValidator[C <: FileUploadValidationContext](
   private final case class CsvValidationAccumulator(
     rowsValidated: Long,
     validationErrors: Long,
-    inlineErrors: Vector[FileUploadValidationError]
+    inlineErrors: Vector[FileUploadValidationError],
+    errorVolumes: Map[String, Long]
   )
 
   private object CsvValidationAccumulator {
-    val empty: CsvValidationAccumulator = CsvValidationAccumulator(0L, 0L, Vector.empty)
+    val empty: CsvValidationAccumulator = CsvValidationAccumulator(0L, 0L, Vector.empty, Map.empty)
   }
 
   @tailrec
@@ -179,6 +181,11 @@ abstract class BaseCsvFileUploadValidator[C <: FileUploadValidationContext](
           validationAccumulator.inlineErrors
         }
 
+      val updatedErrorVolumes =
+        rowCellErrors.foldLeft(validationAccumulator.errorVolumes) { case (errorVolumes, errorCode) =>
+          errorVolumes.updatedWith(errorCode)(_.map(_ + 1).orElse(Some(1L)))
+        }
+
       validateRows(
         parser,
         errorWriter,
@@ -186,7 +193,8 @@ abstract class BaseCsvFileUploadValidator[C <: FileUploadValidationContext](
         validationAccumulator.copy(
           rowsValidated = rowNumber,
           validationErrors = validationAccumulator.validationErrors + rowCellErrors.length,
-          inlineErrors = updatedInlineErrors
+          inlineErrors = updatedInlineErrors,
+          errorVolumes = updatedErrorVolumes
         )
       )
     }

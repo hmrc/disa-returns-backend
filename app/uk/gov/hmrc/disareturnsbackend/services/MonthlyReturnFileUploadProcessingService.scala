@@ -21,6 +21,7 @@ import play.api.libs.Files.TemporaryFileCreator
 import uk.gov.hmrc.disareturnsbackend.connectors.*
 import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository
+import uk.gov.hmrc.disareturnsbackend.validators.fileupload.FileUploadValidatorResult
 import uk.gov.hmrc.disareturnsbackend.validators.fileupload.monthly.*
 
 import javax.inject.{Inject, Singleton}
@@ -36,7 +37,8 @@ class MonthlyReturnFileUploadProcessingServiceImpl @Inject() (
   upscanConnector: UpscanConnector,
   monthlyReturnFileValidatorSelector: MonthlyReturnFileValidatorSelector,
   objectStoreConnector: ObjectStoreConnector,
-  monthlyReturnRepository: MonthlyReturnRepository
+  monthlyReturnRepository: MonthlyReturnRepository,
+  monthlyReturnAuditService: MonthlyReturnAuditService
 )(implicit ec: ExecutionContext, materializer: Materializer)
     extends BaseFileUploadProcessingService[MonthlyReturn, MonthlyReturnFileUploadValidationContext](
       temporaryFileCreator = temporaryFileCreator,
@@ -73,6 +75,19 @@ class MonthlyReturnFileUploadProcessingServiceImpl @Inject() (
       validation = validation,
       objectStoreFileLocation = objectStoreFileLocation,
       objectStoreFileErrorsLocation = objectStoreFileErrorsLocation
+    )
+
+  override protected def auditFileUploadValidation(
+    monthlyReturn: MonthlyReturn,
+    fileUploadReference: String,
+    fileUploadDetails: FileUploadDetails,
+    validationOutcome: FileUploadValidatorResult
+  ): Future[Unit] =
+    monthlyReturnAuditService.audit(
+      monthlyReturn = monthlyReturn,
+      fileUploadReference = fileUploadReference,
+      fileUploadDetails = fileUploadDetails,
+      validationOutcome = validationOutcome
     )
 
   override protected def describeReturn(monthlyReturn: MonthlyReturn): String =
