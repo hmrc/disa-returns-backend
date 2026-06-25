@@ -20,13 +20,14 @@ import org.apache.pekko.stream.Materializer
 import org.apache.pekko.stream.scaladsl.{FileIO, Source}
 import org.apache.pekko.util.ByteString
 import play.api.Logging
+import play.api.http.Status.FORBIDDEN
 import play.api.libs.Files.TemporaryFileCreator
 import uk.gov.hmrc.disareturnsbackend.connectors.*
 import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.utils.Constants.XLSX_MIME_TYPE
 import uk.gov.hmrc.disareturnsbackend.utils.TempFileSupport
 import uk.gov.hmrc.disareturnsbackend.validators.fileupload.*
-import uk.gov.hmrc.http.HeaderCarrier
+import uk.gov.hmrc.http.{HeaderCarrier, UpstreamErrorResponse}
 
 import java.nio.file.Path
 import scala.concurrent.duration.NANOSECONDS
@@ -63,6 +64,11 @@ abstract class BaseFileUploadProcessingService[R, C <: FileUploadValidationConte
     fileUploadDetails: FileUploadDetails,
     validationOutcome: FileUploadValidatorResult
   ): Future[Unit]
+
+  protected def markUpscanExpired(
+    returnRecord: R,
+    fileUploadReference: String
+  ): Future[Boolean]
 
   protected def describeReturn(returnRecord: R): String
 
@@ -145,9 +151,25 @@ abstract class BaseFileUploadProcessingService[R, C <: FileUploadValidationConte
           logger.warn(s"${logPrefix(uploadReference)} Repository update returned false for $context")
           Future.successful(FileUploadProcessingResult.MonthlyReturnUpdateFailed)
         }
+      }.recoverWith {
+        case exception if isExpiredUpscanDownload(exception) =>
+          logger.warn(s"${logPrefix(uploadReference)} Upscan download URL expired for $context")
+          markUpscanExpired(returnRecord, uploadReference).map { updated =>
+            if (updated) FileUploadProcessingResult.UpscanExpired
+            else FileUploadProcessingResult.MonthlyReturnUpdateFailed
+          }
       }
     }
   }
+
+  private def isExpiredUpscanDownload(exception: Throwable): Boolean =
+    exception match {
+      case upstreamError: UpstreamErrorResponse =>
+        upstreamError.statusCode == FORBIDDEN &&
+        upstreamError.message.contains("<Code>AccessDenied</Code>") &&
+        upstreamError.message.contains("<Message>Request has expired</Message>")
+      case _                                    => false
+    }
 
   private def downloadFromUpscan(
     details: FileUploadDetails,

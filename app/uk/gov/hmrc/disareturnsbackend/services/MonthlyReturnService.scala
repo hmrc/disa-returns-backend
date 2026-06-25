@@ -382,6 +382,22 @@ class MonthlyReturnService @Inject() (
       Future.successful(false)
     }
 
+  def markUpscanExpired(
+    monthlyReturn: MonthlyReturn,
+    reference: String
+  ): Future[Boolean] =
+    if (monthlyReturn.getFileUpload(reference).exists(_.status == FileUploadStatus.UpscanSuccess)) {
+      val updatedMonthlyReturn = monthlyReturn.markUpscanExpired(reference, now())
+
+      if (updatedMonthlyReturn == monthlyReturn) {
+        Future.successful(false)
+      } else {
+        monthlyReturnRepository.upsert(updatedMonthlyReturn)
+      }
+    } else {
+      Future.successful(false)
+    }
+
   private def isWithinDeclarationPeriod: Boolean = {
     val dayOfMonth                        = LocalDate.now(clock).getDayOfMonth
     val isOnOrAfterDeclarationPeriodStart = dayOfMonth >= appConfig.declarationPeriodStart

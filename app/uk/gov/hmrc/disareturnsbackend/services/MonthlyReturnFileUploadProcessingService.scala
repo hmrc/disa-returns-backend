@@ -87,6 +87,15 @@ class MonthlyReturnFileUploadProcessingServiceImpl @Inject() (
       validationOutcome = validationOutcome
     )
 
+  override protected def markUpscanExpired(
+    monthlyReturn: MonthlyReturn,
+    fileUploadReference: String
+  ): Future[Boolean] =
+    monthlyReturnService.markUpscanExpired(
+      monthlyReturn = monthlyReturn,
+      reference = fileUploadReference
+    )
+
   override protected def describeReturn(monthlyReturn: MonthlyReturn): String =
     s"monthly return zReference [${monthlyReturn.zReference}], taxYear [${monthlyReturn.taxYear}], month [${monthlyReturn.month}]"
 }

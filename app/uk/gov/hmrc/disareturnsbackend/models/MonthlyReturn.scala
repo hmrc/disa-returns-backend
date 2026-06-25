@@ -132,6 +132,23 @@ final case class MonthlyReturn(
       fileUpload.reference != reference && fileUpload.hasMatchingChecksum(checksum)
     }
 
+  def markUpscanExpired(reference: String, updatedOn: Instant): MonthlyReturn = {
+    val updatedUploads = fileUploads.map {
+      case fileUpload if fileUpload.reference == reference && fileUpload.status == FileUploadStatus.UpscanSuccess =>
+        fileUpload.copy(status = FileUploadStatus.UpscanExpired)
+      case fileUpload                                                                                             => fileUpload
+    }
+
+    if (updatedUploads == fileUploads) {
+      this
+    } else {
+      copy(
+        fileUploads = updatedUploads,
+        lastUpdated = updatedOn
+      )
+    }
+  }
+
   def updateNilReturn(nilReturn: Boolean, updatedOn: Instant): MonthlyReturn =
     if (nilReturn) {
       val updatedReturn = copy(

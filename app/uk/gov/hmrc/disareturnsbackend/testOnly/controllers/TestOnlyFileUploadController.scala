@@ -18,6 +18,7 @@ package uk.gov.hmrc.disareturnsbackend.testOnly.controllers
 
 import play.api.libs.json.Json
 import play.api.Environment
+import play.api.http.Status.FORBIDDEN
 import play.api.mvc.{Action, AnyContent, ControllerComponents}
 import uk.gov.hmrc.disareturnsbackend.utils.Constants.XLSX_MIME_TYPE
 import uk.gov.hmrc.play.bootstrap.backend.controller.BackendController
@@ -49,6 +50,13 @@ class TestOnlyFileUploadController @Inject() (cc: ControllerComponents, environm
 
       case _ => BadRequest(Json.obj("message" -> "Invalid file name"))
     }
+  }
+
+  def getExpiredUpscanDownload(): Action[AnyContent] = Action {
+    Status(FORBIDDEN)(
+      """<?xml version="1.0" encoding="UTF-8"?>
+        |<Error><Code>AccessDenied</Code><Message>Request has expired</Message><X-Amz-Expires>21600</X-Amz-Expires></Error>""".stripMargin
+    ).as("application/xml")
   }
 
   private def contentType(filename: String): String =

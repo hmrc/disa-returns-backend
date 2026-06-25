@@ -1,7 +1,7 @@
 meta {
-  name: 01-200-blank-invalid-csv-processed
+  name: 21-200-upscan-expired
   type: http
-  seq: 1
+  seq: 21
 }
 
 get {
@@ -15,17 +15,14 @@ assert {
 }
 
 script:pre-request {
-  bru.setVar("validationFileName", "blank-invalid.csv");
-  bru.setVar("upscanReference", "validation-blank-invalid-csv");
+  bru.setVar("validationFileName", "upscan-expired.csv");
+  bru.setVar("upscanReference", "validation-upscan-expired");
   bru.setVar("callbackZReference", `Z${((Date.now() + Math.floor(Math.random() * 1000)) % 10000).toString().padStart(4, "0")}`);
   bru.setVar("validationMimeType", bru.getEnvVar("csvMimeType"));
   bru.setVar("validationChecksum", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
   bru.setVar("validationFileSize", 0);
-  bru.setVar("expectedUploadStatus", "VALIDATION_FAILURE");
-  bru.setVar("expectedValidationStatus", "InvalidFile");
-  bru.setVar("expectedRowsValidated", 0);
-  bru.setVar("expectedValidationErrors", 0);
-  bru.setVar("expectedInlineErrors", "[]");
+  bru.setVar("validationDownloadUrlOverride", `${bru.getEnvVar("baseUrl")}${bru.getEnvVar("servicePath")}/test-only/file-upload/monthly-expired-download`);
+  bru.setVar("expectedUploadStatus", "UPSCAN_EXPIRED");
   
   bru.setVar("runValidationHelpers", "true");
   
@@ -37,21 +34,17 @@ script:pre-request {
   if (waitResponse.status !== 200) {
     throw new Error(`Expected validation processing wait to respond with 200, got ${waitResponse.status}`);
   }
+  bru.setVar("validationDownloadUrlOverride", "");
 }
 
 tests {
-  test("processed as expected", function() {
+  test("marked as upscan expired", function() {
     const responseBody = res.body ?? res.getBody();
     const body = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
-    const details = body.fileUploadDetails;
-    const validation = details.validation;
-    expect(body.status).to.equal(bru.getVar("expectedUploadStatus"));
-    expect(details.fileName).to.equal(bru.getVar("validationFileName"));
-    expect(validation.status).to.equal(bru.getVar("expectedValidationStatus"));
-    expect(validation.rowsValidated).to.equal(Number(bru.getVar("expectedRowsValidated")));
-    expect(validation.validationErrors).to.equal(Number(bru.getVar("expectedValidationErrors")));
-    expect(validation.inlineErrors ?? []).to.deep.equal(JSON.parse(bru.getVar("expectedInlineErrors")));
-    expect(details.objectStoreFileLocation).to.equal(`disa-returns-backend/${bru.getVar("upscanReference")}`);
-    expect(details.objectStoreFileErrorsLocation).to.equal(undefined);
+    expect(body.status).to.equal("UPSCAN_EXPIRED");
+    expect(body.fileUploadDetails.fileName).to.equal(bru.getVar("validationFileName"));
+    expect(body.fileUploadDetails.validation).to.equal(undefined);
+    expect(body.fileUploadDetails.objectStoreFileLocation).to.equal(undefined);
+    expect(body.fileUploadDetails.objectStoreFileErrorsLocation).to.equal(undefined);
   });
 }

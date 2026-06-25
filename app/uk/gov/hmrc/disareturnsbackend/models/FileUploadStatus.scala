@@ -29,6 +29,7 @@ object FileUploadStatus {
   case object UpscanQuarantine extends FileUploadStatus { val value = "UPSCAN_QUARANTINE" }
   case object UpscanRejected extends FileUploadStatus { val value = "UPSCAN_REJECTED" }
   case object UpscanUnknown extends FileUploadStatus { val value = "UPSCAN_UNKNOWN" }
+  case object UpscanExpired extends FileUploadStatus { val value = "UPSCAN_EXPIRED" }
   case object Duplicate extends FileUploadStatus { val value = "DUPLICATE" }
   case object ValidationSuccess extends FileUploadStatus { val value = "VALIDATION_SUCCESS" }
   case object ValidationFailure extends FileUploadStatus { val value = "VALIDATION_FAILURE" }
@@ -40,6 +41,7 @@ object FileUploadStatus {
       UpscanQuarantine,
       UpscanRejected,
       UpscanUnknown,
+      UpscanExpired,
       Duplicate,
       ValidationSuccess,
       ValidationFailure

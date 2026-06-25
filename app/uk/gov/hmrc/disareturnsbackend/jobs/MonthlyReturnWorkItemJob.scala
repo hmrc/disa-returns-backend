@@ -75,6 +75,19 @@ class MonthlyReturnWorkItemJob @Inject() (
                 )
                 markWorkItemAndContinue(workItem, ProcessingStatus.Succeeded, workerId, "processing succeeded")
 
+              case FileUploadProcessingResult.UpscanExpired =>
+                logger.warn(
+                  s"[MonthlyReturnWorkItemJob][processWorkItem] Worker $workerId stopped processing expired upscan file upload for " +
+                    s"zReference [${item.zReference}], taxYear [${item.taxYear}], month [${item.month}] " +
+                    s"upload reference [${item.reference}]"
+                )
+                markWorkItemAndContinue(
+                  workItem,
+                  ProcessingStatus.PermanentlyFailed,
+                  workerId,
+                  "upscan download expired"
+                )
+
               case result @ (FileUploadProcessingResult.FileUploadNotFound |
                   FileUploadProcessingResult.FileUploadNotReady | FileUploadProcessingResult.MonthlyReturnUpdateFailed |
                   _: FileUploadProcessingResult.UnsupportedMimeType) =>

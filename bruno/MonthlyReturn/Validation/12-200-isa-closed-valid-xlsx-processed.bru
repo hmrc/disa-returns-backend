@@ -28,6 +28,8 @@ script:pre-request {
   bru.setVar("expectedInlineErrors", "[]");
   bru.setVar("expectedErrorsWorkbook", "false");
   
+  bru.setVar("runValidationHelpers", "true");
+  
   const response = await bru.runRequest("TestOnly/ValidationHelpers/01-202-ready-validation-callback");
   if (response.status !== 202) {
     throw new Error(`Expected READY callback to respond with 202, got ${response.status}`);

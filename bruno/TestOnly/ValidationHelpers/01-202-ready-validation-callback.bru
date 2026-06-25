@@ -18,7 +18,7 @@ body:json {
   {
     "reference": "{{upscanReference}}",
     "fileStatus": "READY",
-    "downloadUrl": "{{baseUrl}}{{servicePath}}/test-only/file-upload/monthly/{{validationFileName}}",
+    "downloadUrl": "{{validationDownloadUrl}}",
     "uploadDetails": {
       "fileName": "{{validationFileName}}",
       "fileMimeType": "{{validationMimeType}}",
@@ -32,10 +32,20 @@ body:json {
 script:pre-request {
   const baseUrl = bru.getEnvVar("baseUrl");
   const servicePath = bru.getEnvVar("servicePath");
+  
+  if (bru.getVar("runValidationHelpers") !== "true") {
+    req.setMethod("GET");
+    req.setUrl(`${baseUrl}${servicePath}/test-only/clock`);
+    return;
+  }
+  
   const zReference = bru.getVar("callbackZReference");
   const taxYear = bru.getEnvVar("taxYear");
   const month = bru.getEnvVar("month");
   const uploadReference = bru.getVar("upscanReference");
+  const validationDownloadUrlOverride = bru.getVar("validationDownloadUrlOverride");
+  const validationDownloadUrl = validationDownloadUrlOverride || `${baseUrl}${servicePath}/test-only/file-upload/monthly/${bru.getVar("validationFileName")}`;
+  bru.setVar("validationDownloadUrl", validationDownloadUrl);
   
   const clockResponse = await bru.runRequest("TestOnly/Clock/04-200-set-clock-inside-declaration-period");
   

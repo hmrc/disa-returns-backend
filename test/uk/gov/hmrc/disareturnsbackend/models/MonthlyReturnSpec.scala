@@ -429,6 +429,37 @@ class MonthlyReturnSpec extends SpecBase {
     }
   }
 
+  "markUpscanExpired" - {
+
+    "must mark an UpscanSuccess upload as UpscanExpired" in {
+      val monthlyReturn = emptyMonthlyReturn.copy(
+        fileUploads = List(
+          FileUpload(testUploadReference, FileUploadStatus.UpscanSuccess, testCreatedOn, Some(fileUploadDetails)),
+          FileUpload("other-reference", FileUploadStatus.UpscanSuccess, testCreatedOn, Some(fileUploadDetails))
+        )
+      )
+
+      val result = monthlyReturn.markUpscanExpired(testUploadReference, testUpscanCompletedOn)
+
+      result.fileUploads.head.status mustBe FileUploadStatus.UpscanExpired
+      result.fileUploads.head.fileUploadDetails mustBe monthlyReturn.fileUploads.head.fileUploadDetails
+      result.fileUploads(1) mustBe monthlyReturn.fileUploads(1)
+      result.lastUpdated mustBe testUpscanCompletedOn
+    }
+
+    "must leave the return unchanged when the upload is not UpscanSuccess" in {
+      val monthlyReturn = emptyMonthlyReturn.copy(
+        fileUploads = List(FileUpload(testUploadReference, FileUploadStatus.Created, testCreatedOn))
+      )
+
+      monthlyReturn.markUpscanExpired(testUploadReference, testUpscanCompletedOn) mustBe monthlyReturn
+    }
+
+    "must leave the return unchanged when the upload does not exist" in {
+      emptyMonthlyReturn.markUpscanExpired(testUploadReference, testUpscanCompletedOn) mustBe emptyMonthlyReturn
+    }
+  }
+
   "FileUploadStatus format" - {
 
     Seq(
@@ -437,6 +468,7 @@ class MonthlyReturnSpec extends SpecBase {
       UpscanQuarantine                   -> upscanQuarantineStatusString,
       UpscanRejected                     -> upscanRejectedStatusString,
       UpscanUnknown                      -> upscanUnknownStatusString,
+      UpscanExpired                      -> upscanExpiredStatusString,
       Duplicate                          -> duplicateStatusString,
       FileUploadStatus.ValidationSuccess -> validationSuccessStatusString,
       FileUploadStatus.ValidationFailure -> validationFailureStatusString
