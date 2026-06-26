@@ -387,15 +387,36 @@ class MonthlyReturnService @Inject() (
     reference: String
   ): Future[Boolean] =
     if (monthlyReturn.getFileUpload(reference).exists(_.status == FileUploadStatus.UpscanSuccess)) {
+      logger.info(
+        s"[MonthlyReturnService][markUpscanExpired] Marking upscan as expired for zReference [${monthlyReturn.zReference}], taxYear [${monthlyReturn.taxYear}], month [${monthlyReturn.month}], upload reference [$reference]"
+      )
+
       val updatedMonthlyReturn = monthlyReturn.markUpscanExpired(reference, now())
 
       if (updatedMonthlyReturn == monthlyReturn) {
+        logger.warn(
+          s"[MonthlyReturnService][markUpscanExpired] No change made when marking upscan as expired for zReference [${monthlyReturn.zReference}], taxYear [${monthlyReturn.taxYear}], month [${monthlyReturn.month}], upload reference [$reference]"
+        )
         Future.successful(false)
       } else {
-        monthlyReturnRepository.upsert(updatedMonthlyReturn)
+        monthlyReturnRepository.upsert(updatedMonthlyReturn).map { updated =>
+          logger.info(
+            s"[MonthlyReturnService][markUpscanExpired] Marked upscan as expired for zReference [${monthlyReturn.zReference}], taxYear [${monthlyReturn.taxYear}], month [${monthlyReturn.month}], upload reference [$reference]"
+          )
+          updated
+        }
       }
     } else {
+      logger.warn(
+        s"[MonthlyReturnService][markUpscanExpired] No UpscanSuccess file upload found to mark expired for zReference [${monthlyReturn.zReference}], taxYear [${monthlyReturn.taxYear}], month [${monthlyReturn.month}], upload reference [$reference]"
+      )
       Future.successful(false)
+    }.recoverWith { case NonFatal(exception) =>
+      logger.error(
+        s"[MonthlyReturnService][markUpscanExpired] Failed to mark upscan as expired for zReference [${monthlyReturn.zReference}], taxYear [${monthlyReturn.taxYear}], month [${monthlyReturn.month}], upload reference [$reference]",
+        exception
+      )
+      Future.failed(exception)
     }
 
   private def isWithinDeclarationPeriod: Boolean = {
