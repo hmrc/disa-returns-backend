@@ -15,11 +15,20 @@ assert {
 }
 
 script:pre-request {
+  const baseUrl = bru.getEnvVar("baseUrl");
+  const servicePath = bru.getEnvVar("servicePath");
+  
+  if (bru.getVar("runValidationHelpers") !== "true") {
+    req.setUrl(`${baseUrl}${servicePath}/test-only/clock`);
+    return;
+  }
+  
   const maxAttempts = 15;
   const pollIntervalMs = Number(bru.getEnvVar("validationProcessingPollIntervalMs") ?? 1000);
   const expectedStatus = bru.getVar("expectedUploadStatus");
-  const url = `${bru.getEnvVar("baseUrl")}${bru.getEnvVar("servicePath")}/monthly/${bru.getVar("callbackZReference")}/${bru.getEnvVar("taxYear")}/${bru.getEnvVar("month")}/files/${bru.getVar("upscanReference")}`;
+  const url = `${baseUrl}${servicePath}/monthly/${bru.getVar("callbackZReference")}/${bru.getEnvVar("taxYear")}/${bru.getEnvVar("month")}/files/${bru.getVar("upscanReference")}`;
   let lastStatus = "not polled";
+  let statusMatched = false;
   
   const clockResponse = await bru.runRequest("TestOnly/Clock/03-200-reset-clock");
   if (clockResponse.status !== 200) {
@@ -32,7 +41,8 @@ script:pre-request {
       lastStatus = response.data?.status ?? "missing status";
   
       if (lastStatus === expectedStatus) {
-        return;
+        statusMatched = true;
+        break;
       }
     } catch (error) {
       lastStatus = `HTTP ${error.response?.status ?? "no response"}`;
@@ -43,5 +53,10 @@ script:pre-request {
     }
   }
   
-  throw new Error(`Expected validation status [${expectedStatus}] after ${maxAttempts} poll attempts, last status was [${lastStatus}]. If this stays at [UPSCAN_SUCCESS], the MonthlyReturnWorkItemJob is not processing validation work items. Check backend logs for [MonthlyReturnWorkItemJob][processWorkItem] and restart backend after object-store/internal-auth are healthy. URL: ${url}. Setup return [${bru.getVar("validationSetupReturnStatus")}] ${bru.getVar("validationSetupReturnUrl")}. Setup file upload [${bru.getVar("validationSetupFileUploadStatus")}] ${bru.getVar("validationSetupFileUploadUrl")}`);
+  if (!statusMatched) {
+    bru.setVar("runValidationHelpers", "false");
+    throw new Error(`Expected validation status [${expectedStatus}] after ${maxAttempts} poll attempts, last status was [${lastStatus}]. If this stays at [UPSCAN_SUCCESS], the MonthlyReturnWorkItemJob is not processing validation work items. Check backend logs for [MonthlyReturnWorkItemJob][processWorkItem] and restart backend after object-store/internal-auth are healthy. URL: ${url}. Setup return [${bru.getVar("validationSetupReturnStatus")}] ${bru.getVar("validationSetupReturnUrl")}. Setup file upload [${bru.getVar("validationSetupFileUploadStatus")}] ${bru.getVar("validationSetupFileUploadUrl")}`);
+  }
+  
+  bru.setVar("runValidationHelpers", "false");
 }

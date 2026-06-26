@@ -28,6 +28,7 @@ import uk.gov.hmrc.disareturnsbackend.connectors.{ObjectStoreConnector, UpscanCo
 import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.validators.fileupload.*
 import uk.gov.hmrc.disareturnsbackend.validators.fileupload.monthly.{MonthlyReturnFileUploadValidationContext, MonthlyReturnFileValidatorSelector}
+import uk.gov.hmrc.http.UpstreamErrorResponse
 
 import java.nio.file.Path
 import scala.concurrent.{Future, Promise}
@@ -102,6 +103,25 @@ class MonthlyReturnFileUploadProcessingServiceSpec extends SpecBase {
         "download failed"
       )
 
+      verify(fixture.selector, never()).select(any[String])
+      verify(fixture.validator, never()).validate(any[Path], any[Path], any[MonthlyReturnFileUploadValidationContext])
+      verify(fixture.objectStoreConnector, never()).putFile(any[String], any[Path], any[String])(any)
+      verify(fixture.monthlyReturnService, never())
+        .updateFileUploadProcessingDetails(any[MonthlyReturn], any[String], any, any, any)
+    }
+
+    "must mark the upload as UpscanExpired when the upscan download URL has expired" in {
+      val expiredUpscanResponse =
+        "<Error><Code>AccessDenied</Code><Message>Request has expired</Message><X-Amz-Expires>21600</X-Amz-Expires></Error>"
+      val fixture               = new Fixture(download = Some(Future.failed(UpstreamErrorResponse(expiredUpscanResponse, 403))))
+
+      fixture.service.process(fixture.monthlyReturn, testUploadReference).futureValue mustBe
+        FileUploadProcessingResult.UpscanExpired
+
+      verify(fixture.monthlyReturnService).markUpscanExpired(
+        eqTo(fixture.monthlyReturn),
+        eqTo(testUploadReference)
+      )
       verify(fixture.selector, never()).select(any[String])
       verify(fixture.validator, never()).validate(any[Path], any[Path], any[MonthlyReturnFileUploadValidationContext])
       verify(fixture.objectStoreConnector, never()).putFile(any[String], any[Path], any[String])(any)
@@ -232,7 +252,9 @@ class MonthlyReturnFileUploadProcessingServiceSpec extends SpecBase {
     originalUpload: Future[String] = Future.successful("original-location"),
     errorsUpload: Future[String] = Future.successful("errors-location"),
     repositoryUpdate: Boolean = true,
+    statusUpdate: Boolean = true,
     downloadSource: Source[ByteString, ?] = Source.single(ByteString("file-content")),
+    download: Option[Future[Source[ByteString, ?]]] = None,
     auditResult: Future[Unit] = Future.successful(())
   ) {
     val validator: FileUploadValidator[MonthlyReturnFileUploadValidationContext] =
@@ -249,7 +271,7 @@ class MonthlyReturnFileUploadProcessingServiceSpec extends SpecBase {
     val monthlyReturnService: MonthlyReturnService                               = mock[MonthlyReturnService]
 
     when(upscanConnector.downloadFile(any[String])(any, any, any))
-      .thenReturn(Future.successful(downloadSource))
+      .thenReturn(download.getOrElse(Future.successful(downloadSource)))
     when(selector.select(any[String])).thenReturn(selectValidator)
     when(validator.validate(any[Path], any[Path], any[MonthlyReturnFileUploadValidationContext]))
       .thenReturn(Future.successful(validationOutcome))
@@ -264,6 +286,8 @@ class MonthlyReturnFileUploadProcessingServiceSpec extends SpecBase {
         .audit(any[MonthlyReturn], any[String], any[FileUploadDetails], any[FileUploadValidatorResult])
     )
       .thenReturn(auditResult)
+    when(monthlyReturnService.markUpscanExpired(any[MonthlyReturn], any[String]))
+      .thenReturn(Future.successful(statusUpdate))
 
     val service = new MonthlyReturnFileUploadProcessingServiceImpl(
       temporaryFileCreator = inject[TemporaryFileCreator],

@@ -29,6 +29,7 @@ object FileUploadProcessingResult {
 
   case object FileUploadNotFound extends FileUploadProcessingResult
   case object FileUploadNotReady extends FileUploadProcessingResult
+  case object UpscanExpired extends FileUploadProcessingResult
   final case class UnsupportedMimeType(fileMimeType: String) extends FileUploadProcessingResult
   case object MonthlyReturnUpdateFailed extends FileUploadProcessingResult
 }

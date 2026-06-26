@@ -636,6 +636,63 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
         verify(mockMonthlyReturnRepository, never()).upsert(any[MonthlyReturn])
       }
     }
+
+    "markUpscanExpired" - {
+
+      "must mark an UpscanSuccess file upload as UpscanExpired and persist the MonthlyReturn" in {
+        val returnWithUpload   = monthlyReturn.copy(fileUploads = List(completedFileUpload()))
+        val expectedFileUpload = completedFileUpload().copy(status = FileUploadStatus.UpscanExpired)
+        val expectedReturn     = returnWithUpload.copy(fileUploads = List(expectedFileUpload), lastUpdated = testCreatedOn)
+
+        when(mockMonthlyReturnRepository.upsert(eqTo(expectedReturn))).thenReturn(Future.successful(true))
+
+        service
+          .markUpscanExpired(
+            monthlyReturn = returnWithUpload,
+            reference = uploadReference
+          )
+          .futureValue mustBe true
+      }
+
+      "must return false when the file upload is already UpscanExpired" in {
+        val returnWithUpload = monthlyReturn.copy(
+          fileUploads = List(completedFileUpload().copy(status = FileUploadStatus.UpscanExpired))
+        )
+
+        service
+          .markUpscanExpired(
+            monthlyReturn = returnWithUpload,
+            reference = uploadReference
+          )
+          .futureValue mustBe false
+
+        verify(mockMonthlyReturnRepository, never()).upsert(any[MonthlyReturn])
+      }
+
+      "must return false when the file upload is not UpscanSuccess" in {
+        val returnWithUpload = monthlyReturn.copy(fileUploads = List(createdFileUpload()))
+
+        service
+          .markUpscanExpired(
+            monthlyReturn = returnWithUpload,
+            reference = uploadReference
+          )
+          .futureValue mustBe false
+
+        verify(mockMonthlyReturnRepository, never()).upsert(any[MonthlyReturn])
+      }
+
+      "must return false when the file upload reference does not exist" in {
+        service
+          .markUpscanExpired(
+            monthlyReturn = monthlyReturn,
+            reference = uploadReference
+          )
+          .futureValue mustBe false
+
+        verify(mockMonthlyReturnRepository, never()).upsert(any[MonthlyReturn])
+      }
+    }
   }
 
   private def buildService(now: Instant, serviceAppConfig: AppConfig = appConfig): MonthlyReturnService =

@@ -199,6 +199,7 @@ Stored file upload after a successful callback:
 
 After Upscan success, file upload processing downloads the file, validates it, uploads the original file to object-store as the upload reference, and stores validation metadata under `fileUploadDetails`.
 Uploads stored with status `DUPLICATE` skip this processing.
+If the Upscan download URL has expired before processing downloads it, the upload is stored with status `UPSCAN_EXPIRED`; the work item is marked as `PermanentlyFailed` and is not retried.
 
 Stored successful validation example:
 
@@ -507,10 +508,11 @@ Otherwise the routes will not be available.
 | `DELETE /disa-returns-backend/test-only/monthly-returns` | `bruno/TestOnly/MonthlyReturns` | Remove all backend monthly returns from the local database before automation runs. |
 | `DELETE /disa-returns-backend/test-only/monthly-return-file-upload-work-items` | `bruno/TestOnly/MonthlyReturnFileUploadWorkItems` | Delete queued or failed local file-upload validation work-item documents from `monthlyReturnFileUploadWorkItems`. |
 | `GET /disa-returns-backend/test-only/file-upload/monthly/:filename` | `bruno/MonthlyReturn/Validation` | Serve copied local validation tests from `conf/test-only/file-upload/monthly` so Bruno can use them as Upscan `downloadUrl` values. |
+| `GET /disa-returns-backend/test-only/file-upload/monthly-expired-download` | `bruno/MonthlyReturn/Validation/21-200-upscan-expired` | Return an S3-style expired Upscan download response so Bruno can verify `UPSCAN_EXPIRED` processing. |
 
 `bruno/TestOnly/MonthlyReturns/01-204-clear-monthly-returns` also clears monthly returns from `disa-returns-submission` before calling the backend cleanup route, so Bruno scenarios start from a clean declaration source of truth.
 
-The monthly file-upload test endpoint only serves simple `.csv` and `.xlsx` filenames copied into `conf/test-only/file-upload/monthly`. The files are runtime resources so they are available when running locally or through service-manager with the test-only router enabled.
+The monthly file-upload test endpoint only serves simple `.csv` and `.xlsx` filenames copied into `conf/test-only/file-upload/monthly`. The files are runtime resources so they are available when running locally or through service-manager with the test-only router enabled. The expired-download endpoint does not serve a file; it returns `403 Forbidden` with an S3 `AccessDenied` / `Request has expired` XML body.
 
 Monthly file-upload validation tests are maintained in `it/resources/file-upload/monthly` for integration tests and copied to `conf/test-only/file-upload/monthly` for local Bruno/service-manager use. The same filenames exist in both locations.
 
@@ -590,14 +592,16 @@ Many later requests run one of these setup requests from their pre-request scrip
 
 Run executable Bruno folders explicitly against a running local service, for example `bru run MonthlyReturn/Get --env Local --bail`. The setup scripts create the data each folder needs. The Upscan callback folder creates a fresh non-nil monthly return with `callbackZReference`, creates a file upload placeholder with `POST /files`, gets that file upload with `GET /files/:reference`, sends a READY callback, then gets the monthly return to confirm the completed file upload was recorded. It also includes a duplicate callback flow that creates a second upload with the same checksum and asserts the stored status is `DUPLICATE`.
 
-The Validation folder uses the copied monthly file-upload tests as local Upscan downloads. Each validation request creates a fresh file-upload scenario, sends a READY callback with a test-only file URL, waits for `validationProcessingDelayMs`, then asserts the final validation result and object-store locations.
+The Validation folder uses the copied monthly file-upload tests as local Upscan downloads. Each validation request creates a fresh file-upload scenario, sends a READY callback with a test-only file URL, waits for processing to reach the expected upload status, then asserts the final validation result and object-store locations. Scenario `21-200-upscan-expired` uses the expired-download test endpoint and asserts the terminal `UPSCAN_EXPIRED` status.
 
-`validationProcessingDelayMs` is defined in `bruno/environments/Local.bru` and defaults to `10000`. It is used by the processed validation requests in `bruno/MonthlyReturn/Validation`, currently the test-specific `01` to `20` checks. The delay gives the asynchronous monthly return file-upload work-item job time to download, validate, upload to object-store, and update Mongo before Bruno performs the final GET/assertions.
+`bruno/TestOnly/ValidationHelpers` contains support requests used by the validation scenarios. They are guarded with the runtime variable `runValidationHelpers`, so they no-op safely if the whole collection runs them directly.
+
+`validationProcessingPollIntervalMs` is defined in `bruno/environments/Local.bru` and defaults to `1000`. It is used by the processed validation requests in `bruno/MonthlyReturn/Validation`, currently the test-specific `01` to `21` checks. The polling gives the asynchronous monthly return file-upload work-item job time to download, validate, upload to object-store, and update Mongo before Bruno performs the final GET/assertions.
 
 To change it permanently for local runs, edit `bruno/environments/Local.bru`:
 
 ```text
-validationProcessingDelayMs: 15000
+validationProcessingPollIntervalMs: 1500
 ```
 
 Generated Bruno `zReference` values are set as runtime variables with `bru.setVar`, not environment variables, so running Bruno should not rewrite `bruno/environments/Local.bru`.

@@ -55,6 +55,7 @@ class MonthlyReturnWorkItemJobSpec extends SpecBase {
 
     Seq(
       FileUploadProcessingResult.Processed(validation, Some("original"), None) -> ProcessingStatus.Succeeded,
+      FileUploadProcessingResult.UpscanExpired                                 -> ProcessingStatus.PermanentlyFailed,
       FileUploadProcessingResult.FileUploadNotFound                            -> ProcessingStatus.PermanentlyFailed,
       FileUploadProcessingResult.FileUploadNotReady                            -> ProcessingStatus.PermanentlyFailed,
       FileUploadProcessingResult.MonthlyReturnUpdateFailed                     -> ProcessingStatus.PermanentlyFailed,
