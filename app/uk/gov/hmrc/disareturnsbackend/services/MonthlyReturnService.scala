@@ -406,18 +406,19 @@ class MonthlyReturnService @Inject() (
           updated
         }
       }
-    } else {
-      logger.warn(
-        s"[MonthlyReturnService][markUpscanExpired] No UpscanSuccess file upload found to mark expired for zReference [${monthlyReturn.zReference}], taxYear [${monthlyReturn.taxYear}], month [${monthlyReturn.month}], upload reference [$reference]"
-      )
-      Future.successful(false)
-    }.recoverWith { case NonFatal(exception) =>
-      logger.error(
-        s"[MonthlyReturnService][markUpscanExpired] Failed to mark upscan as expired for zReference [${monthlyReturn.zReference}], taxYear [${monthlyReturn.taxYear}], month [${monthlyReturn.month}], upload reference [$reference]",
-        exception
-      )
-      Future.failed(exception)
-    }
+    } else
+      {
+        logger.warn(
+          s"[MonthlyReturnService][markUpscanExpired] No UpscanSuccess file upload found to mark expired for zReference [${monthlyReturn.zReference}], taxYear [${monthlyReturn.taxYear}], month [${monthlyReturn.month}], upload reference [$reference]"
+        )
+        Future.successful(false)
+      }.recoverWith { case NonFatal(exception) =>
+        logger.error(
+          s"[MonthlyReturnService][markUpscanExpired] Failed to mark upscan as expired for zReference [${monthlyReturn.zReference}], taxYear [${monthlyReturn.taxYear}], month [${monthlyReturn.month}], upload reference [$reference]",
+          exception
+        )
+        Future.failed(exception)
+      }
 
   private def isWithinDeclarationPeriod: Boolean = {
     val dayOfMonth                        = LocalDate.now(clock).getDayOfMonth
