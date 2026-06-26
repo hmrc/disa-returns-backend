@@ -26,7 +26,6 @@ import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.repositories.{MonthlyReturnFileUploadWorkItemRepository, MonthlyReturnRepository}
 import uk.gov.hmrc.mongo.workitem.{ProcessingStatus, WorkItem}
 
-import java.time.{Clock, ZoneOffset}
 import scala.concurrent.Future
 
 class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
@@ -37,8 +36,7 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
   private val service                                       = new UpscanCallbackService(
     mockMonthlyReturnRepository,
     mockMonthlyReturnFileUploadWorkItemRepository,
-    upscanCallbackMapper,
-    Clock.fixed(testCreatedOn, ZoneOffset.UTC)
+    upscanCallbackMapper
   )
 
   private val zReference                = testZReference
@@ -130,7 +128,18 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
       )
 
       stubGetMonthlyReturn(Future.successful(Some(monthlyReturnWithDuplicateChecksum)))
-      when(mockMonthlyReturnRepository.upsert(any[MonthlyReturn])).thenReturn(Future.successful(true))
+      when(
+        mockMonthlyReturnRepository.completeUpscan(
+          any[String],
+          any[String],
+          any[Int],
+          any[String],
+          any[FileUploadStatus],
+          any[Option[FileUploadDetails]],
+          any[Option[FileUploadFailureReason]],
+          any[Option[String]]
+        )
+      ).thenReturn(Future.successful(true))
 
       service
         .monthlyReturnUpscanCallback(
@@ -147,8 +156,7 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
 
       verifyMonthlyReturnUpserted(
         FileUploadStatus.Duplicate,
-        Some(expectedFileUploadDetails),
-        monthlyReturn = monthlyReturnWithDuplicateChecksum
+        Some(expectedFileUploadDetails)
       )
       verifyNoMonthlyReturnFileUploadWorkItemEnqueued()
     }
@@ -225,7 +233,18 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
       )
 
       stubGetMonthlyReturn(Future.successful(Some(declaredReturn)))
-      when(mockMonthlyReturnRepository.upsert(any[MonthlyReturn])).thenReturn(Future.successful(true))
+      when(
+        mockMonthlyReturnRepository.completeUpscan(
+          any[String],
+          any[String],
+          any[Int],
+          any[String],
+          any[FileUploadStatus],
+          any[Option[FileUploadDetails]],
+          any[Option[FileUploadFailureReason]],
+          any[Option[String]]
+        )
+      ).thenReturn(Future.successful(true))
       stubEnqueueMonthlyReturnFileUploadWorkItem()
 
       service
@@ -402,30 +421,47 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
   private def stubCompleteUpscan(result: Future[Boolean]): Unit =
     stubGetMonthlyReturn(Future.successful(Some(monthlyReturnWithCreatedUpload)))
 
-    when(mockMonthlyReturnRepository.upsert(any[MonthlyReturn])).thenReturn(result)
+    when(
+      mockMonthlyReturnRepository.completeUpscan(
+        any[String],
+        any[String],
+        any[Int],
+        any[String],
+        any[FileUploadStatus],
+        any[Option[FileUploadDetails]],
+        any[Option[FileUploadFailureReason]],
+        any[Option[String]]
+      )
+    ).thenReturn(result)
 
   private def verifyMonthlyReturnUpserted(
     status: FileUploadStatus,
     fileUploadDetails: Option[FileUploadDetails],
     failureReason: Option[FileUploadFailureReason] = None,
-    failureMessage: Option[String] = None,
-    monthlyReturn: MonthlyReturn = monthlyReturnWithCreatedUpload
+    failureMessage: Option[String] = None
   ): Unit =
-    verify(mockMonthlyReturnRepository).upsert(
-      eqTo(
-        monthlyReturn.completeUpscan(
-          reference = upscanReference,
-          status = status,
-          upscanCompletedOn = testCreatedOn,
-          fileUploadDetails = fileUploadDetails,
-          failureReason = failureReason,
-          failureMessage = failureMessage
-        )
-      )
+    verify(mockMonthlyReturnRepository).completeUpscan(
+      eqTo(zReference),
+      eqTo(taxYear),
+      eqTo(month),
+      eqTo(upscanReference),
+      eqTo(status),
+      eqTo(fileUploadDetails),
+      eqTo(failureReason),
+      eqTo(failureMessage)
     )
 
   private def verifyNoMonthlyReturnUpserted(): Unit =
-    verify(mockMonthlyReturnRepository, never()).upsert(any[MonthlyReturn])
+    verify(mockMonthlyReturnRepository, never()).completeUpscan(
+      any[String],
+      any[String],
+      any[Int],
+      any[String],
+      any[FileUploadStatus],
+      any[Option[FileUploadDetails]],
+      any[Option[FileUploadFailureReason]],
+      any[Option[String]]
+    )
 
   private def monthlyReturnWithCreatedUpload: MonthlyReturn =
     monthlyReturn.copy(

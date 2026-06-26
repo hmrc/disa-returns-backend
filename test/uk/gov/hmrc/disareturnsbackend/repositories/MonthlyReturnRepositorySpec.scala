@@ -17,11 +17,13 @@
 package uk.gov.hmrc.disareturnsbackend.repositories
 
 import base.SpecBase
+import org.mongodb.scala.SingleObservableFuture
 import uk.gov.hmrc.disareturnsbackend.config.AppConfig
 import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.mongo.test.DefaultPlayMongoRepositorySupport
 
 import java.time.{Clock, Instant, ZoneOffset}
+import scala.concurrent.Future
 
 class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoRepositorySupport[MonthlyReturn] {
 
@@ -55,13 +57,13 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
       "must return a MonthlyReturn by zReference, taxYear and month" in {
         val monthlyReturn = buildMonthlyReturn()
 
-        repository.upsert(monthlyReturn).futureValue
+        insertMonthlyReturn(monthlyReturn)
 
         repository.get(zReference, taxYear, month).futureValue.value mustBe monthlyReturn.copy(lastUpdated = fixedNow)
       }
 
       "must not return a MonthlyReturn with a different key" in {
-        repository.upsert(buildMonthlyReturn()).futureValue
+        insertMonthlyReturn(buildMonthlyReturn())
 
         repository.get(zReference, taxYear, 6).futureValue mustBe None
       }
@@ -134,34 +136,268 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
       }
     }
 
-    "upsert" - {
+    "updateNilReturn" - {
 
-      "must insert a MonthlyReturn and set lastUpdated" in {
-        val monthlyReturn = buildMonthlyReturn(lastUpdated = existingUpdated)
+      "must update nilReturn atomically and clear file uploads" in {
+        val monthlyReturn = buildMonthlyReturn(fileUploads = List(createdFileUpload(testUploadReference)))
+        insertMonthlyReturn(monthlyReturn)
 
-        repository.upsert(monthlyReturn).futureValue mustBe true
-
-        repository.get(zReference, taxYear, month).futureValue.value mustBe monthlyReturn.copy(lastUpdated = fixedNow)
+        repository.updateNilReturn(zReference, taxYear, month, nilReturn = true).futureValue mustBe
+          UpdateNilReturnRepositoryResult.NilReturnUpdated(
+            monthlyReturn.copy(nilReturn = true, fileUploads = Nil, lastUpdated = fixedNow)
+          )
       }
 
-      "must replace an existing MonthlyReturn for the same key" in {
-        val existing    = buildMonthlyReturn(
-          fileUploads = List(createdFileUpload(reference = "old-reference"))
-        )
-        val replacement = buildMonthlyReturn(
-          fileUploads = List(createdFileUpload(reference = "new-reference"))
-        )
+      "must return MonthlyReturnNotFound when no monthly return exists" in {
+        repository.updateNilReturn(zReference, taxYear, month, nilReturn = true).futureValue mustBe
+          UpdateNilReturnRepositoryResult.MonthlyReturnNotFound
+      }
 
-        repository.upsert(existing).futureValue
-        repository.upsert(replacement).futureValue mustBe true
+      "must not update lastUpdated when nilReturn is unchanged" in {
+        val monthlyReturn = buildMonthlyReturn(nilReturn = false, lastUpdated = existingUpdated)
+        insertMonthlyReturn(monthlyReturn)
+
+        repository.updateNilReturn(zReference, taxYear, month, nilReturn = false).futureValue mustBe
+          UpdateNilReturnRepositoryResult.NilReturnUpdated(monthlyReturn.copy(lastUpdated = fixedNow))
+      }
+    }
+
+    "createFileUpload" - {
+
+      "must append a new upload without replacing existing uploads" in {
+        val existingReference = "existing-reference"
+        insertMonthlyReturn(buildMonthlyReturn(fileUploads = List(createdFileUpload(existingReference))))
+
+        val result = repository.createFileUpload(zReference, taxYear, month, testUploadReference).futureValue
+
+        val updatedReturn = result.asInstanceOf[CreateFileUploadRepositoryResult.FileUploadCreated].monthlyReturn
+        updatedReturn.fileUploads.map(_.reference) must contain theSameElementsInOrderAs List(
+          existingReference,
+          testUploadReference
+        )
+        updatedReturn.lastUpdated mustBe fixedNow
+      }
+
+      "must return FileUploadAlreadyExists when the reference already exists" in {
+        insertMonthlyReturn(buildMonthlyReturn(fileUploads = List(createdFileUpload(testUploadReference))))
+
+        repository.createFileUpload(zReference, taxYear, month, testUploadReference).futureValue mustBe
+          CreateFileUploadRepositoryResult.FileUploadAlreadyExists
+      }
+
+      "must return MonthlyReturnNotFound for nil returns" in {
+        insertMonthlyReturn(buildMonthlyReturn(nilReturn = true))
+
+        repository.createFileUpload(zReference, taxYear, month, testUploadReference).futureValue mustBe
+          CreateFileUploadRepositoryResult.MonthlyReturnNotFound
+      }
+
+      "must preserve concurrent upload creates for different references" in {
+        val firstReference  = "first-reference"
+        val secondReference = "second-reference"
+        insertMonthlyReturn(buildMonthlyReturn())
+
+        val firstCreate  = repository.createFileUpload(zReference, taxYear, month, firstReference)
+        val secondCreate = repository.createFileUpload(zReference, taxYear, month, secondReference)
+
+        Future.sequence(Seq(firstCreate, secondCreate)).futureValue
 
         val stored = repository.get(zReference, taxYear, month).futureValue.value
-        stored.fileUploads.map(_.reference) mustBe List("new-reference")
+        stored.fileUploads.map(_.reference) must contain theSameElementsAs Seq(firstReference, secondReference)
+      }
+    }
+
+    "deleteFileUpload" - {
+
+      "must remove only the matching upload" in {
+        val keptReference = "kept-reference"
+        insertMonthlyReturn(
+          buildMonthlyReturn(fileUploads =
+            List(createdFileUpload(testUploadReference), createdFileUpload(keptReference))
+          )
+        )
+
+        repository.deleteFileUpload(zReference, taxYear, month, testUploadReference).futureValue mustBe true
+
+        val stored = repository.get(zReference, taxYear, month).futureValue.value
+        stored.fileUploads.map(_.reference) mustBe List(keptReference)
         stored.lastUpdated mustBe fixedNow
+      }
+
+      "must return false when the upload does not exist" in {
+        insertMonthlyReturn(buildMonthlyReturn())
+
+        repository.deleteFileUpload(zReference, taxYear, month, testUploadReference).futureValue mustBe false
+      }
+    }
+
+    "completeUpscan" - {
+
+      "must update only the matching upload and preserve other uploads" in {
+        val otherReference = "other-reference"
+        insertMonthlyReturn(
+          buildMonthlyReturn(fileUploads =
+            List(createdFileUpload(testUploadReference), createdFileUpload(otherReference))
+          )
+        )
+
+        repository
+          .completeUpscan(
+            zReference,
+            taxYear,
+            month,
+            testUploadReference,
+            FileUploadStatus.UpscanSuccess,
+            Some(fileUploadDetails)
+          )
+          .futureValue mustBe true
+
+        val stored          = repository.get(zReference, taxYear, month).futureValue.value
+        val completedUpload = stored.getFileUpload(testUploadReference).value
+        completedUpload.status mustBe FileUploadStatus.UpscanSuccess
+        completedUpload.fileUploadDetails.value.upscanCompletedOn mustBe Some(fixedNow)
+        stored.getFileUpload(otherReference).value.status mustBe FileUploadStatus.Created
+      }
+
+      "must return false when the upload is not in CREATED status" in {
+        insertMonthlyReturn(buildMonthlyReturn(fileUploads = List(completedFileUpload(testUploadReference))))
+
+        repository
+          .completeUpscan(
+            zReference,
+            taxYear,
+            month,
+            testUploadReference,
+            FileUploadStatus.UpscanSuccess,
+            Some(fileUploadDetails)
+          )
+          .futureValue mustBe false
+      }
+
+      "must preserve uploads added after an earlier read while completing another upload" in {
+        val laterReference = "later-reference"
+        val earlierRead    = buildMonthlyReturn(fileUploads = List(createdFileUpload(testUploadReference)))
+        insertMonthlyReturn(earlierRead)
+        repository.createFileUpload(zReference, taxYear, month, laterReference).futureValue
+
+        repository
+          .completeUpscan(
+            zReference,
+            taxYear,
+            month,
+            testUploadReference,
+            FileUploadStatus.UpscanSuccess,
+            Some(fileUploadDetails)
+          )
+          .futureValue mustBe true
+
+        val stored = repository.get(zReference, taxYear, month).futureValue.value
+        stored.fileUploads.map(_.reference) must contain theSameElementsAs Seq(testUploadReference, laterReference)
+        stored.getFileUpload(testUploadReference).value.status mustBe FileUploadStatus.UpscanSuccess
+        stored.getFileUpload(laterReference).value.status mustBe FileUploadStatus.Created
+      }
+    }
+
+    "updateFileUploadProcessingDetails" - {
+
+      "must update processing details on the matching upload only" in {
+        val otherReference = "other-reference"
+        val validation     = FileUploadValidationResult(1, 0, FileUploadValidationStatus.ValidationSuccess)
+        insertMonthlyReturn(
+          buildMonthlyReturn(fileUploads =
+            List(completedFileUpload(testUploadReference), completedFileUpload(otherReference))
+          )
+        )
+
+        repository
+          .updateFileUploadProcessingDetails(
+            zReference,
+            taxYear,
+            month,
+            testUploadReference,
+            validation,
+            Some("original-location"),
+            Some("errors-location")
+          )
+          .futureValue mustBe true
+
+        val stored        = repository.get(zReference, taxYear, month).futureValue.value
+        val updatedUpload = stored.getFileUpload(testUploadReference).value
+        updatedUpload.status mustBe FileUploadStatus.ValidationSuccess
+        updatedUpload.fileUploadDetails.value.validation mustBe Some(validation)
+        stored.getFileUpload(otherReference).value.status mustBe FileUploadStatus.UpscanSuccess
+      }
+
+      "must return false when the upload has no details" in {
+        insertMonthlyReturn(buildMonthlyReturn(fileUploads = List(createdFileUpload(testUploadReference))))
+
+        repository
+          .updateFileUploadProcessingDetails(
+            zReference,
+            taxYear,
+            month,
+            testUploadReference,
+            FileUploadValidationResult(1, 0, FileUploadValidationStatus.ValidationSuccess),
+            Some("original-location"),
+            None
+          )
+          .futureValue mustBe false
+      }
+
+      "must preserve uploads added after an earlier worker read while updating processing details" in {
+        val laterReference = "later-reference"
+        val validation     = FileUploadValidationResult(1, 0, FileUploadValidationStatus.ValidationSuccess)
+        val earlierRead    = buildMonthlyReturn(fileUploads = List(completedFileUpload(testUploadReference)))
+        insertMonthlyReturn(earlierRead)
+        repository.createFileUpload(zReference, taxYear, month, laterReference).futureValue
+
+        repository
+          .updateFileUploadProcessingDetails(
+            zReference,
+            taxYear,
+            month,
+            testUploadReference,
+            validation,
+            Some("original-location"),
+            None
+          )
+          .futureValue mustBe true
+
+        val stored = repository.get(zReference, taxYear, month).futureValue.value
+        stored.fileUploads.map(_.reference) must contain theSameElementsAs Seq(testUploadReference, laterReference)
+        stored.getFileUpload(testUploadReference).value.status mustBe FileUploadStatus.ValidationSuccess
+        stored.getFileUpload(laterReference).value.status mustBe FileUploadStatus.Created
+      }
+    }
+
+    "markUpscanExpired" - {
+
+      "must mark only the matching successful upload as expired" in {
+        val otherReference = "other-reference"
+        insertMonthlyReturn(
+          buildMonthlyReturn(fileUploads =
+            List(completedFileUpload(testUploadReference), completedFileUpload(otherReference))
+          )
+        )
+
+        repository.markUpscanExpired(zReference, taxYear, month, testUploadReference).futureValue mustBe true
+
+        val stored = repository.get(zReference, taxYear, month).futureValue.value
+        stored.getFileUpload(testUploadReference).value.status mustBe FileUploadStatus.UpscanExpired
+        stored.getFileUpload(otherReference).value.status mustBe FileUploadStatus.UpscanSuccess
+      }
+
+      "must return false when the upload is not successful" in {
+        insertMonthlyReturn(buildMonthlyReturn(fileUploads = List(createdFileUpload(testUploadReference))))
+
+        repository.markUpscanExpired(zReference, taxYear, month, testUploadReference).futureValue mustBe false
       }
     }
 
   }
+
+  private def insertMonthlyReturn(monthlyReturn: MonthlyReturn): Unit =
+    repository.collection.insertOne(monthlyReturn.copy(lastUpdated = fixedNow)).toFuture().futureValue
 
   private def buildMonthlyReturn(
     nilReturn: Boolean = false,
@@ -185,5 +421,22 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
       status = FileUploadStatus.Created,
       createdOn = fixedNow
     )
+
+  private def completedFileUpload(reference: String): FileUpload =
+    FileUpload(
+      reference = reference,
+      status = FileUploadStatus.UpscanSuccess,
+      createdOn = fixedNow,
+      fileUploadDetails = Some(fileUploadDetails)
+    )
+
+  private val fileUploadDetails = FileUploadDetails(
+    fileName = testFileName,
+    fileMimeType = testFileMimeType,
+    uploadTimestamp = fixedNow,
+    checksum = testChecksum,
+    size = testFileSize,
+    upscanDownloadUrl = testDownloadUrl
+  )
 
 }
