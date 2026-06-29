@@ -29,7 +29,8 @@ import scala.util.control.NonFatal
 class UpscanCallbackService @Inject() (
   monthlyReturnRepository: MonthlyReturnRepository,
   monthlyReturnFileUploadWorkItemRepository: MonthlyReturnFileUploadWorkItemRepository,
-  upscanCallbackMapper: UpscanCallbackMapper
+  upscanCallbackMapper: UpscanCallbackMapper,
+  monthlyReturnAuditService: MonthlyReturnAuditService
 )(implicit ec: ExecutionContext)
     extends Logging {
 
@@ -123,6 +124,8 @@ class UpscanCallbackService @Inject() (
         Future.successful(None)
 
       case Some(monthlyReturn) =>
+        val maybeFileUpload = monthlyReturn.getFileUpload(reference)
+
         val completedStatus =
           fileUploadDetails match {
             case Some(details) =>
@@ -155,7 +158,21 @@ class UpscanCallbackService @Inject() (
           )
           .map { updated =>
             logCallbackResult(zReference, taxYear, month, reference, completedStatus)(updated)
-            Option.when(updated)(completedStatus)
+            Option.when(updated) {
+              maybeFileUpload.foreach { fileUpload =>
+                submitCallbackAudit(
+                  AuditDetails(
+                    monthlyReturn = monthlyReturn,
+                    fileUpload = fileUpload,
+                    status = completedStatus,
+                    fileUploadDetails = fileUploadDetails,
+                    failureReason = failureReason,
+                    failureMessage = failureMessage
+                  )
+                )
+              }
+              completedStatus
+            }
           }
 
       case None =>
@@ -184,6 +201,67 @@ class UpscanCallbackService @Inject() (
         logEnqueueMonthlyReturnFileUploadWorkItemFailure(zReference, taxYear, month, reference, exception)
         Future.failed(exception)
       }
+
+  private def submitCallbackAudit(auditDetails: AuditDetails): Unit =
+    try {
+      callbackAudit(auditDetails)
+        .recover { case NonFatal(exception) =>
+          logger.error(
+            s"[UpscanCallbackService][submitCallbackAudit] Audit failed for upload reference [${auditDetails.fileUpload.reference}], status [${auditDetails.status.value}]",
+            exception
+          )
+        }
+      ()
+    } catch {
+      case NonFatal(exception) =>
+        logger.error(
+          s"[UpscanCallbackService][submitCallbackAudit] Audit could not be submitted for upload reference [${auditDetails.fileUpload.reference}], status [${auditDetails.status.value}]",
+          exception
+        )
+    }
+
+  private def callbackAudit(auditDetails: AuditDetails): Future[Unit] =
+    auditDetails.status match {
+      case FileUploadStatus.UpscanSuccess =>
+        auditDetails.fileUploadDetails match {
+          case Some(details) =>
+            monthlyReturnAuditService.auditUpscanValidationSuccess(
+              monthlyReturn = auditDetails.monthlyReturn,
+              fileUpload = auditDetails.fileUpload,
+              fileUploadDetails = details
+            )
+          case None          =>
+            Future.successful(())
+        }
+
+      case FileUploadStatus.Duplicate =>
+        auditDetails.fileUploadDetails match {
+          case Some(details) =>
+            monthlyReturnAuditService.auditDuplicateFileUploadValidation(
+              monthlyReturn = auditDetails.monthlyReturn,
+              fileUploadReference = auditDetails.fileUpload.reference,
+              fileUploadDetails = details
+            )
+          case None          =>
+            Future.successful(())
+        }
+
+      case FileUploadStatus.UpscanQuarantine | FileUploadStatus.UpscanRejected | FileUploadStatus.UpscanUnknown =>
+        (auditDetails.failureReason, auditDetails.failureMessage) match {
+          case (Some(reason), Some(message)) =>
+            monthlyReturnAuditService.auditUpscanValidationFailure(
+              monthlyReturn = auditDetails.monthlyReturn,
+              fileUpload = auditDetails.fileUpload,
+              failureReason = reason,
+              failureMessage = message
+            )
+          case _                             =>
+            Future.successful(())
+        }
+
+      case _ =>
+        Future.successful(())
+    }
 
   private def logCallbackResult(
     zReference: String,
@@ -228,3 +306,12 @@ class UpscanCallbackService @Inject() (
     )
 
 }
+
+private case class AuditDetails(
+  monthlyReturn: MonthlyReturn,
+  fileUpload: FileUpload,
+  status: FileUploadStatus,
+  fileUploadDetails: Option[FileUploadDetails],
+  failureReason: Option[FileUploadFailureReason],
+  failureMessage: Option[String]
+)

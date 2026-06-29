@@ -32,11 +32,13 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
 
   private val mockMonthlyReturnRepository                   = mock[MonthlyReturnRepository]
   private val mockMonthlyReturnFileUploadWorkItemRepository = mock[MonthlyReturnFileUploadWorkItemRepository]
+  private val mockMonthlyReturnAuditService                 = mock[MonthlyReturnAuditService]
   private val upscanCallbackMapper: UpscanCallbackMapper    = new UpscanCallbackMapperImpl()
   private val service                                       = new UpscanCallbackService(
     mockMonthlyReturnRepository,
     mockMonthlyReturnFileUploadWorkItemRepository,
-    upscanCallbackMapper
+    upscanCallbackMapper,
+    mockMonthlyReturnAuditService
   )
 
   private val zReference                = testZReference
@@ -72,7 +74,8 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
 
   override protected def beforeEach(): Unit = {
     super.beforeEach()
-    reset(mockMonthlyReturnRepository, mockMonthlyReturnFileUploadWorkItemRepository)
+    reset(mockMonthlyReturnRepository, mockMonthlyReturnFileUploadWorkItemRepository, mockMonthlyReturnAuditService)
+    stubAudits()
   }
 
   "monthlyReturnUpscanCallback" - {
@@ -95,6 +98,11 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
         .futureValue
 
       verifyMonthlyReturnUpserted(FileUploadStatus.UpscanSuccess, Some(expectedFileUploadDetails))
+      verify(mockMonthlyReturnAuditService).auditUpscanValidationSuccess(
+        eqTo(monthlyReturnWithCreatedUpload),
+        eqTo(createdFileUpload),
+        eqTo(expectedFileUploadDetails)
+      )
       verifyEnqueueMonthlyReturnFileUploadWorkItem()
     }
 
@@ -114,6 +122,7 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
         )
         .futureValue
 
+      verifyNoAuditSubmitted()
       verifyNoMonthlyReturnFileUploadWorkItemEnqueued()
     }
 
@@ -158,6 +167,21 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
         FileUploadStatus.Duplicate,
         Some(expectedFileUploadDetails)
       )
+      verify(mockMonthlyReturnAuditService).auditDuplicateFileUploadValidation(
+        eqTo(
+          monthlyReturnWithCreatedUpload.copy(
+            fileUploads = monthlyReturnWithCreatedUpload.fileUploads :+ FileUpload(
+              reference = "existing-reference",
+              status = FileUploadStatus.ValidationSuccess,
+              createdOn = testCreatedOn,
+              fileUploadDetails = Some(expectedFileUploadDetails)
+            )
+          )
+        ),
+        eqTo(upscanReference),
+        eqTo(expectedFileUploadDetails)
+      )
+      verifyNoUpscanValidationAuditSubmitted()
       verifyNoMonthlyReturnFileUploadWorkItemEnqueued()
     }
 
@@ -178,6 +202,7 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
         .futureValue
 
       verifyNoMonthlyReturnUpserted()
+      verifyNoAuditSubmitted()
       verifyNoMonthlyReturnFileUploadWorkItemEnqueued()
     }
 
@@ -198,6 +223,7 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
         .futureValue
 
       verifyNoMonthlyReturnUpserted()
+      verifyNoAuditSubmitted()
       verifyNoMonthlyReturnFileUploadWorkItemEnqueued()
     }
 
@@ -218,6 +244,7 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
         .futureValue
 
       verifyNoMonthlyReturnUpserted()
+      verifyNoAuditSubmitted()
       verifyNoMonthlyReturnFileUploadWorkItemEnqueued()
     }
 
@@ -261,6 +288,17 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
         .futureValue
 
       verifyMonthlyReturnUpserted(FileUploadStatus.UpscanSuccess, Some(expectedFileUploadDetails))
+      verify(mockMonthlyReturnAuditService).auditUpscanValidationSuccess(
+        eqTo(declaredReturn),
+        eqTo(
+          FileUpload(
+            reference = upscanReference,
+            status = FileUploadStatus.Created,
+            createdOn = testCreatedOn
+          )
+        ),
+        eqTo(expectedFileUploadDetails)
+      )
       verifyEnqueueMonthlyReturnFileUploadWorkItem()
     }
 
@@ -270,7 +308,7 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
       UpscanFailureReason.Unknown    -> (FileUploadStatus.UpscanUnknown, FileUploadFailureReason.Unknown)
     ).foreach { case (upscanFailureReason, (fileUploadStatus, fileUploadFailureReason)) =>
       s"must complete a file upload as ${fileUploadStatus.value} for a ${upscanFailureReason.value} callback" in {
-        stubCompleteUpscan(result = false)
+        stubCompleteUpscan(result = true)
 
         service
           .monthlyReturnUpscanCallback(
@@ -292,6 +330,12 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
           fileUploadDetails = None,
           failureReason = Some(fileUploadFailureReason),
           failureMessage = Some(testUpscanFailureMessage)
+        )
+        verify(mockMonthlyReturnAuditService).auditUpscanValidationFailure(
+          eqTo(monthlyReturnWithCreatedUpload),
+          eqTo(createdFileUpload),
+          eqTo(fileUploadFailureReason),
+          eqTo(testUpscanFailureMessage)
         )
         verifyNoMonthlyReturnFileUploadWorkItemEnqueued()
       }
@@ -316,6 +360,7 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
         .getMessage mustBe testMongoDownMessage
 
       verifyMonthlyReturnUpserted(FileUploadStatus.UpscanSuccess, Some(expectedFileUploadDetails))
+      verifyNoAuditSubmitted()
       verifyNoMonthlyReturnFileUploadWorkItemEnqueued()
     }
 
@@ -368,6 +413,7 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
         failureReason = Some(FileUploadFailureReason.Rejected),
         failureMessage = Some(testUpscanFailureMessage)
       )
+      verifyNoAuditSubmitted()
       verifyNoMonthlyReturnFileUploadWorkItemEnqueued()
     }
   }
@@ -413,6 +459,65 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
       any[String],
       any[Int],
       any[String]
+    )
+
+  private def stubAudits(): Unit = {
+    when(
+      mockMonthlyReturnAuditService.auditUpscanValidationSuccess(
+        any[MonthlyReturn],
+        any[FileUpload],
+        any[FileUploadDetails]
+      )
+    ).thenReturn(Future.successful(()))
+
+    when(
+      mockMonthlyReturnAuditService.auditUpscanValidationFailure(
+        any[MonthlyReturn],
+        any[FileUpload],
+        any[FileUploadFailureReason],
+        any[String]
+      )
+    ).thenReturn(Future.successful(()))
+
+    when(
+      mockMonthlyReturnAuditService.auditDuplicateFileUploadValidation(
+        any[MonthlyReturn],
+        any[String],
+        any[FileUploadDetails]
+      )
+    ).thenReturn(Future.successful(()))
+  }
+
+  private def verifyNoAuditSubmitted(): Unit = {
+    verifyNoUpscanValidationAuditSubmitted()
+
+    verify(mockMonthlyReturnAuditService, never()).auditDuplicateFileUploadValidation(
+      any[MonthlyReturn],
+      any[String],
+      any[FileUploadDetails]
+    )
+  }
+
+  private def verifyNoUpscanValidationAuditSubmitted(): Unit = {
+    verify(mockMonthlyReturnAuditService, never()).auditUpscanValidationSuccess(
+      any[MonthlyReturn],
+      any[FileUpload],
+      any[FileUploadDetails]
+    )
+
+    verify(mockMonthlyReturnAuditService, never()).auditUpscanValidationFailure(
+      any[MonthlyReturn],
+      any[FileUpload],
+      any[FileUploadFailureReason],
+      any[String]
+    )
+  }
+
+  private def createdFileUpload: FileUpload =
+    FileUpload(
+      reference = upscanReference,
+      status = FileUploadStatus.Created,
+      createdOn = testCreatedOn
     )
 
   private def stubCompleteUpscan(result: Boolean): Unit =
@@ -466,11 +571,7 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
   private def monthlyReturnWithCreatedUpload: MonthlyReturn =
     monthlyReturn.copy(
       fileUploads = List(
-        FileUpload(
-          reference = upscanReference,
-          status = FileUploadStatus.Created,
-          createdOn = testCreatedOn
-        )
+        createdFileUpload
       )
     )
 

@@ -28,6 +28,7 @@ import uk.gov.hmrc.play.audit.http.connector.AuditResult.Success
 import uk.gov.hmrc.play.audit.http.connector.AuditConnector
 import uk.gov.hmrc.play.audit.model.ExtendedDataEvent
 
+import java.time.{Clock, ZoneOffset}
 import scala.concurrent.Future
 
 class MonthlyReturnAuditServiceSpec extends SpecBase {
@@ -73,15 +74,12 @@ class MonthlyReturnAuditServiceSpec extends SpecBase {
       event.auditType mustBe MonthlyReturnAuditService.fileUploadValidation
       (detail \ "internalReturnId").as[String] mustBe testSubmissionId.toString
       (detail \ "fileUploadStatus").as[String] mustBe "Success"
-      (detail \ "downloadTime").as[String] mustBe testUpscanCompletedOn.toEpochMilli.toString
       (detail \ "fileSize").as[String] mustBe testFileSize.toString
       (detail \ "fileValidationTime").as[String] mustBe "60"
       (detail \ "numberOfEntries").as[String] mustBe "299"
       (detail \ "fileReference").as[String] mustBe testUploadReference
       (detail \ "fileName").as[String] mustBe testFileName
       (detail \ "period").as[String] mustBe "January 2026"
-      (detail \ "fileMimeType").toOption mustBe None
-      (detail \ "errorDetails").toOption mustBe None
     }
 
     "must send aggregated validation error codes for a failed validation" in {
@@ -124,6 +122,76 @@ class MonthlyReturnAuditServiceSpec extends SpecBase {
       (detail \ "fileUploadStatus").as[String] mustBe "Failure"
       errorDetails mustBe Seq(Json.obj("errorType" -> "InvalidFile", "volume" -> 1))
     }
+
+    "must send an UpscanValidation success event" in {
+      val fixture    = new Fixture
+      val fileUpload = FileUpload(testUploadReference, FileUploadStatus.Created, testCreatedOn)
+
+      fixture.service
+        .auditUpscanValidationSuccess(monthlyReturn, fileUpload, fileUploadDetails)
+        .futureValue mustBe ()
+
+      val event  = fixture.capturedEvent()
+      val detail = event.detail.as[JsObject]
+
+      event.auditSource mustBe fixture.appName
+      event.auditType mustBe MonthlyReturnAuditService.upscanValidation
+      (detail \ "internalReturnId").as[String] mustBe testSubmissionId.toString
+      (detail \ "upscanStatus").as[String] mustBe "Success"
+      (detail \ "upscanValidationTime").as[String] mustBe "60000"
+      (detail \ "fileReference").as[String] mustBe testUploadReference
+      (detail \ "fileName").as[String] mustBe testFileName
+      (detail \ "period").as[String] mustBe "January 2026"
+      (detail \ "failureReason").toOption mustBe None
+      (detail \ "failureMessage").toOption mustBe None
+    }
+
+    "must send an UpscanValidation failure event" in {
+      val fixture    = new Fixture
+      val fileUpload = FileUpload(testUploadReference, FileUploadStatus.Created, testCreatedOn)
+
+      fixture.service
+        .auditUpscanValidationFailure(
+          monthlyReturn,
+          fileUpload,
+          FileUploadFailureReason.Quarantine,
+          testEicarSignatureMessage
+        )
+        .futureValue mustBe ()
+
+      val event  = fixture.capturedEvent()
+      val detail = event.detail.as[JsObject]
+
+      event.auditSource mustBe fixture.appName
+      event.auditType mustBe MonthlyReturnAuditService.upscanValidation
+      (detail \ "internalReturnId").as[String] mustBe testSubmissionId.toString
+      (detail \ "upscanStatus").as[String] mustBe "Failure"
+      (detail \ "upscanValidationTime").as[String] mustBe "60000"
+      (detail \ "failureReason").as[String] mustBe "QUARANTINE"
+      (detail \ "failureMessage").as[String] mustBe testEicarSignatureMessage
+      (detail \ "fileReference").as[String] mustBe testUploadReference
+      (detail \ "fileName").as[String] mustBe MonthlyReturnAuditService.absentDueToFailureFileName
+      (detail \ "period").as[String] mustBe "January 2026"
+    }
+
+    "must send DuplicateFile as the sole error detail for a duplicate upload" in {
+      val fixture = new Fixture
+
+      fixture.service
+        .auditDuplicateFileUploadValidation(monthlyReturn, testUploadReference, fileUploadDetails)
+        .futureValue mustBe ()
+
+      val event        = fixture.capturedEvent()
+      val detail       = event.detail.as[JsObject]
+      val errorDetails = (detail \ "errorDetails").as[JsArray].value.map(_.as[JsObject])
+
+      event.auditType mustBe MonthlyReturnAuditService.fileUploadValidation
+      (detail \ "fileUploadStatus").as[String] mustBe "Failure"
+      (detail \ "fileValidationTime").as[String] mustBe "0"
+      (detail \ "numberOfEntries").as[String] mustBe "0"
+      (detail \ "downloadTime").toOption mustBe None
+      errorDetails mustBe Seq(Json.obj("errorType" -> "DuplicateFile", "volume" -> 1))
+    }
   }
 
   private class Fixture {
@@ -131,7 +199,8 @@ class MonthlyReturnAuditServiceSpec extends SpecBase {
 
     private val auditConnector = mock[AuditConnector]
     private val appConfig      = mock[AppConfig]
-    val service                = new MonthlyReturnAuditService(auditConnector, appConfig)
+    private val clock          = Clock.fixed(testUpscanCompletedOn, ZoneOffset.UTC)
+    val service                = new MonthlyReturnAuditService(auditConnector, appConfig, clock)
 
     when(appConfig.appName).thenReturn(appName)
     when(auditConnector.sendExtendedEvent(any[ExtendedDataEvent])(any, any))

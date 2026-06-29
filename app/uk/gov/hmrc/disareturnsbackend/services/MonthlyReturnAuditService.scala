@@ -18,14 +18,14 @@ package uk.gov.hmrc.disareturnsbackend.services
 
 import play.api.Logging
 import play.api.libs.json.{JsObject, Json}
-import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.config.AppConfig
+import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.validators.fileupload.FileUploadValidatorResult
 import uk.gov.hmrc.play.audit.http.connector.AuditResult.{Disabled, Failure, Success}
 import uk.gov.hmrc.play.audit.http.connector.{AuditConnector, AuditResult}
 import uk.gov.hmrc.play.audit.model.ExtendedDataEvent
 
-import java.time.YearMonth
+import java.time.{Clock, Duration, Instant, YearMonth}
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import javax.inject.{Inject, Singleton}
@@ -34,7 +34,8 @@ import scala.concurrent.{ExecutionContext, Future}
 @Singleton
 class MonthlyReturnAuditService @Inject() (
   auditConnector: AuditConnector,
-  appConfig: AppConfig
+  appConfig: AppConfig,
+  clock: Clock
 )(implicit ec: ExecutionContext)
     extends Logging {
 
@@ -57,8 +58,75 @@ class MonthlyReturnAuditService @Inject() (
 
     auditConnector
       .sendExtendedEvent(event)
-      .map(logResult)
+      .map(logResult(fileUploadValidation))
   }
+
+  def auditUpscanValidationSuccess(
+    monthlyReturn: MonthlyReturn,
+    fileUpload: FileUpload,
+    fileUploadDetails: FileUploadDetails
+  ): Future[Unit] = {
+    val event = ExtendedDataEvent(
+      auditSource = appConfig.appName,
+      auditType = upscanValidation,
+      detail = baseUpscanValidationDetail(
+        monthlyReturn = monthlyReturn,
+        fileUpload = fileUpload,
+        upscanStatus = successStatusValue,
+        fileName = fileUploadDetails.fileName
+      )
+    )
+
+    auditConnector
+      .sendExtendedEvent(event)
+      .map(logResult(upscanValidation))
+  }
+
+  def auditUpscanValidationFailure(
+    monthlyReturn: MonthlyReturn,
+    fileUpload: FileUpload,
+    failureReason: FileUploadFailureReason,
+    failureMessage: String
+  ): Future[Unit] = {
+    val event = ExtendedDataEvent(
+      auditSource = appConfig.appName,
+      auditType = upscanValidation,
+      detail = baseUpscanValidationDetail(
+        monthlyReturn = monthlyReturn,
+        fileUpload = fileUpload,
+        upscanStatus = failureStatusValue,
+        fileName = absentDueToFailureFileName
+      ) ++ Json.obj(
+        failureReasonField  -> failureReason.value,
+        failureMessageField -> failureMessage
+      )
+    )
+
+    auditConnector
+      .sendExtendedEvent(event)
+      .map(logResult(upscanValidation))
+  }
+
+  def auditDuplicateFileUploadValidation(
+    monthlyReturn: MonthlyReturn,
+    fileUploadReference: String,
+    fileUploadDetails: FileUploadDetails
+  ): Future[Unit] =
+    audit(
+      monthlyReturn = monthlyReturn,
+      fileUploadReference = fileUploadReference,
+      fileUploadDetails = fileUploadDetails,
+      validationOutcome = FileUploadValidatorResult(
+        validation = FileUploadValidationResult(
+          rowsValidated = 0,
+          validationErrors = 1,
+          status = FileUploadValidationStatus.ValidationFailed
+        ),
+        errorFileWritten = false,
+        errorVolumes = Map(duplicateFileErrorType -> 1L),
+        validationTimeMillis = 0
+      )
+    )
 
   private def baseDetail(
     monthlyReturn: MonthlyReturn,
@@ -69,10 +137,6 @@ class MonthlyReturnAuditService @Inject() (
     Json.obj(
       internalReturnIdField   -> monthlyReturn.submissionId.toString,
       fileUploadStatusField   -> fileUploadStatus(validationOutcome.validation.status),
-      downloadTimeField       -> fileUploadDetails.upscanCompletedOn
-        .getOrElse(fileUploadDetails.uploadTimestamp)
-        .toEpochMilli
-        .toString,
       fileSizeField           -> fileUploadDetails.size.toString,
       fileValidationTimeField -> validationOutcome.validationTimeMillis.toString,
       numberOfEntriesField    -> validationOutcome.validation.rowsValidated.toString,
@@ -99,11 +163,29 @@ class MonthlyReturnAuditService @Inject() (
       )
     }
 
+  private def baseUpscanValidationDetail(
+    monthlyReturn: MonthlyReturn,
+    fileUpload: FileUpload,
+    upscanStatus: String,
+    fileName: String
+  ): JsObject =
+    Json.obj(
+      internalReturnIdField     -> monthlyReturn.submissionId.toString,
+      upscanStatusField         -> upscanStatus,
+      upscanValidationTimeField -> upscanValidationTime(fileUpload.createdOn),
+      fileReferenceField        -> fileUpload.reference,
+      fileNameField             -> fileName,
+      periodField               -> reportingPeriod(monthlyReturn)
+    )
+
   private def fileUploadStatus(validationStatus: FileUploadValidationStatus): String =
     validationStatus match {
       case FileUploadValidationStatus.ValidationSuccess => successStatusValue
       case _                                            => failureStatusValue
     }
+
+  private def upscanValidationTime(startedAt: Instant): String =
+    Duration.between(startedAt, Instant.now(clock)).toMillis.toString
 
   private def reportingPeriod(monthlyReturn: MonthlyReturn): String = {
     val startYear           = monthlyReturn.taxYear.take(4).toInt
@@ -115,33 +197,40 @@ class MonthlyReturnAuditService @Inject() (
       .format(reportingPeriodFormatter)
   }
 
-  private def logResult(result: AuditResult): Unit =
+  private def logResult(auditType: String)(result: AuditResult): Unit =
     result match {
-      case Success         => logger.info(s"$fileUploadValidation audit successful")
-      case Failure(err, _) => logger.warn(s"$fileUploadValidation audit failed: $err")
-      case Disabled        => logger.warn(s"$fileUploadValidation audit skipped because auditing is disabled")
+      case Success         => logger.info(s"$auditType audit successful")
+      case Failure(err, _) => logger.warn(s"$auditType audit failed: $err")
+      case Disabled        => logger.warn(s"$auditType audit skipped because auditing is disabled")
     }
 }
 
 object MonthlyReturnAuditService {
   val fileUploadValidation = "FileUploadValidation"
+  val upscanValidation     = "UpscanValidation"
 
-  val internalReturnIdField   = "internalReturnId"
-  val fileUploadStatusField   = "fileUploadStatus"
-  val downloadTimeField       = "downloadTime"
-  val fileSizeField           = "fileSize"
-  val fileValidationTimeField = "fileValidationTime"
-  val numberOfEntriesField    = "numberOfEntries"
-  val fileReferenceField      = "fileReference"
-  val fileNameField           = "fileName"
-  val periodField             = "period"
-  val errorDetailsField       = "errorDetails"
-  val errorTypeField          = "errorType"
-  val volumeField             = "volume"
-  val invalidFileErrorType    = "InvalidFile"
+  val internalReturnIdField     = "internalReturnId"
+  val fileUploadStatusField     = "fileUploadStatus"
+  val fileSizeField             = "fileSize"
+  val fileValidationTimeField   = "fileValidationTime"
+  val numberOfEntriesField      = "numberOfEntries"
+  val fileReferenceField        = "fileReference"
+  val fileNameField             = "fileName"
+  val periodField               = "period"
+  val errorDetailsField         = "errorDetails"
+  val errorTypeField            = "errorType"
+  val volumeField               = "volume"
+  val upscanStatusField         = "upscanStatus"
+  val upscanValidationTimeField = "upscanValidationTime"
+  val failureReasonField        = "failureReason"
+  val failureMessageField       = "failureMessage"
+  val invalidFileErrorType      = "InvalidFile"
+  val duplicateFileErrorType    = "DuplicateFile"
 
   val successStatusValue = "Success"
   val failureStatusValue = "Failure"
+
+  val absentDueToFailureFileName = "absent due to failure"
 
   val reportingPeriodFormatter = DateTimeFormatter.ofPattern("MMMM uuuu", Locale.UK)
 }
