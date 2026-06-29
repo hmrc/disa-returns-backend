@@ -226,7 +226,8 @@ abstract class BaseFileUploadProcessingService[R, C <: FileUploadValidationConte
         logger.warn(
           s"${logPrefix(uploadReference)} Unsupported MIME type [$unsupportedMimeType] treated as InvalidFile for $context"
         )
-        val validationOutcome = invalidFileValidationResult
+        val validationOutcome =
+          FileUploadValidationResults.invalidFile(FileUploadValidationResults.unsupportedFileTypeErrorType)
         logger.info(
           s"${logPrefix(uploadReference)} Validation completed for $context, status [${validationOutcome.validation.status}], rows validated [${validationOutcome.validation.rowsValidated}], validation errors [${validationOutcome.validation.validationErrors}], errors file written [${validationOutcome.errorFileWritten}]"
         )
@@ -298,16 +299,6 @@ abstract class BaseFileUploadProcessingService[R, C <: FileUploadValidationConte
       objectStoreFileErrorsLocation = objectStoreFileErrorsLocation
     )
   }
-
-  private def invalidFileValidationResult: FileUploadValidatorResult =
-    FileUploadValidatorResult(
-      validation = FileUploadValidationResult(
-        rowsValidated = 0,
-        validationErrors = 0,
-        status = FileUploadValidationStatus.InvalidFile
-      ),
-      errorFileWritten = false
-    )
 
   private def elapsedMillis(startedAtNanos: Long): Long =
     NANOSECONDS.toMillis(System.nanoTime() - startedAtNanos)

@@ -24,6 +24,7 @@ import org.apache.poi.ss.usermodel.DataFormatter
 import org.apache.poi.xssf.eventusermodel.{ReadOnlySharedStringsTable, XSSFReader, XSSFSheetXMLHandler}
 import org.apache.poi.xssf.model.StylesTable
 import org.xml.sax.{InputSource, SAXException}
+import uk.gov.hmrc.disareturnsbackend.validators.fileupload.FileUploadValidationResults.{invalidHeaderErrorType, invalidWorkbookErrorType, noDataRowsErrorType}
 
 import java.io.InputStream
 import java.nio.file.Path
@@ -121,10 +122,15 @@ abstract class BaseXlsxFileUploadValidator[C <: FileUploadValidationContext](
     val noErrorFileWasWritten: Boolean = !summary.errorFileWritten
     val isInvalidFile: Boolean         = isInvalidWorkbookException(exception) && noRowsWereValidated && noErrorFileWasWritten
 
-    if (isInvalidFile) {
-      FileUploadValidationResults.invalidFile
-    } else {
-      throw exception
+    exception match {
+      case InvalidHeaderException if isInvalidFile  =>
+        FileUploadValidationResults.invalidFile(FileUploadValidationResults.invalidHeaderErrorType)
+      case MultipleSheetsException if isInvalidFile =>
+        FileUploadValidationResults.invalidFile(FileUploadValidationResults.invalidWorkbookErrorType)
+      case _ if isInvalidFile                       =>
+        FileUploadValidationResults.invalidFile(FileUploadValidationResults.invalidFileErrorType)
+      case _                                        =>
+        throw exception
     }
   }
 
@@ -134,11 +140,14 @@ abstract class BaseXlsxFileUploadValidator[C <: FileUploadValidationContext](
     val headerWasNotSeen               = !summary.headerSeen
     val headerIsInvalid                = !summary.headerIsValid
     val noRowsWereValidated            = summary.rowsValidated == 0
-    val workbookIsInvalid              = workbookDoesNotHaveSingleSheet || headerWasNotSeen || headerIsInvalid || noRowsWereValidated
     val hasValidationErrors            = summary.validationErrors > 0
 
-    if (workbookIsInvalid) {
-      FileUploadValidationResults.invalidFile
+    if (workbookDoesNotHaveSingleSheet) {
+      FileUploadValidationResults.invalidFile(invalidWorkbookErrorType)
+    } else if (headerIsInvalid || headerWasNotSeen) {
+      FileUploadValidationResults.invalidFile(invalidHeaderErrorType)
+    } else if (noRowsWereValidated) {
+      FileUploadValidationResults.invalidFile(noDataRowsErrorType)
     } else if (!hasValidationErrors) {
       FileUploadValidationResults.success(summary.rowsValidated)
     } else {
