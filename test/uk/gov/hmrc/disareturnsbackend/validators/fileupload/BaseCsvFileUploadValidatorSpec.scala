@@ -71,6 +71,7 @@ class BaseCsvFileUploadValidatorSpec extends SpecBase {
       result.validation.status mustBe FileUploadValidationStatus.InvalidFile
       result.validation.inlineErrors mustBe Nil
       result.errorFileWritten mustBe false
+      result.errorVolumes mustBe Map(FileUploadValidationResults.invalidHeaderErrorType -> 1L)
     }
 
     "must return InvalidFile for an extra non-empty header column" in {
@@ -80,6 +81,7 @@ class BaseCsvFileUploadValidatorSpec extends SpecBase {
 
       result.validation.status mustBe FileUploadValidationStatus.InvalidFile
       result.errorFileWritten mustBe false
+      result.errorVolumes mustBe Map(FileUploadValidationResults.invalidHeaderErrorType -> 1L)
     }
 
     "must return InvalidFile for header-only CSV" in {
@@ -87,6 +89,15 @@ class BaseCsvFileUploadValidatorSpec extends SpecBase {
 
       result.validation.status mustBe FileUploadValidationStatus.InvalidFile
       result.validation.rowsValidated mustBe 0
+      result.errorVolumes mustBe Map(FileUploadValidationResults.noDataRowsErrorType -> 1L)
+    }
+
+    "must return InvalidFile for an empty header row" in {
+      val result = validateCsv(csv(Seq(Vector("value-a", "value-b")), headers = Vector("", ""))).futureValue
+
+      result.validation.status mustBe FileUploadValidationStatus.InvalidFile
+      result.validation.rowsValidated mustBe 0
+      result.errorVolumes mustBe Map(FileUploadValidationResults.invalidHeaderErrorType -> 1L)
     }
 
     "must write an errors workbook for an invalid data row" in {

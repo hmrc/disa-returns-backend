@@ -25,11 +25,12 @@ class FileUploadValidationResultsSpec extends SpecBase {
 
   "FileUploadValidationResults" - {
 
-    "must return InvalidFile with empty inline errors" in {
-      val result = FileUploadValidationResults.invalidFile
+    "must return InvalidFile with the supplied error type" in {
+      val result = FileUploadValidationResults.invalidFile(FileUploadValidationResults.invalidFileErrorType)
 
       result.validation.status mustBe FileUploadValidationStatus.InvalidFile
       result.validation.inlineErrors mustBe Nil
+      result.errorVolumes mustBe Map(FileUploadValidationResults.invalidFileErrorType -> 1L)
     }
 
     "must return ValidationSuccess with empty inline errors" in {
