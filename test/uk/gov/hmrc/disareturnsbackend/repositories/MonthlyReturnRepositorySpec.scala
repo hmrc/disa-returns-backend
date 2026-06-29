@@ -344,6 +344,26 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
           .futureValue mustBe false
       }
 
+      "must return false when the upload is no longer UpscanSuccess" in {
+        val expiredUpload = completedFileUpload(testUploadReference).copy(status = FileUploadStatus.UpscanExpired)
+        insertMonthlyReturn(buildMonthlyReturn(fileUploads = List(expiredUpload)))
+
+        repository
+          .updateFileUploadProcessingDetails(
+            zReference,
+            taxYear,
+            month,
+            testUploadReference,
+            FileUploadValidationResult(1, 0, FileUploadValidationStatus.ValidationSuccess),
+            Some("original-location"),
+            None
+          )
+          .futureValue mustBe false
+
+        repository.get(zReference, taxYear, month).futureValue.value.getFileUpload(testUploadReference).value mustBe
+          expiredUpload
+      }
+
       "must preserve uploads added after an earlier worker read while updating processing details" in {
         val laterReference = "later-reference"
         val validation     = FileUploadValidationResult(1, 0, FileUploadValidationStatus.ValidationSuccess)

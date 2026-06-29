@@ -307,18 +307,19 @@ class MonthlyReturnRepository @Inject() (
           case FileUploadValidationStatus.InvalidFile       => FileUploadStatus.ValidationFailure
         }
 
-        val matchingFileUploadWithDetails     = Filters.elemMatch(
+        val matchingUpscanSuccessFileUploadWithDetails = Filters.elemMatch(
           fileUploadsField,
           Filters.and(
             Filters.equal(referenceField, reference),
+            Filters.equal(statusField, FileUploadStatus.UpscanSuccess),
             Filters.exists(fileUploadDetailsField)
           )
         )
-        val filter                            = Filters.and(
+        val filter                                     = Filters.and(
           byKey(zReference, taxYear, month),
-          matchingFileUploadWithDetails
+          matchingUpscanSuccessFileUploadWithDetails
         )
-        val updateFileUploadProcessingDetails = Updates.combine(
+        val updateFileUploadProcessingDetails          = Updates.combine(
           Updates.set(matchingFileUploadStatusField, validationStatus),
           setOrUnsetOptionField(matchingFileUploadObjectStoreFileLocationField, objectStoreFileLocation),
           setOrUnsetOptionField(matchingFileUploadObjectStoreFileErrorsLocationField, objectStoreFileErrorsLocation),
