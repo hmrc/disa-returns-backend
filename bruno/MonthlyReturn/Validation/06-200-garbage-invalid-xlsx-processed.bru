@@ -34,8 +34,8 @@ script:pre-request {
     throw new Error(`Expected READY callback to respond with 202, got ${response.status}`);
   }
   const waitResponse = await bru.runRequest("TestOnly/ValidationHelpers/02-200-wait-for-validation-processing");
-  if (waitResponse.status !== 200) {
-    throw new Error(`Expected validation processing wait to respond with 200, got ${waitResponse.status}`);
+  if (waitResponse?.status !== 200) {
+    throw new Error(`Expected validation processing wait to respond with 200, got ${waitResponse?.status}`);
   }
 }
 

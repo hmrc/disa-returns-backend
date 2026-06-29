@@ -38,7 +38,9 @@ script:pre-request {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       const response = await bru.sendRequest({ method: "GET", url, timeout: 3000 });
-      lastStatus = response.data?.status ?? "missing status";
+      const responseBody = response.body ?? response.data;
+      const body = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
+      lastStatus = body?.status ?? "missing status";
   
       if (lastStatus === expectedStatus) {
         statusMatched = true;

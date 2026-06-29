@@ -29,21 +29,21 @@ script:pre-request {
   if (clockResponse.status !== 200) {
     throw new Error(`Expected clock setup to respond with 200, got ${clockResponse.status}`);
   }
-
+  
   const clearResponse = await bru.runRequest("TestOnly/MonthlyReturns/01-204-clear-monthly-returns");
   if (clearResponse.status !== 204) {
     throw new Error(`Expected monthly returns cleanup to respond with 204, got ${clearResponse.status}`);
   }
-
+  
   const zReference = `Z${((Date.now() + Math.floor(Math.random() * 1000)) % 10000).toString().padStart(4, "0")}`;
   bru.setVar("submissionDeclaredZReference", zReference);
-
+  
   const submissionUrl = `${bru.getEnvVar("submissionBaseUrl")}${bru.getEnvVar("submissionServicePath")}/monthly/${zReference}/${bru.getEnvVar("taxYear")}/${bru.getEnvVar("month")}`;
   const createResponse = await bru.sendRequest({ method: "POST", url: submissionUrl, headers: { "Content-Type": "application/json" }, data: { nilReturn: false }, timeout: 3000 });
   if (createResponse.status !== 201) {
     throw new Error(`Expected submission monthly return create setup to respond with 201, got ${createResponse.status}`);
   }
-
+  
   const declarationResponse = await bru.sendRequest({ method: "POST", url: `${submissionUrl}/declarations`, headers: { "Content-Type": "application/json" }, data: { nilReturn: false }, timeout: 3000 });
   if (declarationResponse.status !== 200) {
     throw new Error(`Expected submission monthly return declaration setup to respond with 200, got ${declarationResponse.status}`);
