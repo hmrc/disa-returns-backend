@@ -74,7 +74,7 @@ abstract class BaseCsvFileUploadValidator[C <: FileUploadValidationContext](
     val headerRowIsInvalid: Boolean       = !headerRow.exists(schema.validHeader)
 
     if (headerRowIsInvalid) {
-      FileUploadValidationResults.invalidFile
+      FileUploadValidationResults.invalidFile(FileUploadValidationResults.invalidHeaderErrorType)
     } else {
       skipRowsBetweenHeaderAndData(parser, currentRowIndex = headerRowIndex + 1)
       validateDataRows(parser, errorsFile, context)
@@ -120,7 +120,7 @@ abstract class BaseCsvFileUploadValidator[C <: FileUploadValidationContext](
         errorWriter.close()
 
     if (accumulator.rowsValidated == 0) {
-      FileUploadValidationResults.invalidFile
+      FileUploadValidationResults.invalidFile(FileUploadValidationResults.noDataRowsErrorType)
     } else if (accumulator.validationErrors == 0) {
       FileUploadValidationResults.success(accumulator.rowsValidated)
     } else {

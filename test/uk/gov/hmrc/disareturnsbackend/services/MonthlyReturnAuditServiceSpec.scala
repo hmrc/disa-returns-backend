@@ -24,6 +24,7 @@ import play.api.libs.json.{JsArray, JsObject, Json}
 import uk.gov.hmrc.disareturnsbackend.config.AppConfig
 import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.validators.fileupload.FileUploadValidatorResult
+import uk.gov.hmrc.disareturnsbackend.validators.fileupload.FileUploadValidationResults
 import uk.gov.hmrc.play.audit.http.connector.AuditResult.Success
 import uk.gov.hmrc.play.audit.http.connector.AuditConnector
 import uk.gov.hmrc.play.audit.model.ExtendedDataEvent
@@ -82,7 +83,7 @@ class MonthlyReturnAuditServiceSpec extends SpecBase {
       (detail \ "period").as[String] mustBe "January 2026"
     }
 
-    "must send aggregated validation error codes for a failed validation" in {
+    "must send aggregated readable validation error names for a failed validation" in {
       val fixture           = new Fixture
       val validationOutcome = FileUploadValidatorResult(
         validation = FileUploadValidationResult(299, 8, FileUploadValidationStatus.ValidationFailed),
@@ -100,16 +101,17 @@ class MonthlyReturnAuditServiceSpec extends SpecBase {
 
       (detail \ "fileUploadStatus").as[String] mustBe "Failure"
       errorDetails mustBe Seq(
-        Json.obj("errorType" -> "E020", "volume" -> 6),
-        Json.obj("errorType" -> "E030", "volume" -> 2)
+        Json.obj("errorType" -> "FirstNameRequired", "volume"         -> 2),
+        Json.obj("errorType" -> "NationalInsuranceRequired", "volume" -> 6)
       )
     }
 
-    "must send InvalidFile as the sole error detail for an invalid file" in {
+    "must use the supplied invalid file error type for an invalid file" in {
       val fixture           = new Fixture
       val validationOutcome = FileUploadValidatorResult(
         validation = FileUploadValidationResult(0, 0, FileUploadValidationStatus.InvalidFile),
-        errorFileWritten = false
+        errorFileWritten = false,
+        errorVolumes = Map(FileUploadValidationResults.invalidFileErrorType -> 1L)
       )
 
       fixture.service

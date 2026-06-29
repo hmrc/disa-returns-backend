@@ -20,13 +20,14 @@ import play.api.Logging
 import play.api.libs.json.{JsObject, Json}
 import uk.gov.hmrc.disareturnsbackend.config.AppConfig
 import uk.gov.hmrc.disareturnsbackend.models.*
+import uk.gov.hmrc.disareturnsbackend.validators.fileupload.monthly.MonthlyFileUploadErrorCodes
 import uk.gov.hmrc.disareturnsbackend.validators.fileupload.FileUploadValidatorResult
 import uk.gov.hmrc.play.audit.http.connector.AuditResult.{Disabled, Failure, Success}
 import uk.gov.hmrc.play.audit.http.connector.{AuditConnector, AuditResult}
 import uk.gov.hmrc.play.audit.model.ExtendedDataEvent
 
-import java.time.{Clock, Duration, Instant, YearMonth}
 import java.time.format.DateTimeFormatter
+import java.time.{Clock, Duration, Instant, YearMonth}
 import java.util.Locale
 import javax.inject.{Inject, Singleton}
 import scala.concurrent.{ExecutionContext, Future}
@@ -149,19 +150,19 @@ class MonthlyReturnAuditService @Inject() (
     if (validation.status == FileUploadValidationStatus.ValidationSuccess) {
       Json.obj()
     } else {
-      val auditErrorVolumes =
-        if (validation.status == FileUploadValidationStatus.InvalidFile) {
-          Map(invalidFileErrorType -> 1L)
-        } else {
-          errorVolumes
-        }
-
       Json.obj(
-        errorDetailsField -> auditErrorVolumes.toSeq.sortBy(_._1).map { case (errorType, volume) =>
+        errorDetailsField -> readableErrorVolumes(errorVolumes).map { case (errorType, volume) =>
           Json.obj(errorTypeField -> errorType, volumeField -> volume)
         }
       )
     }
+
+  private def readableErrorVolumes(errorVolumes: Map[String, Long]): Seq[(String, Long)] =
+    errorVolumes.toSeq
+      .map { case (errorType, volume) => MonthlyFileUploadErrorCodes.readableName(errorType) -> volume }
+      .groupMapReduce(_._1)(_._2)(_ + _)
+      .toSeq
+      .sortBy(_._1)
 
   private def baseUpscanValidationDetail(
     monthlyReturn: MonthlyReturn,
@@ -224,7 +225,6 @@ object MonthlyReturnAuditService {
   val upscanValidationTimeField = "upscanValidationTime"
   val failureReasonField        = "failureReason"
   val failureMessageField       = "failureMessage"
-  val invalidFileErrorType      = "InvalidFile"
   val duplicateFileErrorType    = "DuplicateFile"
 
   val successStatusValue = "Success"

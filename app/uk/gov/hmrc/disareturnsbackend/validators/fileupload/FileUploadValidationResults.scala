@@ -20,6 +20,12 @@ import uk.gov.hmrc.disareturnsbackend.models.{FileUploadValidationError, FileUpl
 
 object FileUploadValidationResults {
 
+  val invalidHeaderErrorType       = "InvalidHeader"
+  val invalidWorkbookErrorType     = "InvalidWorkbook"
+  val invalidFileErrorType         = "InvalidFile"
+  val noDataRowsErrorType          = "NoDataRows"
+  val unsupportedFileTypeErrorType = "UnsupportedFileType"
+
   def failed(
     rowsValidated: Long,
     validationErrors: Long,
@@ -38,7 +44,7 @@ object FileUploadValidationResults {
       errorVolumes = errorVolumes
     )
 
-  def invalidFile: FileUploadValidatorResult =
+  def invalidFile(errorType: String): FileUploadValidatorResult =
     FileUploadValidatorResult(
       validation = FileUploadValidationResult(
         rowsValidated = 0,
@@ -46,7 +52,8 @@ object FileUploadValidationResults {
         status = FileUploadValidationStatus.InvalidFile,
         inlineErrors = Nil
       ),
-      errorFileWritten = false
+      errorFileWritten = false,
+      errorVolumes = Map(errorType -> 1L)
     )
 
   def success(rowsValidated: Long): FileUploadValidatorResult =

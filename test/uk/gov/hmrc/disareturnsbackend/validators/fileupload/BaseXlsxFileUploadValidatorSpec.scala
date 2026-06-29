@@ -54,6 +54,7 @@ class BaseXlsxFileUploadValidatorSpec extends SpecBase {
       result.validation.status mustBe FileUploadValidationStatus.InvalidFile
       result.validation.inlineErrors mustBe Nil
       result.errorFileWritten mustBe false
+      result.errorVolumes mustBe Map(FileUploadValidationResults.invalidHeaderErrorType -> 1L)
     }
 
     "must return InvalidFile for an invalid header" in {
@@ -64,6 +65,7 @@ class BaseXlsxFileUploadValidatorSpec extends SpecBase {
 
       result.validation.status mustBe FileUploadValidationStatus.InvalidFile
       result.errorFileWritten mustBe false
+      result.errorVolumes mustBe Map(FileUploadValidationResults.invalidHeaderErrorType -> 1L)
     }
 
     "must not write an errors workbook for an invalid header" in {
@@ -91,6 +93,7 @@ class BaseXlsxFileUploadValidatorSpec extends SpecBase {
 
         result.validation.status mustBe FileUploadValidationStatus.InvalidFile
         result.errorFileWritten mustBe false
+        result.errorVolumes mustBe Map(FileUploadValidationResults.invalidFileErrorType -> 1L)
         Files.exists(errorsFile) mustBe false
       } finally {
         Files.deleteIfExists(file)
@@ -120,6 +123,7 @@ class BaseXlsxFileUploadValidatorSpec extends SpecBase {
 
       result.validation.status mustBe FileUploadValidationStatus.InvalidFile
       rowValidator.calls mustBe 0
+      result.errorVolumes mustBe Map(FileUploadValidationResults.invalidHeaderErrorType -> 1L)
     }
 
     "must return InvalidFile for a header-only workbook" in {
@@ -127,6 +131,15 @@ class BaseXlsxFileUploadValidatorSpec extends SpecBase {
 
       result.validation.status mustBe FileUploadValidationStatus.InvalidFile
       result.validation.rowsValidated mustBe 0
+      result.errorVolumes mustBe Map(FileUploadValidationResults.noDataRowsErrorType -> 1L)
+    }
+
+    "must return InvalidFile for an empty header row" in {
+      val result = validateWorkbook(headers = Vector("", ""), rows = Seq(Vector("value-a", "value-b"))).futureValue
+
+      result.validation.status mustBe FileUploadValidationStatus.InvalidFile
+      result.validation.rowsValidated mustBe 0
+      result.errorVolumes mustBe Map(FileUploadValidationResults.invalidHeaderErrorType -> 1L)
     }
 
     "must return InvalidFile without writing an errors workbook for a workbook with no sheets" in {
@@ -136,6 +149,7 @@ class BaseXlsxFileUploadValidatorSpec extends SpecBase {
 
       result.validation.status mustBe FileUploadValidationStatus.InvalidFile
       result.errorFileWritten mustBe false
+      result.errorVolumes mustBe Map(FileUploadValidationResults.invalidWorkbookErrorType -> 1L)
       Files.exists(errorsFile) mustBe false
       Files.deleteIfExists(errorsFile.getParent)
     }
@@ -151,6 +165,7 @@ class BaseXlsxFileUploadValidatorSpec extends SpecBase {
 
       result.validation.status mustBe FileUploadValidationStatus.InvalidFile
       result.errorFileWritten mustBe false
+      result.errorVolumes mustBe Map(FileUploadValidationResults.invalidWorkbookErrorType -> 1L)
       Files.exists(errorsFile) mustBe false
       Files.deleteIfExists(errorsFile.getParent)
     }
@@ -162,6 +177,7 @@ class BaseXlsxFileUploadValidatorSpec extends SpecBase {
 
       result.validation.status mustBe FileUploadValidationStatus.InvalidFile
       result.errorFileWritten mustBe false
+      result.errorVolumes mustBe Map(FileUploadValidationResults.noDataRowsErrorType -> 1L)
       Files.exists(errorsFile) mustBe false
       Files.deleteIfExists(errorsFile.getParent)
     }
