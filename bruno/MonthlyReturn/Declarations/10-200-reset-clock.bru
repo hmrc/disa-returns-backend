@@ -17,7 +17,7 @@ assert {
 script:pre-request {
   const url = `${bru.getEnvVar("submissionBaseUrl")}${bru.getEnvVar("submissionServicePath")}/test-only/clock`;
   let response;
-
+  
   try {
     response = await bru.sendRequest({ method: "DELETE", url, timeout: 3000 });
   } catch (error) {

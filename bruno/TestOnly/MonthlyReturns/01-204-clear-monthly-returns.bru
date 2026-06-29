@@ -17,13 +17,13 @@ assert {
 script:pre-request {
   const url = `${bru.getEnvVar("submissionBaseUrl")}${bru.getEnvVar("submissionServicePath")}/test-only/monthly-returns`;
   let response;
-
+  
   try {
     response = await bru.sendRequest({ method: "DELETE", url, timeout: 3000 });
   } catch (error) {
     response = error.response;
   }
-
+  
   if (!response || response.status !== 204) {
     throw new Error(`Expected submission monthly returns cleanup to respond with 204, got ${response?.status ?? "no response"}. Check disa-returns-submission is running with -Dapplication.router=testOnlyDoNotUseInAppConf.Routes. URL: ${url}`);
   }
