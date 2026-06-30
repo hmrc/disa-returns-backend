@@ -24,18 +24,18 @@ import org.mockito.Mockito.{timeout as mockitoTimeout, verify, when}
 import play.api.inject.ApplicationLifecycle
 import uk.gov.hmrc.mongo.workitem.{ProcessingStatus, WorkItem, WorkItemRepository}
 
-import java.time.{Clock, Instant, ZoneOffset}
+import java.time.{Clock, Duration, Instant, ZoneOffset}
 import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.duration.DurationInt
 import scala.concurrent.{Future, Promise}
 
 class WorkItemJobSpec extends SpecBase {
 
-  private val workerCount    =
+  private val workerCount      =
     math.max(1, Runtime.getRuntime.availableProcessors() / 2)
-  private val now            = Instant.parse("2026-06-08T12:00:00Z")
-  private val clock          = Clock.fixed(now, ZoneOffset.UTC)
-  private val testWorkItem   = WorkItem(
+  private val now              = Instant.parse("2026-06-08T12:00:00Z")
+  private val clock            = Clock.fixed(now, ZoneOffset.UTC)
+  private val testWorkItem     = WorkItem(
     id = new ObjectId(),
     receivedAt = now,
     updatedAt = now,
@@ -44,20 +44,21 @@ class WorkItemJobSpec extends SpecBase {
     failureCount = 0,
     item = "test-item"
   )
-  private val actorSystem    = inject[ActorSystem]
-  private val dispatcherName = "contexts.monthly-return-file-upload-work-item"
-  private val pollInterval   = 1.hour
+  private val actorSystem      = inject[ActorSystem]
+  private val dispatcherName   = "contexts.monthly-return-file-upload-work-item"
+  private val pollInterval     = 1.hour
+  private val failedRetryAfter = Duration.ofMinutes(1)
 
   "start" - {
 
-    "must poll for outstanding work items using the configured clock" in new TestSetup {
+    "must poll for outstanding work items using the configured clock and failed retry delay" in new TestSetup {
       when(mockWorkItemRepository.pullOutstanding(any[Instant], any[Instant]))
         .thenReturn(Future.successful(None))
 
       job.start()
 
       verify(mockWorkItemRepository, mockitoTimeout(1000).times(workerCount))
-        .pullOutstanding(eqTo(now), eqTo(now))
+        .pullOutstanding(eqTo(now.minus(failedRetryAfter)), eqTo(now))
     }
 
     "must process an outstanding work item" in new TestSetup {
@@ -131,7 +132,8 @@ class WorkItemJobSpec extends SpecBase {
       lifecycle = lifecycle,
       workItemRepository = mockWorkItemRepository,
       dispatcherName = dispatcherName,
-      pollInterval = jobPollInterval
+      pollInterval = jobPollInterval,
+      failedRetryAfter = failedRetryAfter
     ) {
       override protected val jobName: String = "TestWorkItemJob"
 

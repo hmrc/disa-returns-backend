@@ -46,6 +46,10 @@ class AppConfig @Inject() (
     .getOptional[Duration]("monthly-return-file-upload-work-item-job.inProgressRetryAfter")
     .getOrElse(Duration.ofMinutes(5))
 
+  val monthlyReturnFileUploadJobFailedRetryAfter: Duration = config
+    .getOptional[Duration]("monthly-return-file-upload-work-item-job.failedRetryAfter")
+    .getOrElse(Duration.ofMinutes(1))
+
   val monthlyReturnFileUploadJobPollInterval: FiniteDuration = config
     .getOptional[Duration]("monthly-return-file-upload-work-item-job.pollInterval")
     .getOrElse(Duration.ofSeconds(10))

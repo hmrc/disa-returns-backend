@@ -29,7 +29,7 @@ import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnFileUploadWorkIt
 import uk.gov.hmrc.disareturnsbackend.services.{FileUploadProcessingResult, MonthlyReturnFileUploadProcessingService, MonthlyReturnService}
 import uk.gov.hmrc.mongo.workitem.{ProcessingStatus, WorkItem}
 
-import java.time.{Clock, Instant, ZoneOffset}
+import java.time.{Clock, Duration, Instant, ZoneOffset}
 import scala.concurrent.duration.DurationInt
 import scala.concurrent.{Future, Promise}
 
@@ -136,6 +136,7 @@ class MonthlyReturnWorkItemJobSpec extends SpecBase {
 
     private val appConfig = mock[AppConfig]
     when(appConfig.monthlyReturnFileUploadJobPollInterval).thenReturn(10.seconds)
+    when(appConfig.monthlyReturnFileUploadJobFailedRetryAfter).thenReturn(Duration.ofMinutes(1))
 
     val job = new TestableMonthlyReturnWorkItemJob(repository, processingService, monthlyReturnService, appConfig)
   }

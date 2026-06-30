@@ -317,6 +317,7 @@ contexts {
 
 monthly-return-file-upload-work-item-job {
   pollInterval = 10 seconds
+  failedRetryAfter = 1 minute
   inProgressRetryAfter = 5 minutes
 }
 
@@ -332,6 +333,7 @@ Config purpose:
 - `contexts.file-upload-blocking` defines the dispatcher used for blocking file-upload work, including CSV/XLSX validation and object-store file size/MD5 calculation.
 - `contexts.file-upload-blocking.thread-pool-executor.fixed-pool-size` caps how many blocking file-upload tasks can run at once.
 - `monthly-return-file-upload-work-item-job.pollInterval` controls how long the job waits before polling again when no work item is available.
+- `monthly-return-file-upload-work-item-job.failedRetryAfter` controls how long a failed work item waits before it can be retried.
 - `monthly-return-file-upload-work-item-job.inProgressRetryAfter` controls when an `InProgress` work item becomes eligible to be pulled again if it has not completed. This prevents stuck work items from being hidden forever.
 - `fileUploadMaxInlineErrors` controls how many row-level validation error entries are stored inline on `FileUploadValidationResult`. The full errors workbook still contains all row-level validation errors.
 
