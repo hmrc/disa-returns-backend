@@ -44,7 +44,8 @@ class MonthlyReturnWorkItemJob @Inject() (
       lifecycle = lifecycle,
       workItemRepository = monthlyReturnFileUploadWorkItemRepository,
       dispatcherName = "contexts.monthly-return-file-upload-work-item",
-      pollInterval = appConfig.monthlyReturnFileUploadJobPollInterval
+      pollInterval = appConfig.monthlyReturnFileUploadJobPollInterval,
+      failedRetryAfter = appConfig.monthlyReturnFileUploadJobFailedRetryAfter
     ) {
 
   override protected val jobName: String = "MonthlyReturnWorkItemJob"

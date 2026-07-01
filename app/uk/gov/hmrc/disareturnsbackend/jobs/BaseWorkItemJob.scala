@@ -21,7 +21,7 @@ import play.api.Logging
 import play.api.inject.ApplicationLifecycle
 import uk.gov.hmrc.mongo.workitem.{WorkItem, WorkItemRepository}
 
-import java.time.Clock
+import java.time.{Clock, Duration}
 import java.util.concurrent.atomic.AtomicBoolean
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
@@ -32,7 +32,8 @@ abstract class BaseWorkItemJob[A](
   lifecycle: ApplicationLifecycle,
   workItemRepository: WorkItemRepository[A],
   dispatcherName: String,
-  pollInterval: FiniteDuration
+  pollInterval: FiniteDuration,
+  failedRetryAfter: Duration
 ) extends Logging {
 
   private val workerCount =
@@ -93,7 +94,7 @@ abstract class BaseWorkItemJob[A](
   private def processNextWorkItem(workerId: Int): Future[Boolean] = {
     val now = clock.instant()
 
-    workItemRepository.pullOutstanding(now, now).flatMap {
+    workItemRepository.pullOutstanding(now.minus(failedRetryAfter), now).flatMap {
       case Some(workItem) =>
         processWorkItem(workerId, workItem)
       case None           =>
