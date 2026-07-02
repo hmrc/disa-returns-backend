@@ -27,6 +27,7 @@ script:pre-request {
   const pollIntervalMs = Number(bru.getEnvVar("validationProcessingPollIntervalMs") ?? 1000);
   const expectedStatus = bru.getVar("expectedUploadStatus");
   const url = `${baseUrl}${servicePath}/monthly/${bru.getVar("callbackZReference")}/${bru.getEnvVar("taxYear")}/${bru.getEnvVar("month")}/files/${bru.getVar("upscanReference")}`;
+  const backendHeaders = { "Authorization": bru.getVar("bearerToken") };
   let lastStatus = "not polled";
   let statusMatched = false;
   
@@ -37,7 +38,7 @@ script:pre-request {
   
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      const response = await bru.sendRequest({ method: "GET", url, timeout: 3000 });
+      const response = await bru.sendRequest({ method: "GET", url, headers: backendHeaders, timeout: 3000 });
       const responseBody = response.body ?? response.data;
       const body = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
       lastStatus = body?.status ?? "missing status";

@@ -17,7 +17,7 @@ assert {
 script:pre-request {
   bru.setVar("validationFileName", "isa-closed-valid.xlsx");
   bru.setVar("upscanReference", "validation-isa-closed-valid-xlsx");
-  bru.setVar("callbackZReference", `Z${((Date.now() + Math.floor(Math.random() * 1000)) % 10000).toString().padStart(4, "0")}`);
+  bru.setVar("callbackZReference", bru.getEnvVar("callbackZReference"));
   bru.setVar("validationMimeType", bru.getEnvVar("xlsxMimeType"));
   bru.setVar("validationChecksum", "eac0fc9ee43807e4aaba929833b0233308212ca95db7ffb98020a18c39a41661");
   bru.setVar("validationFileSize", 3241);

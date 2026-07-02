@@ -16,9 +16,9 @@
 
 package uk.gov.hmrc.disareturnsbackend.utils
 
-import play.api.http.HeaderNames.CONTENT_TYPE
+import play.api.http.HeaderNames.{AUTHORIZATION, CONTENT_TYPE}
 import play.api.libs.json.JsValue
-import play.api.libs.ws.{WSClient, WSResponse, writeableOf_JsValue, writeableOf_String}
+import play.api.libs.ws.{WSClient, WSRequest, WSResponse, writeableOf_JsValue, writeableOf_String}
 import play.api.test.Helpers.await
 import play.api.test.{DefaultAwaitTimeout, Helpers}
 
@@ -28,40 +28,74 @@ trait RequestUtils extends DefaultAwaitTimeout {
 
   protected def serviceUrl(path: String): String
 
+  protected def defaultAuthorizationHeader: Option[String] = None
+
+  private def request(path: String, authorizationHeader: Option[String] = defaultAuthorizationHeader): WSRequest = {
+    val wsRequest = ws.url(serviceUrl(path))
+
+    authorizationHeader.fold(wsRequest) { authorization =>
+      wsRequest.withHttpHeaders(AUTHORIZATION -> authorization)
+    }
+  }
+
   protected def get(path: String): WSResponse =
     await(
-      ws.url(serviceUrl(path))
+      request(path)
         .get()
     )
 
   protected def delete(path: String): WSResponse =
     await(
-      ws.url(serviceUrl(path))
+      request(path)
         .delete()
     )
 
   protected def postJson(path: String, body: JsValue): WSResponse =
     await(
-      ws.url(serviceUrl(path))
+      request(path)
         .post(body)
     )
 
   protected def putString(path: String, body: String = ""): WSResponse =
     await(
-      ws.url(serviceUrl(path))
+      request(path)
         .put(body)
     )
 
   protected def putJson(path: String, body: JsValue): WSResponse =
     await(
-      ws.url(serviceUrl(path))
+      request(path)
         .put(body)
     )
 
   protected def postString(path: String, body: String, contentType: String): WSResponse =
     await(
-      ws.url(serviceUrl(path))
+      request(path)
         .withHttpHeaders(CONTENT_TYPE -> contentType)
         .post(body)
     )
+
+  protected def getWithoutAuthorization(path: String): WSResponse =
+    await(request(path, None).get())
+
+  protected def deleteWithoutAuthorization(path: String): WSResponse =
+    await(request(path, None).delete())
+
+  protected def postJsonWithoutAuthorization(path: String, body: JsValue): WSResponse =
+    await(request(path, None).post(body))
+
+  protected def putJsonWithoutAuthorization(path: String, body: JsValue): WSResponse =
+    await(request(path, None).put(body))
+
+  protected def getWithAuthorization(path: String, authorizationHeader: String): WSResponse =
+    await(request(path, Some(authorizationHeader)).get())
+
+  protected def deleteWithAuthorization(path: String, authorizationHeader: String): WSResponse =
+    await(request(path, Some(authorizationHeader)).delete())
+
+  protected def postJsonWithAuthorization(path: String, body: JsValue, authorizationHeader: String): WSResponse =
+    await(request(path, Some(authorizationHeader)).post(body))
+
+  protected def putJsonWithAuthorization(path: String, body: JsValue, authorizationHeader: String): WSResponse =
+    await(request(path, Some(authorizationHeader)).put(body))
 }

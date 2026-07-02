@@ -17,8 +17,19 @@
 package uk.gov.hmrc.disareturnsbackend.controllers
 
 import play.api.http.HeaderNames.LOCATION
-import play.api.http.Status.{BAD_REQUEST, CONFLICT, CREATED, NO_CONTENT, NOT_FOUND, OK, UNPROCESSABLE_ENTITY}
+import play.api.http.Status.{
+  BAD_REQUEST,
+  CONFLICT,
+  CREATED,
+  FORBIDDEN,
+  NO_CONTENT,
+  NOT_FOUND,
+  OK,
+  UNAUTHORIZED,
+  UNPROCESSABLE_ENTITY
+}
 import play.api.libs.json.{JsValue, Json}
+import play.api.libs.ws.WSResponse
 import play.api.libs.ws.readableAsString
 import uk.gov.hmrc.disareturnsbackend.BaseIntegrationSpec
 
@@ -39,6 +50,37 @@ class MonthlyReturnControllerISpec extends BaseIntegrationSpec {
   private val nilReturnValueFalseRequest = Json.obj(valueFieldName -> false)
   private val invalidNilReturnValueRequest = Json.obj(valueFieldName -> "yes")
   private val createFileUploadRequest = Json.obj(referenceFieldName -> testUploadReference)
+
+  "secured monthly return endpoints" should {
+
+    securedEndpoints.foreach { endpoint =>
+      s"return 401 Unauthorized when ${endpoint.name} has no bearer token" in {
+        val result = endpoint.requestWithoutAuthorization()
+
+        result.status shouldBe UNAUTHORIZED
+      }
+    }
+
+    securedEndpoints.foreach { endpoint =>
+      s"return 401 Unauthorized when ${endpoint.name} has an invalid bearer token" in {
+        stubInvalidBearerToken()
+
+        val result = endpoint.requestWithAuthorization(invalidTestBearerToken)
+
+        result.status shouldBe UNAUTHORIZED
+      }
+    }
+
+    securedEndpoints.foreach { endpoint =>
+      s"return 403 Forbidden when ${endpoint.name} has a bearer token without a matching DISA enrolment" in {
+        stubAuth(wrongTestZReference)
+
+        val result = endpoint.requestWithDefaultAuthorization()
+
+        result.status shouldBe FORBIDDEN
+      }
+    }
+  }
 
   "GET to monthly return" should {
 
@@ -330,5 +372,57 @@ class MonthlyReturnControllerISpec extends BaseIntegrationSpec {
     monthFieldName -> testMonth,
     declaredOnFieldName -> testCreatedOnString,
     lastUpdatedFieldName -> testCreatedOnString
+  )
+
+  private case class SecuredEndpoint(
+    name: String,
+    requestWithoutAuthorization: () => WSResponse,
+    requestWithDefaultAuthorization: () => WSResponse,
+    requestWithAuthorization: String => WSResponse
+  )
+
+  private lazy val securedEndpoints: Seq[SecuredEndpoint] = Seq(
+    SecuredEndpoint(
+      "GET /monthly/:zReference/:taxYear/:month",
+      () => getWithoutAuthorization(monthlyPath),
+      () => get(monthlyPath),
+      authorization => getWithAuthorization(monthlyPath, authorization)
+    ),
+    SecuredEndpoint(
+      "POST /monthly/:zReference/:taxYear/:month",
+      () => postJsonWithoutAuthorization(monthlyPath, nilReturnFalseRequest),
+      () => postJson(monthlyPath, nilReturnFalseRequest),
+      authorization => postJsonWithAuthorization(monthlyPath, nilReturnFalseRequest, authorization)
+    ),
+    SecuredEndpoint(
+      "POST /monthly/:zReference/:taxYear/:month/declarations",
+      () => postJsonWithoutAuthorization(declarationsPath, Json.obj()),
+      () => postJson(declarationsPath, Json.obj()),
+      authorization => postJsonWithAuthorization(declarationsPath, Json.obj(), authorization)
+    ),
+    SecuredEndpoint(
+      "POST /monthly/:zReference/:taxYear/:month/files",
+      () => postJsonWithoutAuthorization(filesPath, createFileUploadRequest),
+      () => postJson(filesPath, createFileUploadRequest),
+      authorization => postJsonWithAuthorization(filesPath, createFileUploadRequest, authorization)
+    ),
+    SecuredEndpoint(
+      "GET /monthly/:zReference/:taxYear/:month/files/:reference",
+      () => getWithoutAuthorization(filePath),
+      () => get(filePath),
+      authorization => getWithAuthorization(filePath, authorization)
+    ),
+    SecuredEndpoint(
+      "DELETE /monthly/:zReference/:taxYear/:month/files/:reference",
+      () => deleteWithoutAuthorization(filePath),
+      () => delete(filePath),
+      authorization => deleteWithAuthorization(filePath, authorization)
+    ),
+    SecuredEndpoint(
+      "PUT /monthly/:zReference/:taxYear/:month/nilReturn",
+      () => putJsonWithoutAuthorization(nilReturnPath, nilReturnValueTrueRequest),
+      () => putJson(nilReturnPath, nilReturnValueTrueRequest),
+      authorization => putJsonWithAuthorization(nilReturnPath, nilReturnValueTrueRequest, authorization)
+    )
   )
 }

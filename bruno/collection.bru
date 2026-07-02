@@ -1,3 +1,48 @@
 headers {
   Accept: application/json
+  Authorization: {{bearerToken}}
+}
+
+script:pre-request {
+  if (bru.getVar("bearerToken")) {
+    return;
+  }
+
+  const axios = require("axios");
+  const zReferences = [
+    bru.getEnvVar("zReference"),
+    bru.getEnvVar("nilZReference"),
+    bru.getEnvVar("missingZReference"),
+    bru.getEnvVar("declarationZReference"),
+    bru.getEnvVar("declarationMissingZReference"),
+    bru.getEnvVar("submissionDeclaredZReference"),
+    bru.getEnvVar("outsidePeriodZReference"),
+    bru.getEnvVar("deleteZReference"),
+    bru.getEnvVar("callbackZReference")
+  ].filter(Boolean);
+
+  const enrolments = [...new Set(zReferences)].map((zReference) => ({
+    key: "HMRC-DISA-ORG",
+    identifiers: [
+      {
+        key: "ZREF",
+        value: zReference
+      }
+    ],
+    state: "Activated"
+  }));
+
+  const response = await axios.post(
+    `${bru.getEnvVar("authLoginBaseUrl")}/government-gateway/session/login`,
+    {
+      credId: "1234567890123456",
+      affinityGroup: "Organisation",
+      confidenceLevel: 250,
+      credentialStrength: "strong",
+      credentialRole: "Admin",
+      enrolments: enrolments
+    }
+  );
+
+  bru.setVar("bearerToken", response.headers.get("authorization"));
 }

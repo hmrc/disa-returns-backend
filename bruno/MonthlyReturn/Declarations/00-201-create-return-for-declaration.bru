@@ -38,13 +38,6 @@ script:pre-request {
     throw new Error(`Expected monthly returns cleanup to respond with 204, got ${clearResponse.status}`);
   }
   
-  const base = (Date.now() + Math.floor(Math.random() * 1000)) % 10000;
-  
-  function zRef(offset) {
-    const value = (base + offset) % 10000;
-    return `Z${value.toString().padStart(4, "0")}`;
-  }
-  
-  bru.setVar("declarationZReference", zRef(0));
-  bru.setVar("declarationMissingZReference", zRef(1));
+  bru.setVar("declarationZReference", bru.getEnvVar("declarationZReference"));
+  bru.setVar("declarationMissingZReference", bru.getEnvVar("declarationMissingZReference"));
 }

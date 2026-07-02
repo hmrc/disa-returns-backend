@@ -30,6 +30,10 @@ trait TestConstants {
   protected val testZReference          = "Z1234"
   protected val lowercaseTestZReference = "z1234"
   protected val invalidTestZReference   = "1234"
+  protected val wrongTestZReference     = "Z9999"
+
+  protected val testBearerToken        = "Bearer valid-bearer-token"
+  protected val invalidTestBearerToken = "Bearer invalid-bearer-token"
 
   protected val testTaxYear                = "2026-27"
   protected val yearOnlyTestTaxYear        = "2026"

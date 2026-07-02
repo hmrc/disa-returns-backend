@@ -17,7 +17,7 @@ assert {
 script:pre-request {
   bru.setVar("validationFileName", "inline-error-limit-exceeded-invalid.xlsx");
   bru.setVar("upscanReference", "validation-inline-error-limit-exceeded-invalid-xlsx");
-  bru.setVar("callbackZReference", `Z${((Date.now() + Math.floor(Math.random() * 1000)) % 10000).toString().padStart(4, "0")}`);
+  bru.setVar("callbackZReference", bru.getEnvVar("callbackZReference"));
   bru.setVar("validationMimeType", bru.getEnvVar("xlsxMimeType"));
   bru.setVar("validationChecksum", "17d65eb638fcba829ca088e141387cc7e3c3544c23024f3dc4ad746441d6b2c7");
   bru.setVar("validationFileSize", 2725);

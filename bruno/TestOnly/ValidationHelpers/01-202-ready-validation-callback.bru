@@ -46,6 +46,7 @@ script:pre-request {
   const validationDownloadUrlOverride = bru.getVar("validationDownloadUrlOverride");
   const validationDownloadUrl = validationDownloadUrlOverride || `${baseUrl}${servicePath}/test-only/file-upload/monthly/${bru.getVar("validationFileName")}`;
   bru.setVar("validationDownloadUrl", validationDownloadUrl);
+  const backendHeaders = { "Content-Type": "application/json", "Authorization": bru.getVar("bearerToken") };
   
   const clockResponse = await bru.runRequest("TestOnly/Clock/04-200-set-clock-inside-declaration-period");
   
@@ -67,7 +68,7 @@ script:pre-request {
   
   const returnUrl = `${baseUrl}${servicePath}/monthly/${zReference}/${taxYear}/${month}`;
   bru.setVar("validationSetupReturnUrl", returnUrl);
-  const returnResponse = await bru.sendRequest({ method: "POST", url: returnUrl, headers: { "Content-Type": "application/json" }, data: { nilReturn: false }, timeout: 3000 });
+  const returnResponse = await bru.sendRequest({ method: "POST", url: returnUrl, headers: backendHeaders, data: { nilReturn: false }, timeout: 3000 });
   bru.setVar("validationSetupReturnStatus", String(returnResponse.status));
   
   if (returnResponse.status !== 201) {
@@ -76,7 +77,7 @@ script:pre-request {
   
   const fileUploadUrl = `${returnUrl}/files`;
   bru.setVar("validationSetupFileUploadUrl", fileUploadUrl);
-  const response = await bru.sendRequest({ method: "POST", url: fileUploadUrl, headers: { "Content-Type": "application/json" }, data: { reference: uploadReference }, timeout: 3000 });
+  const response = await bru.sendRequest({ method: "POST", url: fileUploadUrl, headers: backendHeaders, data: { reference: uploadReference }, timeout: 3000 });
   bru.setVar("validationSetupFileUploadStatus", String(response.status));
   
   if (response.status !== 201) {

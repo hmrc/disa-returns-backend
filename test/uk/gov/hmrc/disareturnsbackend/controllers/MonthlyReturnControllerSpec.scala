@@ -24,9 +24,11 @@ import play.api.Application
 import play.api.http.HeaderNames.LOCATION
 import play.api.inject.bind
 import play.api.libs.json.Json
+import play.api.mvc.{ActionBuilder, AnyContent, ControllerComponents}
 import play.api.test.FakeRequest
 import play.api.test.Helpers.*
 import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector
+import uk.gov.hmrc.disareturnsbackend.controllers.actions.{MonthlyReturnAuthAction, ValidatedMonthlyReturnAction}
 import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.services.CreateFileUploadResult
 import uk.gov.hmrc.disareturnsbackend.services.DeclareMonthlyReturnResult
@@ -40,11 +42,13 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
 
   private val mockMonthlyReturnService       = mock[MonthlyReturnService]
   private val mockReturnsSubmissionConnector = mock[ReturnsSubmissionConnector]
+  private val monthlyReturnAuthAction        = new FakeMonthlyReturnAuthAction(stubControllerComponents())
 
   override lazy val app: Application = applicationBuilder(
     Seq(
       bind[MonthlyReturnService].toInstance(mockMonthlyReturnService),
-      bind[ReturnsSubmissionConnector].toInstance(mockReturnsSubmissionConnector)
+      bind[ReturnsSubmissionConnector].toInstance(mockReturnsSubmissionConnector),
+      bind[MonthlyReturnAuthAction].toInstance(monthlyReturnAuthAction)
     )
   ).build()
 
@@ -55,6 +59,17 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
   private val declarationsPath = s"$path/declarations"
   private val filesPath        = s"$path/files"
   private val filePath         = s"$filesPath/$testUploadReference"
+
+  private class FakeMonthlyReturnAuthAction(cc: ControllerComponents) extends MonthlyReturnAuthAction {
+    private val validatedMonthlyReturnAction = new ValidatedMonthlyReturnAction(cc)
+
+    override def apply(
+      zReference: String,
+      taxYear: String,
+      month: String
+    ): ActionBuilder[ValidatedMonthlyReturnRequest, AnyContent] =
+      validatedMonthlyReturnAction(zReference, taxYear, month)
+  }
 
   private val monthlyReturn = MonthlyReturn(
     zReference = testZReference,

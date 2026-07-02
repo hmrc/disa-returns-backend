@@ -65,6 +65,12 @@ class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
       result.status shouldBe ACCEPTED
     }
 
+    "return 202 Accepted for READY callback payload without a bearer token" in {
+      val result = postJsonWithoutAuthorization(fullCallbackPath, Json.toJson(successfulUploadResult))
+
+      result.status shouldBe ACCEPTED
+    }
+
     "set the file upload status to DUPLICATE when the checksum already exists" in {
       postJson(monthlyPath, nilReturnFalseRequest).status shouldBe CREATED
       postJson(filesPath, Json.obj(referenceFieldName -> upscanReference)).status shouldBe CREATED

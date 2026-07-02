@@ -17,7 +17,7 @@ assert {
 script:pre-request {
   bru.setVar("validationFileName", "garbage-invalid.csv");
   bru.setVar("upscanReference", "validation-garbage-invalid-csv");
-  bru.setVar("callbackZReference", `Z${((Date.now() + Math.floor(Math.random() * 1000)) % 10000).toString().padStart(4, "0")}`);
+  bru.setVar("callbackZReference", bru.getEnvVar("callbackZReference"));
   bru.setVar("validationMimeType", bru.getEnvVar("csvMimeType"));
   bru.setVar("validationChecksum", "10681980e4978bfde3cda470df77e798b1c9065d3d2b5b74831b306c22de74a4");
   bru.setVar("validationFileSize", 47);

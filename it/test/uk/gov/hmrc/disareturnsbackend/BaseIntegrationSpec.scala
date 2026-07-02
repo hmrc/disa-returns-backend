@@ -26,7 +26,8 @@ import org.scalatestplus.play.guice.GuiceOneServerPerSuite
 import org.mongodb.scala.ObservableFuture
 import org.mongodb.scala.model.Filters
 import play.api.Application
-import play.api.http.Status.{CREATED, OK}
+import play.api.http.HeaderNames.{AUTHORIZATION, WWW_AUTHENTICATE}
+import play.api.http.Status.{CREATED, OK, UNAUTHORIZED}
 import play.api.inject.bind
 import play.api.inject.guice.GuiceApplicationBuilder
 import play.api.libs.json.{JsObject, Json}
@@ -68,6 +69,9 @@ trait BaseIntegrationSpec
       "auditing.enabled"                    -> false,
       "create-internal-auth-token-on-start" -> false,
       "mongodb.uri"                         -> "mongodb://localhost:27017/disa-returns-backend-it",
+      "microservice.services.auth.protocol" -> "http",
+      "microservice.services.auth.host"     -> "localhost",
+      "microservice.services.auth.port"     -> wireMockPort,
       "microservice.services.disa-returns-submission.protocol" -> "http",
       "microservice.services.disa-returns-submission.host"     -> "localhost",
       "microservice.services.disa-returns-submission.port"     -> wireMockPort
@@ -79,8 +83,11 @@ trait BaseIntegrationSpec
   implicit val ws: WSClient                       = inject[WSClient]
   implicit val executionContext: ExecutionContext = inject[ExecutionContext]
 
+  override protected def defaultAuthorizationHeader: Option[String] = Some(testBearerToken)
+
   override protected def beforeEach(): Unit = {
     super.beforeEach()
+    stubAuth()
     stubReturnsSubmissionCreateMonthlyReturn()
     stubReturnsSubmissionDeclareMonthlyReturn()
     clearMongoCollections()
@@ -117,6 +124,46 @@ trait BaseIntegrationSpec
     stubFor(
       post(urlPathMatching("/disa-returns-submission/monthly/[^/]+/[^/]+/[^/]+/declarations"))
         .willReturn(aResponse().withStatus(status))
+    )
+
+  protected def stubAuth(zReference: String = testZReference, authorizationHeader: String = testBearerToken): Unit =
+    stubFor(
+      post(urlEqualTo("/auth/authorise"))
+        .withHeader(AUTHORIZATION, equalTo(authorizationHeader))
+        .willReturn(
+          aResponse()
+            .withStatus(OK)
+            .withHeader("Content-Type", "application/json")
+            .withBody(
+              Json
+                .obj(
+                  "allEnrolments" -> Json.arr(
+                    Json.obj(
+                      "key" -> "HMRC-DISA-ORG",
+                      "identifiers" -> Json.arr(
+                        Json.obj(
+                          "key"   -> "ZREF",
+                          "value" -> zReference
+                        )
+                      ),
+                      "state" -> "Activated"
+                    )
+                  )
+                )
+                .toString()
+            )
+        )
+    )
+
+  protected def stubInvalidBearerToken(): Unit =
+    stubFor(
+      post(urlEqualTo("/auth/authorise"))
+        .withHeader(AUTHORIZATION, equalTo(invalidTestBearerToken))
+        .willReturn(
+          aResponse()
+            .withStatus(UNAUTHORIZED)
+            .withHeader(WWW_AUTHENTICATE, """MDTP detail="InvalidBearerToken"""")
+        )
     )
 
   def serviceUrl(path: String): String = s"http://localhost:$port$path"
