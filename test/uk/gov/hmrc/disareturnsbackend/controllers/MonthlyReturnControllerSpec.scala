@@ -24,32 +24,33 @@ import play.api.Application
 import play.api.http.HeaderNames.LOCATION
 import play.api.inject.bind
 import play.api.libs.json.Json
-import play.api.mvc.{ActionBuilder, AnyContent, ControllerComponents}
+import play.api.mvc.{ActionBuilder, AnyContent, BodyParser, ControllerComponents, Request, Result, Results}
 import play.api.test.FakeRequest
 import play.api.test.Helpers.*
 import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector
-import uk.gov.hmrc.disareturnsbackend.controllers.actions.{MonthlyReturnAuthAction, ValidatedMonthlyReturnAction}
+import uk.gov.hmrc.disareturnsbackend.controllers.actions.RequestAuthAndValidationAction
 import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.services.CreateFileUploadResult
 import uk.gov.hmrc.disareturnsbackend.services.DeclareMonthlyReturnResult
 import uk.gov.hmrc.disareturnsbackend.services.CreateMonthlyReturnResult.{AlreadyExists, Created, OutsideDeclarationPeriod}
 import uk.gov.hmrc.disareturnsbackend.services.MonthlyReturnService
 import uk.gov.hmrc.disareturnsbackend.services.UpdateNilReturnResult
+import uk.gov.hmrc.disareturnsbackend.validators.ValidationHelper
 
-import java.time.{Clock, Instant, ZoneOffset}
+import java.time.{Clock, Instant, LocalDate, YearMonth, ZoneOffset}
 import scala.concurrent.Future
 
 class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
 
   private val mockMonthlyReturnService       = mock[MonthlyReturnService]
   private val mockReturnsSubmissionConnector = mock[ReturnsSubmissionConnector]
-  private val monthlyReturnAuthAction        = new FakeMonthlyReturnAuthAction(stubControllerComponents())
+  private val requestAuthAndValidationAction = new FakeRequestAuthAndValidationAction(stubControllerComponents())
 
   override lazy val app: Application = applicationBuilder(
     Seq(
       bind[MonthlyReturnService].toInstance(mockMonthlyReturnService),
       bind[ReturnsSubmissionConnector].toInstance(mockReturnsSubmissionConnector),
-      bind[MonthlyReturnAuthAction].toInstance(monthlyReturnAuthAction)
+      bind[RequestAuthAndValidationAction].toInstance(requestAuthAndValidationAction)
     )
   ).build()
 
@@ -61,11 +62,10 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
   private val filesPath        = s"$path/files"
   private val filePath         = s"$filesPath/$testUploadReference"
 
-  private class FakeMonthlyReturnAuthAction(cc: ControllerComponents) extends MonthlyReturnAuthAction {
-    private val validatedMonthlyReturnAction = new ValidatedMonthlyReturnAction(
-      cc,
-      Clock.fixed(Instant.parse("2026-06-07T12:00:00Z"), ZoneOffset.UTC)
-    )
+  private class FakeRequestAuthAndValidationAction(cc: ControllerComponents)
+      extends RequestAuthAndValidationAction
+      with Results {
+    private val clock = Clock.fixed(Instant.parse("2026-06-07T12:00:00Z"), ZoneOffset.UTC)
 
     override def apply(
       zReference: String,
@@ -73,7 +73,39 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
       month: String,
       checkPeriod: Boolean = false
     ): ActionBuilder[ValidatedMonthlyReturnRequest, AnyContent] =
-      validatedMonthlyReturnAction(zReference, taxYear, month, checkPeriod)
+      new ActionBuilder[ValidatedMonthlyReturnRequest, AnyContent] {
+        override def parser: BodyParser[AnyContent] = cc.parsers.defaultBodyParser
+
+        override protected def executionContext = ec
+
+        override def invokeBlock[A](
+          request: Request[A],
+          block: ValidatedMonthlyReturnRequest[A] => Future[Result]
+        ): Future[Result] =
+          ValidationHelper.validateParams(zReference, taxYear, month) match {
+            case Right((validZReference, validTaxYear, validMonth)) =>
+              if (checkPeriod && !isPreviousMonthlyPeriod(validTaxYear, validMonth)) {
+                Future.successful(UnprocessableEntity)
+              } else {
+                block(ValidatedMonthlyReturnRequest(validZReference, validTaxYear, validMonth, request))
+              }
+
+            case Left(errorMessage) =>
+              Future.successful(BadRequest(Json.obj("message" -> errorMessage)))
+          }
+      }
+
+    private def isPreviousMonthlyPeriod(taxYear: String, month: Int): Boolean = {
+      val previousMonth = YearMonth.from(LocalDate.now(clock)).minusMonths(1)
+
+      taxYear == taxYearFor(previousMonth) && month == previousMonth.getMonthValue
+    }
+
+    private def taxYearFor(period: YearMonth): String = {
+      val startYear = if (period.getMonthValue >= 4) period.getYear else period.getYear - 1
+
+      f"$startYear%04d-${(startYear + 1) % 100}%02d"
+    }
   }
 
   private val monthlyReturn = MonthlyReturn(

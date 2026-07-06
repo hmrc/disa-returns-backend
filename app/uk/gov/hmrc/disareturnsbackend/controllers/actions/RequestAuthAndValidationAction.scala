@@ -31,7 +31,7 @@ import javax.inject.{Inject, Singleton}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
 
-trait MonthlyReturnAuthAction {
+trait RequestAuthAndValidationAction {
 
   def apply(
     zReference: String,
@@ -42,9 +42,13 @@ trait MonthlyReturnAuthAction {
 }
 
 @Singleton
-class MonthlyReturnAuthActionImpl @Inject() (cc: ControllerComponents, authConnector: AuthConnector, clock: Clock)(implicit
+class RequestAuthAndValidationActionImpl @Inject() (
+  cc: ControllerComponents,
+  authConnector: AuthConnector,
+  clock: Clock
+)(implicit
   ec: ExecutionContext
-) extends MonthlyReturnAuthAction
+) extends RequestAuthAndValidationAction
     with Results
     with Logging {
 
@@ -52,7 +56,7 @@ class MonthlyReturnAuthActionImpl @Inject() (cc: ControllerComponents, authConne
   private val identifierKey = "ZREF"
 
   private val authFunctions = new AuthorisedFunctions {
-    override def authConnector: AuthConnector = MonthlyReturnAuthActionImpl.this.authConnector
+    override def authConnector: AuthConnector = RequestAuthAndValidationActionImpl.this.authConnector
   }
 
   override def apply(
@@ -79,40 +83,40 @@ class MonthlyReturnAuthActionImpl @Inject() (cc: ControllerComponents, authConne
               case Right((validZReference, validTaxYear, validMonth)) =>
                 if (checkPeriod && !isPreviousMonthlyPeriod(validTaxYear, validMonth)) {
                   logger.warn(
-                    s"[MonthlyReturnAuthAction] Monthly return request is outside the allowed period for zReference [$validZReference], taxYear [$validTaxYear], month [$validMonth]"
+                    s"[RequestAuthAndValidationAction] Monthly return request is outside the allowed period for zReference [$validZReference], taxYear [$validTaxYear], month [$validMonth]"
                   )
                   Future.successful(UnprocessableEntity)
                 } else if (hasMatchingDisaEnrolment(enrolments, validZReference)) {
                   block(ValidatedMonthlyReturnRequest(validZReference, validTaxYear, validMonth, request))
                 } else {
                   logger.warn(
-                    s"[MonthlyReturnAuthAction] DISA enrolment [$enrolmentKey/$identifierKey] does not match zReference [$validZReference]"
+                    s"[RequestAuthAndValidationAction] DISA enrolment [$enrolmentKey/$identifierKey] does not match zReference [$validZReference]"
                   )
                   Future.successful(Forbidden)
                 }
 
               case Left(errorMessage) =>
                 logger.warn(
-                  s"[MonthlyReturnAuthAction] Invalid monthly return request parameters for zReference [$zReference], taxYear [$taxYear], month [$month]: [$errorMessage]"
+                  s"[RequestAuthAndValidationAction] Invalid monthly return request parameters for zReference [$zReference], taxYear [$taxYear], month [$month]: [$errorMessage]"
                 )
                 Future.successful(BadRequest(Json.obj("message" -> errorMessage)))
             }
           }
           .recover {
             case exception: InternalError =>
-              logger.error("[MonthlyReturnAuthAction] Auth request failed with internal error", exception)
+              logger.error("[RequestAuthAndValidationAction] Auth request failed with internal error", exception)
               ServiceUnavailable
 
             case exception: NoActiveSession =>
-              logger.warn("[MonthlyReturnAuthAction] Bearer token is missing or invalid", exception)
+              logger.warn("[RequestAuthAndValidationAction] Bearer token is missing or invalid", exception)
               Unauthorized
 
             case exception: AuthorisationException =>
-              logger.warn("[MonthlyReturnAuthAction] Authorisation failed", exception)
+              logger.warn("[RequestAuthAndValidationAction] Authorisation failed", exception)
               Unauthorized
 
             case NonFatal(exception) =>
-              logger.error("[MonthlyReturnAuthAction] Auth request failed unexpectedly", exception)
+              logger.error("[RequestAuthAndValidationAction] Auth request failed unexpectedly", exception)
               ServiceUnavailable
           }
       }

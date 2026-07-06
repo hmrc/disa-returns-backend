@@ -26,12 +26,20 @@ import play.api.test.FakeRequest
 import play.api.test.Helpers.*
 import uk.gov.hmrc.auth.core.{AuthConnector, BearerTokenExpired, Enrolment, EnrolmentIdentifier, Enrolments, InternalError, InvalidBearerToken, MissingBearerToken}
 
+import java.time.{Clock, Instant, ZoneOffset}
 import scala.concurrent.Future
 
-class MonthlyReturnAuthActionSpec extends SpecBase with BeforeAndAfterEach {
+class RequestAuthAndValidationActionSpec extends SpecBase with BeforeAndAfterEach {
 
   private val mockAuthConnector = mock[AuthConnector]
-  private val authAction        = new MonthlyReturnAuthActionImpl(stubControllerComponents(), mockAuthConnector)
+  private val authAction        = authActionAt()
+
+  private def authActionAt(now: String = "2026-06-07T12:00:00Z") =
+    new RequestAuthAndValidationActionImpl(
+      stubControllerComponents(),
+      mockAuthConnector,
+      Clock.fixed(Instant.parse(now), ZoneOffset.UTC)
+    )
 
   override protected def beforeEach(): Unit = {
     super.beforeEach()
@@ -39,7 +47,7 @@ class MonthlyReturnAuthActionSpec extends SpecBase with BeforeAndAfterEach {
     authoriseWith(disaEnrolments(testZReference))
   }
 
-  "MonthlyReturnAuthAction" - {
+  "RequestAuthAndValidationAction" - {
 
     "must allow the request when the bearer token is valid and the DISA enrolment matches the zReference" in {
       val result = authAction(lowercaseTestZReference, testTaxYear, testRouteMonth)
@@ -130,6 +138,41 @@ class MonthlyReturnAuthActionSpec extends SpecBase with BeforeAndAfterEach {
 
       status(result) mustBe BAD_REQUEST
       contentAsString(result) must include(zReferenceFieldName)
+    }
+
+    "must allow the previous monthly period when period checking is enabled" in {
+      val result = authAction("Z1234", "2026-27", "5", checkPeriod = true)
+        .async(_ => Future.successful(Ok))(authorisedRequest)
+
+      status(result) mustBe OK
+    }
+
+    "must reject the current monthly period when period checking is enabled" in {
+      val result = authAction("Z1234", "2026-27", "6", checkPeriod = true)
+        .async(_ => Future.successful(Ok))(authorisedRequest)
+
+      status(result) mustBe UNPROCESSABLE_ENTITY
+    }
+
+    "must reject the previous month when the tax year does not match and period checking is enabled" in {
+      val result = authAction("Z1234", "2025-26", "5", checkPeriod = true)
+        .async(_ => Future.successful(Ok))(authorisedRequest)
+
+      status(result) mustBe UNPROCESSABLE_ENTITY
+    }
+
+    "must calculate April as the start of a tax year when period checking is enabled" in {
+      val result = authActionAt("2026-05-07T12:00:00Z")("Z1234", "2026-27", "4", checkPeriod = true)
+        .async(_ => Future.successful(Ok))(authorisedRequest)
+
+      status(result) mustBe OK
+    }
+
+    "must calculate March as the end of the previous tax year when period checking is enabled" in {
+      val result = authActionAt("2026-04-07T12:00:00Z")("Z1234", "2025-26", "3", checkPeriod = true)
+        .async(_ => Future.successful(Ok))(authorisedRequest)
+
+      status(result) mustBe OK
     }
   }
 
