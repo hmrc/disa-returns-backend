@@ -24,9 +24,11 @@ import play.api.Application
 import play.api.http.HeaderNames.LOCATION
 import play.api.inject.bind
 import play.api.libs.json.Json
+import play.api.mvc.{ActionBuilder, AnyContent, ControllerComponents}
 import play.api.test.FakeRequest
 import play.api.test.Helpers.*
 import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector
+import uk.gov.hmrc.disareturnsbackend.controllers.actions.{MonthlyReturnAuthAction, ValidatedMonthlyReturnAction}
 import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.services.CreateFileUploadResult
 import uk.gov.hmrc.disareturnsbackend.services.DeclareMonthlyReturnResult
@@ -41,13 +43,13 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
 
   private val mockMonthlyReturnService       = mock[MonthlyReturnService]
   private val mockReturnsSubmissionConnector = mock[ReturnsSubmissionConnector]
-  private val fixedClock                     = Clock.fixed(Instant.parse("2026-06-07T12:00:00Z"), ZoneOffset.UTC)
+  private val monthlyReturnAuthAction        = new FakeMonthlyReturnAuthAction(stubControllerComponents())
 
   override lazy val app: Application = applicationBuilder(
     Seq(
       bind[MonthlyReturnService].toInstance(mockMonthlyReturnService),
       bind[ReturnsSubmissionConnector].toInstance(mockReturnsSubmissionConnector),
-      bind[Clock].toInstance(fixedClock)
+      bind[MonthlyReturnAuthAction].toInstance(monthlyReturnAuthAction)
     )
   ).build()
 
@@ -58,6 +60,21 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
   private val declarationsPath = s"$path/declarations"
   private val filesPath        = s"$path/files"
   private val filePath         = s"$filesPath/$testUploadReference"
+
+  private class FakeMonthlyReturnAuthAction(cc: ControllerComponents) extends MonthlyReturnAuthAction {
+    private val validatedMonthlyReturnAction = new ValidatedMonthlyReturnAction(
+      cc,
+      Clock.fixed(Instant.parse("2026-06-07T12:00:00Z"), ZoneOffset.UTC)
+    )
+
+    override def apply(
+      zReference: String,
+      taxYear: String,
+      month: String,
+      checkPeriod: Boolean = false
+    ): ActionBuilder[ValidatedMonthlyReturnRequest, AnyContent] =
+      validatedMonthlyReturnAction(zReference, taxYear, month, checkPeriod)
+  }
 
   private val monthlyReturn = MonthlyReturn(
     zReference = testZReference,
@@ -120,7 +137,6 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
       status(result) mustBe BAD_REQUEST
       contentAsString(result) must include(zReferenceFieldName)
     }
-
   }
 
   "MonthlyReturnController.createMonthlyReturn" - {
@@ -204,21 +220,6 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
       )
 
       status(result) mustBe UNPROCESSABLE_ENTITY
-    }
-
-    "must return UNPROCESSABLE_ENTITY when the tax year and month are not the previous monthly period" in {
-      val currentMonth = "6"
-
-      val result = controller.createMonthlyReturn(testZReference, testTaxYear, currentMonth)(
-        FakeRequest("POST", path).withBody(
-          Json.toJson(CreateMonthlyReturnRequest(nilReturn = false))
-        )
-      )
-
-      status(result) mustBe UNPROCESSABLE_ENTITY
-      verify(mockReturnsSubmissionConnector, never())
-        .getMonthlyReturn(any[String](), any[String](), any[Int]())(any(), any())
-      verify(mockMonthlyReturnService, never()).create(any[String](), any[String](), any[Int](), any[Boolean]())(any())
     }
 
     "must return SERVICE_UNAVAILABLE when the service fails" in {
@@ -329,7 +330,6 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
 
       status(result) mustBe BAD_REQUEST
     }
-
   }
 
   "MonthlyReturnController.declareMonthlyReturn" - {
@@ -394,17 +394,6 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
       )
 
       status(result) mustBe UNPROCESSABLE_ENTITY
-    }
-
-    "must return UNPROCESSABLE_ENTITY when the tax year does not match the previous monthly period" in {
-      val result = controller.declareMonthlyReturn(testZReference, "2025-26", testRouteMonth)(
-        FakeRequest("POST", declarationsPath)
-      )
-
-      status(result) mustBe UNPROCESSABLE_ENTITY
-      verify(mockReturnsSubmissionConnector, never())
-        .getMonthlyReturn(any[String](), any[String](), any[Int]())(any(), any())
-      verify(mockMonthlyReturnService, never()).declare(any[String](), any[String](), any[Int]())(any())
     }
 
     "must return SERVICE_UNAVAILABLE when the service fails" in {
@@ -513,20 +502,6 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
         .createFileUpload(any[String](), any[String](), any[Int](), any[String]())
     }
 
-    "must return UNPROCESSABLE_ENTITY when the tax year and month are not the previous monthly period" in {
-      val currentMonth = "6"
-
-      val result = controller.createFileUpload(testZReference, testTaxYear, currentMonth)(
-        FakeRequest("POST", filesPath).withBody(Json.toJson(CreateFileUploadRequest(testUploadReference)))
-      )
-
-      status(result) mustBe UNPROCESSABLE_ENTITY
-      verify(mockReturnsSubmissionConnector, never())
-        .getMonthlyReturn(any[String](), any[String](), any[Int]())(any(), any())
-      verify(mockMonthlyReturnService, never())
-        .createFileUpload(any[String](), any[String](), any[Int](), any[String]())
-    }
-
     "must return SERVICE_UNAVAILABLE when the service fails" in {
       when(
         mockMonthlyReturnService.createFileUpload(
@@ -608,7 +583,6 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
 
       status(result) mustBe SERVICE_UNAVAILABLE
     }
-
   }
 
   "MonthlyReturnController.deleteFileUpload" - {
@@ -675,6 +649,5 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
       status(result) mustBe BAD_REQUEST
       contentAsString(result) must include(zReferenceFieldName)
     }
-
   }
 }

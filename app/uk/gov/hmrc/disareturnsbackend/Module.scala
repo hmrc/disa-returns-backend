@@ -19,6 +19,7 @@ package uk.gov.hmrc.disareturnsbackend
 import config.{InternalAuthTokenInitialiser, InternalAuthTokenInitialiserImpl, NoOpInternalAuthTokenInitialiser}
 import play.api.{Configuration, Environment}
 import play.api.inject.{Binding, Module as AppModule, bind as binding}
+import uk.gov.hmrc.disareturnsbackend.controllers.actions.{MonthlyReturnAuthAction, MonthlyReturnAuthActionImpl}
 import uk.gov.hmrc.disareturnsbackend.jobs.MonthlyReturnWorkItemJob
 import uk.gov.hmrc.disareturnsbackend.mappers.{UpscanCallbackMapper, UpscanCallbackMapperImpl}
 import uk.gov.hmrc.disareturnsbackend.services.{MonthlyReturnAuditService, MonthlyReturnFileUploadProcessingService, MonthlyReturnFileUploadProcessingServiceImpl}
@@ -59,6 +60,7 @@ class Module extends AppModule:
       }
 
     Seq(
+      binding[MonthlyReturnAuthAction].to[MonthlyReturnAuthActionImpl],
       binding[MonthlyReturnWorkItemJob].toSelf,
       binding[MonthlyReturnFileUploadProcessingService].to[MonthlyReturnFileUploadProcessingServiceImpl],
       binding[MonthlyReturnAuditService].toSelf,

@@ -22,6 +22,12 @@ Path parameters:
 
 Invalid path parameters return `400 Bad Request`.
 
+The monthly return endpoints above require a valid bearer token with DISA enrolment `HMRC-DISA-ORG`.
+Requests with no or invalid bearer token return `401 Unauthorized`.
+Requests with a valid bearer token but no matching DISA enrolment return `403 Forbidden`.
+
+The Upscan callback and test-only endpoints are not secured by this bearer-token/enrolment check.
+
 ### Create Monthly Return
 
 `POST /disa-returns-backend/monthly/:zReference/:taxYear/:month`
