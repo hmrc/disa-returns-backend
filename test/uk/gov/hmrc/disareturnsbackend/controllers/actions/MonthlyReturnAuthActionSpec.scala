@@ -24,16 +24,7 @@ import play.api.http.HeaderNames.AUTHORIZATION
 import play.api.mvc.Results.Ok
 import play.api.test.FakeRequest
 import play.api.test.Helpers.*
-import uk.gov.hmrc.auth.core.{
-  AuthConnector,
-  BearerTokenExpired,
-  Enrolment,
-  EnrolmentIdentifier,
-  Enrolments,
-  InternalError,
-  InvalidBearerToken,
-  MissingBearerToken
-}
+import uk.gov.hmrc.auth.core.{AuthConnector, BearerTokenExpired, Enrolment, EnrolmentIdentifier, Enrolments, InternalError, InvalidBearerToken, MissingBearerToken}
 
 import scala.concurrent.Future
 

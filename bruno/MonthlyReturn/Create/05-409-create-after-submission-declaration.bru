@@ -35,7 +35,7 @@ script:pre-request {
     throw new Error(`Expected monthly returns cleanup to respond with 204, got ${clearResponse.status}`);
   }
   
-  const zReference = `Z${((Date.now() + Math.floor(Math.random() * 1000)) % 10000).toString().padStart(4, "0")}`;
+  const zReference = bru.getEnvVar("submissionDeclaredZReference");
   bru.setVar("submissionDeclaredZReference", zReference);
   
   const submissionUrl = `${bru.getEnvVar("submissionBaseUrl")}${bru.getEnvVar("submissionServicePath")}/monthly/${zReference}/${bru.getEnvVar("taxYear")}/${bru.getEnvVar("month")}`;

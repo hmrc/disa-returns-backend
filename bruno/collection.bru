@@ -1,3 +1,83 @@
 headers {
   Accept: application/json
+  Authorization: {{bearerToken}}
+}
+
+script:pre-request {
+  const defaultZReferences = {
+    zReference: "Z1234",
+    nilZReference: "Z1235",
+    missingZReference: "Z1236",
+    declarationZReference: "Z2234",
+    declarationMissingZReference: "Z2235",
+    submissionDeclaredZReference: "Z3234",
+    outsidePeriodZReference: "Z4234",
+    deleteZReference: "Z5234",
+    callbackZReference: "Z6234"
+  };
+
+  const zReferenceVariableNames = [
+    "zReference",
+    "nilZReference",
+    "missingZReference",
+    "declarationZReference",
+    "declarationMissingZReference",
+    "submissionDeclaredZReference",
+    "outsidePeriodZReference",
+    "deleteZReference",
+    "callbackZReference"
+  ];
+
+  zReferenceVariableNames.forEach((name) => {
+    const value = bru.getEnvVar(name) || bru.getVar(name) || defaultZReferences[name];
+    if (value) {
+      bru.setVar(name, value);
+    }
+  });
+
+  if (bru.getVar("bearerTokenGenerated") !== "true") {
+    const axios = require("axios");
+    const zReferences = zReferenceVariableNames.map((name) => bru.getVar(name)).filter(Boolean);
+
+    const enrolments = [...new Set(zReferences)].map((zReference) => ({
+      key: "HMRC-DISA-ORG",
+      identifiers: [
+        {
+          key: "ZREF",
+          value: zReference
+        }
+      ],
+      state: "Activated"
+    }));
+
+    const response = await axios.post(
+      `${bru.getEnvVar("authLoginBaseUrl")}/government-gateway/session/login`,
+      {
+        credId: "1234567890123456",
+        affinityGroup: "Organisation",
+        confidenceLevel: 250,
+        credentialStrength: "strong",
+        credentialRole: "admin",
+        enrolments: enrolments
+      }
+    );
+
+    const authorization =
+      (response.headers && response.headers.get && response.headers.get("authorization")) ||
+      (response.headers && response.headers.authorization) ||
+      (response.headers && response.headers.Authorization);
+
+    if (!authorization) {
+      throw new Error("auth-login-api did not return an authorization header");
+    }
+
+    bru.setEnvVar("bearerToken", authorization);
+    bru.setVar("bearerToken", authorization);
+    bru.setVar("bearerTokenGenerated", "true");
+  }
+
+  const bearerToken = bru.getVar("bearerToken") || bru.getEnvVar("bearerToken");
+  if (bearerToken && typeof req !== "undefined" && req.setHeader) {
+    req.setHeader("Authorization", bearerToken);
+  }
 }

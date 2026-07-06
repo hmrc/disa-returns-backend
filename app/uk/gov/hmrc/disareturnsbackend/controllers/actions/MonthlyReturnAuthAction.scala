@@ -131,8 +131,7 @@ class MonthlyReturnAuthActionImpl @Inject() (cc: ControllerComponents, authConne
   }
 
   private def hasMatchingDisaEnrolment(enrolments: Enrolments, zReference: String): Boolean =
-    enrolments
-      .enrolments
+    enrolments.enrolments
       .exists { enrolment =>
         enrolment.key == enrolmentKey &&
         enrolment.isActivated &&

@@ -17,7 +17,7 @@ assert {
 script:pre-request {
   bru.setVar("validationFileName", "inline-error-limit-exceeded-invalid.csv");
   bru.setVar("upscanReference", "validation-inline-error-limit-exceeded-invalid-csv");
-  bru.setVar("callbackZReference", `Z${((Date.now() + Math.floor(Math.random() * 1000)) % 10000).toString().padStart(4, "0")}`);
+  bru.setVar("callbackZReference", bru.getEnvVar("callbackZReference"));
   bru.setVar("validationMimeType", bru.getEnvVar("csvMimeType"));
   bru.setVar("validationChecksum", "7fc6bd526ce97908eb88efaf6775ec04dcb4673ef963647fa5f209e5c6e5a759");
   bru.setVar("validationFileSize", 776);

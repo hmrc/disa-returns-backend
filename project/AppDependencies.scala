@@ -11,7 +11,6 @@ object AppDependencies {
 
   val compile: Seq[ModuleID] = Seq(
     "uk.gov.hmrc"             %% "bootstrap-backend-play-30"         % bootstrapVersion,
-    "uk.gov.hmrc"             %% "auth-client-play-30"               % authClientVersion,
     "uk.gov.hmrc.mongo"       %% "hmrc-mongo-work-item-repo-play-30" % hmrcMongoVersion,
     "uk.gov.hmrc.objectstore" %% "object-store-client-play-30"       % objectStoreClientVersion,
     "com.univocity"            % "univocity-parsers"                 % univocityVersion,
