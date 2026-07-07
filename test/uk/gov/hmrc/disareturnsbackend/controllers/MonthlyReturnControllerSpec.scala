@@ -34,17 +34,20 @@ import uk.gov.hmrc.disareturnsbackend.services.CreateMonthlyReturnResult.{Alread
 import uk.gov.hmrc.disareturnsbackend.services.MonthlyReturnService
 import uk.gov.hmrc.disareturnsbackend.services.UpdateNilReturnResult
 
+import java.time.{Clock, Instant, ZoneOffset}
 import scala.concurrent.Future
 
 class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
 
   private val mockMonthlyReturnService       = mock[MonthlyReturnService]
   private val mockReturnsSubmissionConnector = mock[ReturnsSubmissionConnector]
+  private val fixedClock                     = Clock.fixed(Instant.parse("2026-06-07T12:00:00Z"), ZoneOffset.UTC)
 
   override lazy val app: Application = applicationBuilder(
     Seq(
       bind[MonthlyReturnService].toInstance(mockMonthlyReturnService),
-      bind[ReturnsSubmissionConnector].toInstance(mockReturnsSubmissionConnector)
+      bind[ReturnsSubmissionConnector].toInstance(mockReturnsSubmissionConnector),
+      bind[Clock].toInstance(fixedClock)
     )
   ).build()
 
@@ -117,6 +120,7 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
       status(result) mustBe BAD_REQUEST
       contentAsString(result) must include(zReferenceFieldName)
     }
+
   }
 
   "MonthlyReturnController.createMonthlyReturn" - {
@@ -200,6 +204,21 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
       )
 
       status(result) mustBe UNPROCESSABLE_ENTITY
+    }
+
+    "must return UNPROCESSABLE_ENTITY when the tax year and month are not the previous monthly period" in {
+      val currentMonth = "6"
+
+      val result = controller.createMonthlyReturn(testZReference, testTaxYear, currentMonth)(
+        FakeRequest("POST", path).withBody(
+          Json.toJson(CreateMonthlyReturnRequest(nilReturn = false))
+        )
+      )
+
+      status(result) mustBe UNPROCESSABLE_ENTITY
+      verify(mockReturnsSubmissionConnector, never())
+        .getMonthlyReturn(any[String](), any[String](), any[Int]())(any(), any())
+      verify(mockMonthlyReturnService, never()).create(any[String](), any[String](), any[Int](), any[Boolean]())(any())
     }
 
     "must return SERVICE_UNAVAILABLE when the service fails" in {
@@ -310,6 +329,7 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
 
       status(result) mustBe BAD_REQUEST
     }
+
   }
 
   "MonthlyReturnController.declareMonthlyReturn" - {
@@ -374,6 +394,17 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
       )
 
       status(result) mustBe UNPROCESSABLE_ENTITY
+    }
+
+    "must return UNPROCESSABLE_ENTITY when the tax year does not match the previous monthly period" in {
+      val result = controller.declareMonthlyReturn(testZReference, "2025-26", testRouteMonth)(
+        FakeRequest("POST", declarationsPath)
+      )
+
+      status(result) mustBe UNPROCESSABLE_ENTITY
+      verify(mockReturnsSubmissionConnector, never())
+        .getMonthlyReturn(any[String](), any[String](), any[Int]())(any(), any())
+      verify(mockMonthlyReturnService, never()).declare(any[String](), any[String](), any[Int]())(any())
     }
 
     "must return SERVICE_UNAVAILABLE when the service fails" in {
@@ -482,6 +513,20 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
         .createFileUpload(any[String](), any[String](), any[Int](), any[String]())
     }
 
+    "must return UNPROCESSABLE_ENTITY when the tax year and month are not the previous monthly period" in {
+      val currentMonth = "6"
+
+      val result = controller.createFileUpload(testZReference, testTaxYear, currentMonth)(
+        FakeRequest("POST", filesPath).withBody(Json.toJson(CreateFileUploadRequest(testUploadReference)))
+      )
+
+      status(result) mustBe UNPROCESSABLE_ENTITY
+      verify(mockReturnsSubmissionConnector, never())
+        .getMonthlyReturn(any[String](), any[String](), any[Int]())(any(), any())
+      verify(mockMonthlyReturnService, never())
+        .createFileUpload(any[String](), any[String](), any[Int](), any[String]())
+    }
+
     "must return SERVICE_UNAVAILABLE when the service fails" in {
       when(
         mockMonthlyReturnService.createFileUpload(
@@ -563,6 +608,7 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
 
       status(result) mustBe SERVICE_UNAVAILABLE
     }
+
   }
 
   "MonthlyReturnController.deleteFileUpload" - {
@@ -629,5 +675,6 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
       status(result) mustBe BAD_REQUEST
       contentAsString(result) must include(zReferenceFieldName)
     }
+
   }
 }

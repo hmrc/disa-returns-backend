@@ -60,7 +60,8 @@ class MonthlyReturnController @Inject() (
     }
 
   def createMonthlyReturn(zReference: String, taxYear: String, month: String): Action[JsValue] =
-    (validatedMonthlyReturnAction(zReference, taxYear, month) andThen monthlyReturnNotDeclaredAction(Conflict))
+    (validatedMonthlyReturnAction(zReference, taxYear, month, checkPeriod = true) andThen
+      monthlyReturnNotDeclaredAction(Conflict))
       .async(parse.json) { implicit request =>
         withJsonBody[CreateMonthlyReturnRequest] { createRequest =>
           implicit val hc: HeaderCarrier = HeaderCarrierConverter.fromRequest(request)
@@ -102,29 +103,28 @@ class MonthlyReturnController @Inject() (
       }
 
   def declareMonthlyReturn(zReference: String, taxYear: String, month: String): Action[AnyContent] =
-    (validatedMonthlyReturnAction(zReference, taxYear, month) andThen monthlyReturnNotDeclaredAction(Conflict)).async {
-      implicit request =>
-        logger.info(
-          s"[MonthlyReturnController][declareMonthlyReturn] Declare monthly return request for zReference [$zReference], taxYear [$taxYear], month [$month]"
-        )
+    (validatedMonthlyReturnAction(zReference, taxYear, month, checkPeriod = true) andThen
+      monthlyReturnNotDeclaredAction(Conflict)).async { implicit request =>
+      logger.info(
+        s"[MonthlyReturnController][declareMonthlyReturn] Declare monthly return request for zReference [$zReference], taxYear [$taxYear], month [$month]"
+      )
 
-        implicit val hc: HeaderCarrier = HeaderCarrierConverter.fromRequest(request)
+      implicit val hc: HeaderCarrier = HeaderCarrierConverter.fromRequest(request)
 
-        monthlyReturnService
-          .declare(request.zReference, request.taxYear, request.month)
-          .map {
-            case DeclareMonthlyReturnResult.Declared                 => NoContent
-            case DeclareMonthlyReturnResult.AlreadyDeclared          => Conflict
-            case DeclareMonthlyReturnResult.MonthlyReturnNotFound    => NotFound
-            case DeclareMonthlyReturnResult.OutsideDeclarationPeriod => UnprocessableEntity
-          }
-          .recover { case NonFatal(_) => ServiceUnavailable }
+      monthlyReturnService
+        .declare(request.zReference, request.taxYear, request.month)
+        .map {
+          case DeclareMonthlyReturnResult.Declared                 => NoContent
+          case DeclareMonthlyReturnResult.AlreadyDeclared          => Conflict
+          case DeclareMonthlyReturnResult.MonthlyReturnNotFound    => NotFound
+          case DeclareMonthlyReturnResult.OutsideDeclarationPeriod => UnprocessableEntity
+        }
+        .recover { case NonFatal(_) => ServiceUnavailable }
     }
 
   def createFileUpload(zReference: String, taxYear: String, month: String): Action[JsValue] =
-    (validatedMonthlyReturnAction(zReference, taxYear, month) andThen monthlyReturnNotDeclaredAction(
-      UnprocessableEntity
-    ))
+    (validatedMonthlyReturnAction(zReference, taxYear, month, checkPeriod = true) andThen
+      monthlyReturnNotDeclaredAction(UnprocessableEntity))
       .async(parse.json) { implicit request =>
         withJsonBody[CreateFileUploadRequest] { createRequest =>
           logger.info(

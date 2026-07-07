@@ -22,18 +22,20 @@ import play.api.mvc.{ActionBuilder, AnyContent, BodyParser, ControllerComponents
 import uk.gov.hmrc.disareturnsbackend.models.ValidatedMonthlyReturnRequest
 import uk.gov.hmrc.disareturnsbackend.validators.ValidationHelper
 
+import java.time.{Clock, LocalDate, YearMonth}
 import javax.inject.{Inject, Singleton}
 import scala.concurrent.{ExecutionContext, Future}
 
 @Singleton
-class ValidatedMonthlyReturnAction @Inject() (cc: ControllerComponents)(implicit ec: ExecutionContext)
+class ValidatedMonthlyReturnAction @Inject() (cc: ControllerComponents, clock: Clock)(implicit ec: ExecutionContext)
     extends Results
     with Logging {
 
   def apply(
     zReference: String,
     taxYear: String,
-    month: String
+    month: String,
+    checkPeriod: Boolean = false
   ): ActionBuilder[ValidatedMonthlyReturnRequest, AnyContent] =
     new ActionBuilder[ValidatedMonthlyReturnRequest, AnyContent] {
       override def parser: BodyParser[AnyContent] = cc.parsers.defaultBodyParser
@@ -46,7 +48,14 @@ class ValidatedMonthlyReturnAction @Inject() (cc: ControllerComponents)(implicit
       ): Future[Result] =
         ValidationHelper.validateParams(zReference, taxYear, month) match {
           case Right((validZReference, validTaxYear, validMonth)) =>
-            block(ValidatedMonthlyReturnRequest(validZReference, validTaxYear, validMonth, request))
+            if (!checkPeriod || isPreviousMonthlyPeriod(validTaxYear, validMonth)) {
+              block(ValidatedMonthlyReturnRequest(validZReference, validTaxYear, validMonth, request))
+            } else {
+              logger.warn(
+                s"[ValidatedMonthlyReturnAction] Monthly return request is outside the allowed period for zReference [$validZReference], taxYear [$validTaxYear], month [$validMonth]"
+              )
+              Future.successful(UnprocessableEntity)
+            }
 
           case Left(errorMessage) =>
             logger.warn(
@@ -55,4 +64,16 @@ class ValidatedMonthlyReturnAction @Inject() (cc: ControllerComponents)(implicit
             Future.successful(BadRequest(Json.obj("message" -> errorMessage)))
         }
     }
+
+  private def isPreviousMonthlyPeriod(taxYear: String, month: Int): Boolean = {
+    val previousMonth = YearMonth.from(LocalDate.now(clock)).minusMonths(1)
+
+    taxYear == taxYearFor(previousMonth) && month == previousMonth.getMonthValue
+  }
+
+  private def taxYearFor(period: YearMonth): String = {
+    val startYear = if (period.getMonthValue >= 4) period.getYear else period.getYear - 1
+
+    f"$startYear%04d-${(startYear + 1) % 100}%02d"
+  }
 }
