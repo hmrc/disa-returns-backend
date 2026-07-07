@@ -25,6 +25,7 @@ import uk.gov.hmrc.disareturnsbackend.utils.Constants.{CSV_MIME_TYPE, XLSX_MIME_
 import uk.gov.hmrc.disareturnsbackend.utils.{ObjectStoreWireMockStubs, UpscanWireMockStubs}
 
 import java.io.ByteArrayInputStream
+import java.time.{Clock, LocalDate, YearMonth}
 import scala.util.Using
 
 class MonthlyReturnFileUploadProcessingISpec
@@ -32,8 +33,9 @@ class MonthlyReturnFileUploadProcessingISpec
     with ObjectStoreWireMockStubs
     with UpscanWireMockStubs {
 
-  private val taxYear = "2026-27"
-  private val month   = 5
+  private val reportingPeriod = YearMonth.from(LocalDate.now(Clock.systemUTC())).minusMonths(1)
+  private val taxYear         = taxYearFor(reportingPeriod)
+  private val month           = reportingPeriod.getMonthValue
 
   private val validationFieldName                    = "validation"
   private val rowsValidatedFieldName                 = "rowsValidated"
@@ -374,6 +376,12 @@ class MonthlyReturnFileUploadProcessingISpec
       mimeType = mimeType,
       downloadPath = s"/upscan/monthly/$fileName"
     )
+  }
+
+  private def taxYearFor(period: YearMonth): String = {
+    val startYear = if (period.getMonthValue >= 4) period.getYear else period.getYear - 1
+
+    f"$startYear%04d-${(startYear + 1) % 100}%02d"
   }
 
   private final case class UploadFixture(

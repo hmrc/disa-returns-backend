@@ -38,7 +38,7 @@ class TestOnlyClockControllerISpec extends BaseIntegrationSpec {
   "test-only clock routes" should {
 
     "set the app date used by declaration period checks" in {
-      putString(s"$clockPath/2026-05-20").status shouldBe OK
+      putString(s"$clockPath/2026-06-20").status shouldBe OK
       postJson(monthlyPath, nilReturnFalseRequest).status shouldBe CREATED
 
       val result = postJson(declarationsPath, emptyJson)
@@ -51,6 +51,7 @@ class TestOnlyClockControllerISpec extends BaseIntegrationSpec {
     }
 
     "delete monthly returns" in {
+      putString(s"$clockPath/2026-06-17").status shouldBe OK
       postJson(monthlyPath, nilReturnFalseRequest).status shouldBe CREATED
 
       delete(monthlyReturnsPath).status shouldBe NO_CONTENT

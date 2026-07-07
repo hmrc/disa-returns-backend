@@ -38,7 +38,7 @@ import uk.gov.hmrc.http.test.WireMockSupport
 import uk.gov.hmrc.mongo.MongoComponent
 import uk.gov.hmrc.play.audit.http.connector.DatastreamMetrics
 
-import java.time.{Clock, ZoneOffset}
+import java.time.{Clock, Instant, ZoneOffset}
 import scala.concurrent.ExecutionContext
 import scala.reflect.ClassTag
 
@@ -55,10 +55,12 @@ trait BaseIntegrationSpec
     with TestConstants
     with RequestUtils {
 
+  protected val integrationTestNow: Instant = Instant.parse("2026-06-17T12:00:00Z")
+
   override lazy val app: Application = new GuiceApplicationBuilder()
     .configure(config)
     .overrides(
-      bind[Clock].toInstance(Clock.fixed(testCreatedOn, ZoneOffset.UTC)),
+      bind[Clock].toInstance(Clock.fixed(integrationTestNow, ZoneOffset.UTC)),
       bind[DatastreamMetrics].toInstance(DatastreamMetrics.disabled)
     )
     .build()

@@ -25,12 +25,15 @@ import uk.gov.hmrc.disareturnsbackend.BaseIntegrationSpec
 class MonthlyReturnControllerISpec extends BaseIntegrationSpec {
 
   private val monthlyPath = s"$testServicePath/monthly/$testZReference/$testTaxYear/$testMonth"
+  private val outOfPeriodMonthlyPath = s"$testServicePath/monthly/$testZReference/$testTaxYear/6"
   private val invalidMonthlyPath =
     s"$testServicePath/monthly/$invalidTestZReference/$invalidTestTaxYear/$invalidTestMonth"
   private val nilReturnPath = s"$monthlyPath/nilReturn"
   private val isoInstantPattern = "\\d{4}-\\d{2}-\\d{2}T.*Z"
   private val declarationsPath = s"$monthlyPath/declarations"
+  private val outOfPeriodDeclarationsPath = s"$outOfPeriodMonthlyPath/declarations"
   private val filesPath = s"$monthlyPath/files"
+  private val outOfPeriodFilesPath = s"$outOfPeriodMonthlyPath/files"
   private val filePath = s"$filesPath/$testUploadReference"
 
   private val nilReturnTrueRequest = Json.obj(nilReturnFieldName -> true)
@@ -97,6 +100,12 @@ class MonthlyReturnControllerISpec extends BaseIntegrationSpec {
       val result = postJson(monthlyPath, nilReturnFalseRequest)
 
       result.status shouldBe CONFLICT
+    }
+
+    "return 422 Unprocessable Entity when the tax year and month are not the previous monthly period" in {
+      val result = postJson(outOfPeriodMonthlyPath, nilReturnFalseRequest)
+
+      result.status shouldBe UNPROCESSABLE_ENTITY
     }
 
     "return 400 Bad Request when nilReturn is not a boolean" in {
@@ -217,6 +226,12 @@ class MonthlyReturnControllerISpec extends BaseIntegrationSpec {
       result.status shouldBe NOT_FOUND
     }
 
+    "return 422 Unprocessable Entity when the tax year and month are not the previous monthly period" in {
+      val result = postJson(outOfPeriodDeclarationsPath, Json.obj())
+
+      result.status shouldBe UNPROCESSABLE_ENTITY
+    }
+
     "return 400 Bad Request when path parameters are invalid" in {
       val result = postJson(s"$invalidMonthlyPath/declarations", Json.obj())
 
@@ -241,6 +256,12 @@ class MonthlyReturnControllerISpec extends BaseIntegrationSpec {
       val result = postJson(filesPath, createFileUploadRequest)
 
       result.status shouldBe NOT_FOUND
+    }
+
+    "return 422 Unprocessable Entity when the tax year and month are not the previous monthly period" in {
+      val result = postJson(outOfPeriodFilesPath, createFileUploadRequest)
+
+      result.status shouldBe UNPROCESSABLE_ENTITY
     }
 
     "return 409 Conflict when the file upload reference already exists" in {
