@@ -51,6 +51,7 @@ class ReturnsSubmissionConnector @Inject() (
     retryFor[CreateMonthlyReturnSubmissionResult]("create monthly return in disa-returns-submission")(retryCondition) {
       httpClient
         .post(url"${appConfig.returnsSubmissionService}/disa-returns-submission/monthly/$zReference/$taxYear/$month")
+        .setHeader(authorizationHeader)
         .withBody(Json.obj("nilReturn" -> nilReturn))
         .execute
         .flatMap { response =>
@@ -72,6 +73,7 @@ class ReturnsSubmissionConnector @Inject() (
     retryFor[Option[JsValue]]("get monthly return from disa-returns-submission")(retryCondition) {
       httpClient
         .get(url"${appConfig.returnsSubmissionService}/disa-returns-submission/monthly/$zReference/$taxYear/$month")
+        .setHeader(authorizationHeader)
         .execute
         .flatMap { response =>
           response.status match {
@@ -93,6 +95,7 @@ class ReturnsSubmissionConnector @Inject() (
         .post(
           url"${appConfig.returnsSubmissionService}/disa-returns-submission/monthly/$zReference/$taxYear/$month/declarations"
         )
+        .setHeader(authorizationHeader)
         .withBody(Json.obj("nilReturn" -> nilReturn))
         .execute
         .flatMap { response =>
@@ -107,6 +110,9 @@ class ReturnsSubmissionConnector @Inject() (
 
   private def readSubmissionId(response: CreateMonthlyReturnResponse): UUID =
     response.submissionId
+
+  private def authorizationHeader: (String, String) =
+    "Authorization" -> appConfig.internalAuthToken
 }
 
 object ReturnsSubmissionConnector {

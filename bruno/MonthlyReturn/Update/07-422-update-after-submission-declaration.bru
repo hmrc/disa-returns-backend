@@ -45,7 +45,8 @@ script:pre-request {
   }
   
   const submissionUrl = `${bru.getEnvVar("submissionBaseUrl")}${bru.getEnvVar("submissionServicePath")}/monthly/${zReference}/${bru.getEnvVar("taxYear")}/${bru.getEnvVar("month")}/declarations`;
-  const declarationResponse = await bru.sendRequest({ method: "POST", url: submissionUrl, headers: { "Content-Type": "application/json" }, data: { nilReturn: false }, timeout: 3000 });
+  const submissionHeaders = { "Content-Type": "application/json", "Authorization": bru.getEnvVar("internalAuthToken") };
+  const declarationResponse = await bru.sendRequest({ method: "POST", url: submissionUrl, headers: submissionHeaders, data: { nilReturn: false }, timeout: 3000 });
   if (declarationResponse.status !== 200) {
     throw new Error(`Expected submission monthly return declaration setup to respond with 200, got ${declarationResponse.status}`);
   }

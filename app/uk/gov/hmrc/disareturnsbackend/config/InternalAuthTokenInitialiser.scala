@@ -18,7 +18,7 @@ package uk.gov.hmrc.disareturnsbackend.config
 
 import org.apache.pekko.Done
 import play.api.Logging
-import play.api.http.Status.{CREATED, OK}
+import play.api.http.Status.CREATED
 import play.api.libs.concurrent.Futures
 import play.api.libs.json.Json
 import play.api.libs.ws.JsonBodyWritables.writeableOf_JsValue
@@ -54,16 +54,7 @@ class InternalAuthTokenInitialiserImpl @Inject() (
     futures.timeout(30.seconds)(ensureAuthToken())
 
   private def ensureAuthToken(): Future[Done] =
-    authTokenIsValid.flatMap { isValid =>
-      if (isValid) {
-        logger.info(
-          "[InternalAuthTokenInitialiser][ensureAuthToken] Auth token is already valid"
-        )
-        Future.successful(Done)
-      } else {
-        createClientAuthToken()
-      }
-    }
+    createClientAuthToken()
 
   private def createClientAuthToken(): Future[Done] = {
     logger.info(
@@ -80,6 +71,11 @@ class InternalAuthTokenInitialiserImpl @Inject() (
               "resourceType"     -> "object-store",
               "resourceLocation" -> "disa-returns-backend",
               "actions"          -> List("READ", "WRITE", "DELETE")
+            ),
+            Json.obj(
+              "resourceType"     -> "disa-returns-submission",
+              "resourceLocation" -> "*",
+              "actions"          -> List("READ", "WRITE")
             )
           )
         )
@@ -102,14 +98,4 @@ class InternalAuthTokenInitialiserImpl @Inject() (
       }
   }
 
-  private def authTokenIsValid: Future[Boolean] = {
-    logger.info(
-      "[InternalAuthTokenInitialiser][authTokenIsValid] Checking auth token"
-    )
-    httpClient
-      .get(url"${config.internalAuthService}/test-only/token")(HeaderCarrier())
-      .setHeader("Authorization" -> config.internalAuthToken)
-      .execute
-      .map(_.status == OK)
-  }
 }

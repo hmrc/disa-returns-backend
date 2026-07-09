@@ -20,7 +20,7 @@ import base.SpecBase
 import org.apache.pekko.Done
 import org.mockito.ArgumentMatchers.{any, eq as eqTo}
 import org.mockito.Mockito.{verify, when}
-import play.api.http.Status.{CREATED, INTERNAL_SERVER_ERROR, NOT_FOUND, OK}
+import play.api.http.Status.{CREATED, INTERNAL_SERVER_ERROR}
 import play.api.libs.concurrent.Futures
 import play.api.libs.json.{JsObject, Json}
 import uk.gov.hmrc.http.client.{HttpClientV2, RequestBuilder}
@@ -58,7 +58,6 @@ class InternalAuthTokenInitialiserImplSpec extends SpecBase {
   trait TestSetup {
     val mockAppConfig: AppConfig               = mock[AppConfig]
     val mockHttpClient: HttpClientV2           = mock[HttpClientV2]
-    val mockGetRequestBuilder: RequestBuilder  = mock[RequestBuilder]
     val mockPostRequestBuilder: RequestBuilder = mock[RequestBuilder]
     val futures                                = new TestFutures
 
@@ -72,19 +71,6 @@ class InternalAuthTokenInitialiserImplSpec extends SpecBase {
     when(mockAppConfig.internalAuthService).thenReturn(internalAuthService)
     when(mockAppConfig.internalAuthToken).thenReturn(internalAuthToken)
     when(mockAppConfig.appName).thenReturn(appName)
-    when(mockHttpClient.get(eqTo(fullTokenUrl))(any[HeaderCarrier]))
-      .thenReturn(mockGetRequestBuilder)
-    when(mockGetRequestBuilder.setHeader("Authorization" -> internalAuthToken))
-      .thenReturn(mockGetRequestBuilder)
-
-    def authTokenIsValidResponse(status: Int): Unit =
-      when(mockGetRequestBuilder.execute[HttpResponse](any(), any()))
-        .thenReturn(Future.successful(HttpResponse(status)))
-
-    def authTokenIsValidFailure(exception: Throwable): Unit =
-      when(mockGetRequestBuilder.execute[HttpResponse](any(), any()))
-        .thenReturn(Future.failed(exception))
-
     def createAuthTokenResponse(status: Int): Unit = {
       when(mockHttpClient.post(eqTo(fullTokenUrl))(any[HeaderCarrier]))
         .thenReturn(mockPostRequestBuilder)
@@ -108,25 +94,20 @@ class InternalAuthTokenInitialiserImplSpec extends SpecBase {
             "resourceType"     -> "object-store",
             "resourceLocation" -> "disa-returns-backend",
             "actions"          -> List("READ", "WRITE", "DELETE")
+          ),
+          Json.obj(
+            "resourceType"     -> "disa-returns-submission",
+            "resourceLocation" -> "*",
+            "actions"          -> List("READ", "WRITE")
           )
         )
       )
 
     "initialised" - {
-      "must return Done when the auth token is already valid" in new TestSetup {
-        authTokenIsValidResponse(OK)
-
-        initialiser.initialised.futureValue mustBe Done
-        initialiser.initialised.futureValue mustBe Done
-
-        futures.timeoutDuration mustBe Some(timeoutDuration)
-        verify(mockGetRequestBuilder).execute[HttpResponse](any(), any())
-      }
-
-      "must create the auth token when the existing token is not valid" in new TestSetup {
-        authTokenIsValidResponse(NOT_FOUND)
+      "must create or update the auth token with the required permissions" in new TestSetup {
         createAuthTokenResponse(CREATED)
 
+        initialiser.initialised.futureValue mustBe Done
         initialiser.initialised.futureValue mustBe Done
 
         futures.timeoutDuration mustBe Some(timeoutDuration)
@@ -136,7 +117,6 @@ class InternalAuthTokenInitialiserImplSpec extends SpecBase {
       }
 
       "must fail when the auth token cannot be created" in new TestSetup {
-        authTokenIsValidResponse(NOT_FOUND)
         createAuthTokenResponse(INTERNAL_SERVER_ERROR)
 
         val thrown: Throwable = initialiser.initialised.failed.futureValue
@@ -144,15 +124,6 @@ class InternalAuthTokenInitialiserImplSpec extends SpecBase {
         futures.timeoutDuration mustBe Some(timeoutDuration)
         thrown mustBe a[RuntimeException]
         thrown.getMessage mustBe "Unable to initialise internal-auth token"
-      }
-
-      "must fail when checking the auth token fails" in new TestSetup {
-        val exception = new RuntimeException("Unable to check auth token")
-
-        authTokenIsValidFailure(exception)
-
-        initialiser.initialised.failed.futureValue mustBe exception
-        futures.timeoutDuration mustBe Some(timeoutDuration)
       }
     }
   }

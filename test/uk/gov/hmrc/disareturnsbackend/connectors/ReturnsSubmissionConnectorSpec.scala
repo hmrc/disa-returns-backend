@@ -28,11 +28,14 @@ import uk.gov.hmrc.http.test.WireMockSupport
 
 class ReturnsSubmissionConnectorSpec extends SpecBase with WireMockSupport with BeforeAndAfterEach {
 
+  private val internalAuthToken = "valid-internal-auth-token-disa-returns-backend"
+
   override lazy val app: Application = applicationBuilder()
     .configure(
       "microservice.services.disa-returns-submission.protocol" -> "http",
       "microservice.services.disa-returns-submission.host"     -> "localhost",
-      "microservice.services.disa-returns-submission.port"     -> wireMockPort
+      "microservice.services.disa-returns-submission.port"     -> wireMockPort,
+      "internal-auth.token"                                    -> internalAuthToken
     )
     .build()
 
@@ -71,6 +74,11 @@ class ReturnsSubmissionConnectorSpec extends SpecBase with WireMockSupport with 
       connector
         .createMonthlyReturn(testZReference, testTaxYear, testMonth, nilReturn = false)
         .futureValue mustBe CreateMonthlyReturnSubmissionResult.OutsideDeclarationPeriod
+
+      verify(
+        postRequestedFor(urlEqualTo(path))
+          .withHeader("Authorization", equalTo(internalAuthToken))
+      )
     }
 
     "must fail when submission returns an unexpected response" in {
@@ -104,6 +112,11 @@ class ReturnsSubmissionConnectorSpec extends SpecBase with WireMockSupport with 
       )
 
       connector.getMonthlyReturn(testZReference, testTaxYear, testMonth).futureValue mustBe Some(responseJson)
+
+      verify(
+        getRequestedFor(urlEqualTo(path))
+          .withHeader("Authorization", equalTo(internalAuthToken))
+      )
     }
 
     "must return None when submission returns NOT_FOUND" in {
@@ -131,6 +144,11 @@ class ReturnsSubmissionConnectorSpec extends SpecBase with WireMockSupport with 
 
       connector.declareMonthlyReturn(testZReference, testTaxYear, testMonth, testNilReturn).futureValue mustBe
         DeclareMonthlyReturnSubmissionResult.Declared
+
+      verify(
+        postRequestedFor(urlEqualTo(declarationPath))
+          .withHeader("Authorization", equalTo(internalAuthToken))
+      )
     }
 
     "must return MonthlyReturnNotFound when submission cannot find the monthly return" in {
@@ -171,6 +189,7 @@ class ReturnsSubmissionConnectorSpec extends SpecBase with WireMockSupport with 
   private def verifySubmissionRequest(nilReturn: Boolean): Unit =
     verify(
       postRequestedFor(urlEqualTo(path))
+        .withHeader("Authorization", equalTo(internalAuthToken))
         .withRequestBody(equalToJson(Json.obj("nilReturn" -> nilReturn).toString()))
     )
 }
