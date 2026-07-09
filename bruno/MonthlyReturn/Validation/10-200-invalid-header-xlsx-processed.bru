@@ -17,7 +17,7 @@ assert {
 script:pre-request {
   bru.setVar("validationFileName", "invalid-header.xlsx");
   bru.setVar("upscanReference", "validation-invalid-header-xlsx");
-  bru.setVar("callbackZReference", `Z${((Date.now() + Math.floor(Math.random() * 1000)) % 10000).toString().padStart(4, "0")}`);
+  bru.setVar("callbackZReference", bru.getEnvVar("callbackZReference"));
   bru.setVar("validationMimeType", bru.getEnvVar("xlsxMimeType"));
   bru.setVar("validationChecksum", "940adc4b21ad6540c5293018b9bebae8d9825fc82d90ff27f9d7d848f493a7c1");
   bru.setVar("validationFileSize", 3247);

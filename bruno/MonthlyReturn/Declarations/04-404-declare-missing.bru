@@ -21,6 +21,5 @@ script:pre-request {
     throw new Error(`Expected monthly returns cleanup to respond with 204, got ${clearResponse.status}`);
   }
   
-  const value = (Date.now() + Math.floor(Math.random() * 1000)) % 10000;
-  bru.setVar("declarationMissingZReference", `Z${value.toString().padStart(4, "0")}`);
+  bru.setVar("declarationMissingZReference", bru.getEnvVar("declarationMissingZReference"));
 }

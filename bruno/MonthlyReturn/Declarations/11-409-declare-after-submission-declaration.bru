@@ -25,11 +25,11 @@ script:pre-request {
     throw new Error(`Expected monthly returns cleanup to respond with 204, got ${clearResponse.status}`);
   }
   
-  const zReference = `Z${((Date.now() + Math.floor(Math.random() * 1000)) % 10000).toString().padStart(4, "0")}`;
+  const zReference = bru.getEnvVar("submissionDeclaredZReference");
   bru.setVar("submissionDeclaredZReference", zReference);
   
   const backendUrl = `${bru.getEnvVar("baseUrl")}${bru.getEnvVar("servicePath")}/monthly/${zReference}/${bru.getEnvVar("taxYear")}/${bru.getEnvVar("month")}`;
-  const backendCreateResponse = await bru.sendRequest({ method: "POST", url: backendUrl, headers: { "Content-Type": "application/json" }, data: { nilReturn: false }, timeout: 3000 });
+  const backendCreateResponse = await bru.sendRequest({ method: "POST", url: backendUrl, headers: { "Content-Type": "application/json", "Authorization": bru.getVar("bearerToken") }, data: { nilReturn: false }, timeout: 3000 });
   if (backendCreateResponse.status !== 201) {
     throw new Error(`Expected backend monthly return create setup to respond with 201, got ${backendCreateResponse.status}`);
   }
