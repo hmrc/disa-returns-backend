@@ -118,4 +118,35 @@ class FileUploadValidationResultSpec extends SpecBase {
       Json.toJson(result).as[FileUploadValidationResult] mustBe result
     }
   }
+
+  "FileUploadValidationResult format with invalidFileReason" - {
+
+    "must round-trip to JSON with invalidFileReason set" in {
+      val result = FileUploadValidationResult(
+        rowsValidated = 0,
+        validationErrors = 0,
+        status = FileUploadValidationStatus.InvalidFile,
+        invalidFileReason = Some("InvalidHeader")
+      )
+
+      Json.toJson(result).as[FileUploadValidationResult] mustBe result
+    }
+
+    "must read old JSON without invalidFileReason as None" in {
+      val json = Json.parse("""
+        {
+          "rowsValidated": 0,
+          "validationErrors": 0,
+          "status": "InvalidFile"
+        }
+        """)
+
+      json.as[FileUploadValidationResult] mustBe FileUploadValidationResult(
+        rowsValidated = 0,
+        validationErrors = 0,
+        status = FileUploadValidationStatus.InvalidFile,
+        invalidFileReason = None
+      )
+    }
+  }
 }

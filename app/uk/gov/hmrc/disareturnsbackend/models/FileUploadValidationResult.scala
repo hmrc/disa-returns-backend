@@ -22,7 +22,8 @@ final case class FileUploadValidationResult(
   rowsValidated: Long,
   validationErrors: Long,
   status: FileUploadValidationStatus,
-  inlineErrors: List[FileUploadValidationError] = Nil
+  inlineErrors: List[FileUploadValidationError] = Nil,
+  invalidFileReason: Option[String] = None
 )
 
 object FileUploadValidationResult {
