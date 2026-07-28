@@ -40,7 +40,12 @@ class MonthlyReturnFileUploadProcessingServiceSpec extends SpecBase {
   private val validationSuccess =
     FileUploadValidationResult(rowsValidated, validationErrors, FileUploadValidationStatus.ValidationSuccess)
   private val validationFailed  = FileUploadValidationResult(1, 2, FileUploadValidationStatus.ValidationFailed)
-  private val invalidFile       = FileUploadValidationResult(0, 0, FileUploadValidationStatus.InvalidFile)
+  private val invalidFile       = FileUploadValidationResult(
+    0,
+    0,
+    FileUploadValidationStatus.InvalidFile,
+    invalidFileReason = Some(FileUploadValidationResults.unsupportedFileTypeErrorType)
+  )
 
   "MonthlyReturnFileUploadProcessingService" - {
 

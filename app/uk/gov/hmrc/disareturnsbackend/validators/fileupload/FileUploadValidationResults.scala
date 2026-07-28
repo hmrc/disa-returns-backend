@@ -50,7 +50,8 @@ object FileUploadValidationResults {
         rowsValidated = 0,
         validationErrors = 0,
         status = FileUploadValidationStatus.InvalidFile,
-        inlineErrors = Nil
+        inlineErrors = Nil,
+        invalidFileReason = Some(errorType)
       ),
       errorFileWritten = false,
       errorVolumes = Map(errorType -> 1L)
