@@ -22,14 +22,19 @@ import play.api.inject.bind
 import play.api.inject.guice.GuiceApplicationBuilder
 import uk.gov.hmrc.play.audit.http.connector.DatastreamMetrics
 
-import java.time.Clock
+import java.time.{Clock, Duration}
 
 trait WireMockIntegrationSpec extends BaseIntegrationSpec with Eventually {
+
+  private lazy val integrationTestClock: Clock = {
+    val systemClock = Clock.systemUTC()
+    Clock.offset(systemClock, Duration.between(systemClock.instant(), integrationTestNow))
+  }
 
   override lazy val app: Application = new GuiceApplicationBuilder()
     .configure(config)
     .overrides(
-      bind[Clock].toInstance(Clock.systemUTC()),
+      bind[Clock].toInstance(integrationTestClock),
       bind[DatastreamMetrics].toInstance(DatastreamMetrics.disabled)
     )
     .build()

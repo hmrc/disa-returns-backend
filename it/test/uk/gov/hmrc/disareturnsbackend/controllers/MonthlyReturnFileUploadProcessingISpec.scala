@@ -25,7 +25,7 @@ import uk.gov.hmrc.disareturnsbackend.utils.Constants.{CSV_MIME_TYPE, XLSX_MIME_
 import uk.gov.hmrc.disareturnsbackend.utils.{ObjectStoreWireMockStubs, UpscanWireMockStubs}
 
 import java.io.ByteArrayInputStream
-import java.time.{Clock, LocalDate, YearMonth}
+import java.time.{YearMonth, ZoneOffset}
 import scala.util.Using
 
 class MonthlyReturnFileUploadProcessingISpec
@@ -33,7 +33,7 @@ class MonthlyReturnFileUploadProcessingISpec
     with ObjectStoreWireMockStubs
     with UpscanWireMockStubs {
 
-  private val reportingPeriod = YearMonth.from(LocalDate.now(Clock.systemUTC())).minusMonths(1)
+  private val reportingPeriod = YearMonth.from(integrationTestNow.atZone(ZoneOffset.UTC)).minusMonths(1)
   private val taxYear         = taxYearFor(reportingPeriod)
   private val month           = reportingPeriod.getMonthValue
 
