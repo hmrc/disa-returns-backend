@@ -22,31 +22,30 @@ import uk.gov.hmrc.disareturnsbackend.config.InternalAuthTokenInitialiser
 import uk.gov.hmrc.disareturnsbackend.jobs.MonthlyReturnWorkItemJob
 
 import javax.inject.{Inject, Singleton}
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.DurationInt
+import scala.concurrent.{Await, Future}
 import scala.util.Try
+import scala.util.control.NonFatal
 
 @Singleton
 class AppInitialiser @Inject() (
   internalAuthTokenInitialiser: InternalAuthTokenInitialiser,
   monthlyReturnWorkItemJob: MonthlyReturnWorkItemJob
-)(implicit ec: ExecutionContext)
-    extends Logging {
+) extends Logging {
 
   val initialised: Future[Done] =
     internalAuthTokenInitialiser.initialised
 
-  initialised.foreach { _ =>
+  try {
+    Await.result(initialised, 31.seconds)
     logger.info("[AppInitialiser] Internal auth initialiser completed")
 
     Try(monthlyReturnWorkItemJob.start()).failed.foreach { exception =>
       logger.error("[AppInitialiser] Monthly return work item job failed to start", exception)
     }
-  }
-
-  initialised.failed.foreach { exception =>
-    logger.error(
-      "[AppInitialiser] Internal auth initialiser failed",
-      exception
-    )
+  } catch {
+    case NonFatal(exception) =>
+      logger.error("[AppInitialiser] Internal auth initialiser failed", exception)
+      throw exception
   }
 }
