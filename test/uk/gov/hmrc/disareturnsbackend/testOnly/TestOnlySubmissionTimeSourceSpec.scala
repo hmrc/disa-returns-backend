@@ -28,9 +28,9 @@ import java.time.{Instant, LocalDate}
 import scala.concurrent.Future
 
 class TestOnlySubmissionTimeSourceSpec extends SpecBase {
-  private val connector  = mock[TestOnlyReturnsSubmissionConnector]
-  private val systemClock = mock[SystemClock]
-  private val timeSource = new TestOnlySubmissionTimeSource(connector, systemClock)
+  private val connector                  = mock[TestOnlyReturnsSubmissionConnector]
+  private val systemClock                = mock[SystemClock]
+  private val timeSource                 = new TestOnlySubmissionTimeSource(connector, systemClock)
   private implicit val hc: HeaderCarrier = HeaderCarrier()
 
   "TestOnlySubmissionTimeSource" - {

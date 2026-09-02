@@ -23,5 +23,6 @@ import uk.gov.hmrc.http.HeaderCarrier
 
 @Singleton
 class SystemClock @Inject() (clock: Clock) extends TimeSource {
-  override def instant(zReference: String)(implicit hc: HeaderCarrier): Future[Instant] = Future.successful(Instant.now(clock))
+  override def instant(zReference: String)(implicit hc: HeaderCarrier): Future[Instant] =
+    Future.successful(Instant.now(clock))
 }

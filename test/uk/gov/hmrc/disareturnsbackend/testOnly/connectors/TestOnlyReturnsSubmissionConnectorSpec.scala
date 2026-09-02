@@ -37,11 +37,11 @@ class TestOnlyReturnsSubmissionConnectorSpec extends SpecBase with WireMockSuppo
     )
     .build()
 
-  private val connector = inject[TestOnlyReturnsSubmissionConnector]
+  private val connector                  = inject[TestOnlyReturnsSubmissionConnector]
   private implicit val hc: HeaderCarrier = HeaderCarrier()
-  private val path = s"/disa-returns-submission/test-only/overrides/$testZReference"
-  private val replacement = TestOverrideRequest(Some(ClockOverride(LocalDate.parse("2026-06-20"))), None)
-  private val response    = TestOverride(testZReference, replacement.clock, replacement.reportingWindow)
+  private val path                       = s"/disa-returns-submission/test-only/overrides/$testZReference"
+  private val replacement                = TestOverrideRequest(Some(ClockOverride(LocalDate.parse("2026-06-20"))), None)
+  private val response                   = TestOverride(testZReference, replacement.clock, replacement.reportingWindow)
 
   "TestOnlyReturnsSubmissionConnector" - {
     "must proxy aggregate GET, PUT and DELETE requests" in {

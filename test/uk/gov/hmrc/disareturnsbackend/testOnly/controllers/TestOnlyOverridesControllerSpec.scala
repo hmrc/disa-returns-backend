@@ -31,9 +31,9 @@ import scala.concurrent.Future
 
 class TestOnlyOverridesControllerSpec extends SpecBase {
   private implicit lazy val materializer: Materializer = app.materializer
-  private val connector  = mock[TestOnlyReturnsSubmissionConnector]
-  private val controller = new TestOnlyOverridesController(stubControllerComponents(), connector)
-  private val replacement = TestOverrideRequest(
+  private val connector                                = mock[TestOnlyReturnsSubmissionConnector]
+  private val controller                               = new TestOnlyOverridesController(stubControllerComponents(), connector)
+  private val replacement                              = TestOverrideRequest(
     Some(ClockOverride(LocalDate.parse("2026-06-20"))),
     Some(
       ReportingWindowOverride(
@@ -42,7 +42,7 @@ class TestOnlyOverridesControllerSpec extends SpecBase {
       )
     )
   )
-  private val response = TestOverride(testZReference, replacement.clock, replacement.reportingWindow)
+  private val response                                 = TestOverride(testZReference, replacement.clock, replacement.reportingWindow)
 
   "TestOnlyOverridesController" - {
     "must get overrides for the normalized Z-reference" in {
@@ -86,21 +86,23 @@ class TestOnlyOverridesControllerSpec extends SpecBase {
     "must reject an invalid replacement document" in {
       val invalidBody = Json.obj("clock" -> Json.obj("date" -> "20-06-2026"), "reportingWindow" -> None)
 
-      val result = call(controller.set(testZReference), FakeRequest(PUT, "/test-only/overrides").withJsonBody(invalidBody))
+      val result =
+        call(controller.set(testZReference), FakeRequest(PUT, "/test-only/overrides").withJsonBody(invalidBody))
 
       status(result) mustBe BAD_REQUEST
     }
 
     "must reject an inverted reporting window" in {
       val invalidBody = Json.obj(
-        "clock" -> None,
+        "clock"           -> None,
         "reportingWindow" -> Json.obj(
           "startDate" -> "2026-06-20T00:01:00Z",
           "endDate"   -> "2026-06-19T23:59:00Z"
         )
       )
 
-      val result = call(controller.set(testZReference), FakeRequest(PUT, "/test-only/overrides").withJsonBody(invalidBody))
+      val result =
+        call(controller.set(testZReference), FakeRequest(PUT, "/test-only/overrides").withJsonBody(invalidBody))
 
       status(result) mustBe BAD_REQUEST
     }

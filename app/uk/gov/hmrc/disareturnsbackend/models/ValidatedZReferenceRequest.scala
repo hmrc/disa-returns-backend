@@ -18,4 +18,5 @@ package uk.gov.hmrc.disareturnsbackend.models
 
 import play.api.mvc.{Request, WrappedRequest}
 
-final case class ValidatedZReferenceRequest[A](zReference: String, request: Request[A]) extends WrappedRequest[A](request)
+final case class ValidatedZReferenceRequest[A](zReference: String, request: Request[A])
+    extends WrappedRequest[A](request)

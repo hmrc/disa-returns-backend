@@ -31,11 +31,11 @@ import uk.gov.hmrc.disareturnsbackend.services.TimeSource
 import scala.concurrent.Future
 
 class ReportingWindowControllerSpec extends SpecBase {
-  private val authConnector                = mock[AuthConnector]
-  private val returnsSubmissionConnector   = mock[ReturnsSubmissionConnector]
+  private val authConnector                  = mock[AuthConnector]
+  private val returnsSubmissionConnector     = mock[ReturnsSubmissionConnector]
   private val requestAuthAndValidationAction =
     new RequestAuthAndValidationActionImpl(stubControllerComponents(), authConnector, mock[TimeSource])
-  private val controller = new ReportingWindowController(
+  private val controller                     = new ReportingWindowController(
     stubControllerComponents(),
     requestAuthAndValidationAction,
     returnsSubmissionConnector
