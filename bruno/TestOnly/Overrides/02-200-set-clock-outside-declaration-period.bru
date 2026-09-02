@@ -1,11 +1,11 @@
 meta {
-  name: 06-200-set-clock-outside-period
+  name: 02-200-set-clock-outside-declaration-period
   type: http
-  seq: 7
+  seq: 2
 }
 
 put {
-  url: {{baseUrl}}{{servicePath}}/test-only/overrides/{{outsidePeriodZReference}}
+  url: {{baseUrl}}{{servicePath}}/test-only/overrides/{{zReference}}
   body: json
   auth: none
 }

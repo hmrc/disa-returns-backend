@@ -68,12 +68,12 @@ trait BaseIntegrationSpec
 
   def config: Map[String, Any] =
     Map(
-      "auditing.enabled"                    -> false,
-      "create-internal-auth-token-on-start" -> false,
-      "mongodb.uri"                         -> "mongodb://localhost:27017/disa-returns-backend-it",
-      "microservice.services.auth.protocol" -> "http",
-      "microservice.services.auth.host"     -> "localhost",
-      "microservice.services.auth.port"     -> wireMockPort,
+      "auditing.enabled"                                       -> false,
+      "create-internal-auth-token-on-start"                    -> false,
+      "mongodb.uri"                                            -> "mongodb://localhost:27017/disa-returns-backend-it",
+      "microservice.services.auth.protocol"                    -> "http",
+      "microservice.services.auth.host"                        -> "localhost",
+      "microservice.services.auth.port"                        -> wireMockPort,
       "microservice.services.disa-returns-submission.protocol" -> "http",
       "microservice.services.disa-returns-submission.host"     -> "localhost",
       "microservice.services.disa-returns-submission.port"     -> wireMockPort
@@ -90,9 +90,42 @@ trait BaseIntegrationSpec
   override protected def beforeEach(): Unit = {
     super.beforeEach()
     stubAuth()
+    stubReturnsSubmissionReportingWindow()
     stubReturnsSubmissionCreateMonthlyReturn()
     stubReturnsSubmissionDeclareMonthlyReturn()
+    stubReturnsSubmissionTestOnlyOverrides()
     clearMongoCollections()
+  }
+
+  protected def stubReturnsSubmissionTestOnlyOverrides(
+    date: String = "2026-06-17",
+    overridden: Boolean = false
+  ): Unit = {
+    val response = Json.obj(
+      "zReference"      -> testZReference,
+      "clock"           -> Option.when(overridden)(Json.obj("date" -> date)),
+      "reportingWindow" -> None
+    )
+    stubFor(
+      com.github.tomakehurst.wiremock.client.WireMock
+        .get(urlPathMatching("/disa-returns-submission/test-only/overrides/[^/]+"))
+        .willReturn(
+          aResponse().withStatus(OK).withHeader("Content-Type", "application/json").withBody(response.toString())
+        )
+    )
+    stubFor(
+      put(urlPathMatching("/disa-returns-submission/test-only/overrides/[^/]+"))
+        .willReturn(
+          aResponse().withStatus(OK).withHeader("Content-Type", "application/json").withBody(response.toString())
+        )
+    )
+    stubFor(
+      com.github.tomakehurst.wiremock.client.WireMock
+        .delete(urlPathMatching("/disa-returns-submission/test-only/overrides/[^/]+"))
+        .willReturn(
+          aResponse().withStatus(OK).withHeader("Content-Type", "application/json").withBody(response.toString())
+        )
+    )
   }
 
   protected def stubReturnsSubmissionCreateMonthlyReturn(
@@ -109,11 +142,26 @@ trait BaseIntegrationSpec
         )
     )
 
+  protected def stubReturnsSubmissionReportingWindow(open: Boolean = true, status: Int = OK): Unit =
+    stubFor(
+      com.github.tomakehurst.wiremock.client.WireMock
+        .get(
+          urlPathMatching("/disa-returns-submission/reporting-window/status/[^/]+")
+        )
+        .willReturn(
+          aResponse()
+            .withStatus(status)
+            .withHeader("Content-Type", "application/json")
+            .withBody(Json.obj("reportingWindowOpen" -> open).toString())
+        )
+    )
+
   protected def stubReturnsSubmissionGetMonthlyReturn(body: JsObject): Unit =
     stubFor(
-      com.github.tomakehurst.wiremock.client.WireMock.get(
-        urlPathMatching("/disa-returns-submission/monthly/[^/]+/[^/]+/[^/]+")
-      )
+      com.github.tomakehurst.wiremock.client.WireMock
+        .get(
+          urlPathMatching("/disa-returns-submission/monthly/[^/]+/[^/]+/[^/]+")
+        )
         .willReturn(
           aResponse()
             .withStatus(OK)
@@ -122,13 +170,22 @@ trait BaseIntegrationSpec
         )
     )
 
-  protected def stubReturnsSubmissionDeclareMonthlyReturn(status: Int = OK): Unit =
+  protected def stubReturnsSubmissionDeclareMonthlyReturn(status: Int = OK, body: JsObject = Json.obj()): Unit =
     stubFor(
       post(urlPathMatching("/disa-returns-submission/monthly/[^/]+/[^/]+/[^/]+/declarations"))
-        .willReturn(aResponse().withStatus(status))
+        .willReturn(
+          aResponse()
+            .withStatus(status)
+            .withHeader("Content-Type", "application/json")
+            .withBody(body.toString())
+        )
     )
 
-  protected def stubAuth(zReference: String = testZReference, authorizationHeader: String = testBearerToken): Unit =
+  protected def stubAuth(
+    zReference: String = testZReference,
+    authorizationHeader: String = testBearerToken,
+    state: String = "Activated"
+  ): Unit =
     stubFor(
       post(urlEqualTo("/auth/authorise"))
         .withHeader(AUTHORIZATION, equalTo(authorizationHeader))
@@ -141,14 +198,14 @@ trait BaseIntegrationSpec
                 .obj(
                   "allEnrolments" -> Json.arr(
                     Json.obj(
-                      "key" -> "HMRC-DISA-ORG",
+                      "key"         -> "HMRC-DISA-ORG",
                       "identifiers" -> Json.arr(
                         Json.obj(
                           "key"   -> "ZREF",
                           "value" -> zReference
                         )
                       ),
-                      "state" -> "Activated"
+                      "state"       -> state
                     )
                   )
                 )

@@ -54,9 +54,7 @@ trait ObjectStoreWireMockStubs {
     verify(0, putRequestedFor(urlEqualTo(objectStorePath(objectName))))
 
   protected def objectStorePutRequestBody(objectName: String): Array[Byte] =
-    findAll(putRequestedFor(urlEqualTo(objectStorePath(objectName))))
-      .asScala
-      .headOption
+    findAll(putRequestedFor(urlEqualTo(objectStorePath(objectName)))).asScala.headOption
       .map(_.getBody)
       .getOrElse(fail(s"No object-store PUT request found for [$objectName]"))
 

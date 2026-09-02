@@ -1,0 +1,32 @@
+meta {
+  name: 05-200-set-clock-and-reporting-window
+  type: http
+  seq: 5
+}
+
+put {
+  url: {{baseUrl}}{{servicePath}}/test-only/overrides/{{overrideZReference}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "clock": { "date": "{{outsideDeclarationPeriodDate}}" },
+    "reportingWindow": {
+      "startDate": "{{reportingWindowOverrideStart}}",
+      "endDate": "{{reportingWindowOverrideEnd}}"
+    }
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.clock.date: eq {{outsideDeclarationPeriodDate}}
+  res.body.reportingWindow.startDate: eq {{reportingWindowOverrideStart}}
+  res.body.reportingWindow.endDate: eq {{reportingWindowOverrideEnd}}
+}

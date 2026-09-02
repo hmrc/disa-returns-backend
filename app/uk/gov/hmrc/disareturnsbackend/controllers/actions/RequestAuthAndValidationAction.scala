@@ -21,12 +21,14 @@ import play.api.libs.json.Json
 import play.api.mvc.{ActionBuilder, AnyContent, BodyParser, ControllerComponents, Request, Result, Results}
 import uk.gov.hmrc.auth.core.retrieve.v2.Retrievals
 import uk.gov.hmrc.auth.core.{AuthConnector, AuthorisationException, AuthorisedFunctions, Enrolments, InternalError, NoActiveSession}
-import uk.gov.hmrc.disareturnsbackend.models.ValidatedMonthlyReturnRequest
-import uk.gov.hmrc.disareturnsbackend.validators.ValidationHelper
+import uk.gov.hmrc.disareturnsbackend.models.{ValidatedMonthlyReturnRequest, ValidatedZReferenceRequest}
+import uk.gov.hmrc.disareturnsbackend.services.TimeSource
+import uk.gov.hmrc.disareturnsbackend.validators.{ValidationHelper, ZReferenceValidator}
 import uk.gov.hmrc.http.HeaderCarrier
 import uk.gov.hmrc.play.http.HeaderCarrierConverter
 
-import java.time.{Clock, LocalDate, YearMonth}
+import java.time.{LocalDate, YearMonth, ZoneOffset}
+import java.util.Locale
 import javax.inject.{Inject, Singleton}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
@@ -41,14 +43,19 @@ trait RequestAuthAndValidationAction {
   ): ActionBuilder[ValidatedMonthlyReturnRequest, AnyContent]
 }
 
+trait RequestAuthAction {
+  def apply(zReference: String): ActionBuilder[ValidatedZReferenceRequest, AnyContent]
+}
+
 @Singleton
 class RequestAuthAndValidationActionImpl @Inject() (
   cc: ControllerComponents,
   authConnector: AuthConnector,
-  clock: Clock
+  timeSource: TimeSource
 )(implicit
   ec: ExecutionContext
 ) extends RequestAuthAndValidationAction
+    with RequestAuthAction
     with Results
     with Logging {
 
@@ -73,15 +80,13 @@ class RequestAuthAndValidationActionImpl @Inject() (
       override def invokeBlock[A](
         request: Request[A],
         block: ValidatedMonthlyReturnRequest[A] => Future[Result]
-      ): Future[Result] = {
-        implicit val hc: HeaderCarrier = HeaderCarrierConverter.fromRequest(request)
-
-        authFunctions
-          .authorised()
-          .retrieve(Retrievals.allEnrolments) { enrolments =>
-            ValidationHelper.validateParams(zReference, taxYear, month) match {
-              case Right((validZReference, validTaxYear, validMonth)) =>
-                if (checkPeriod && !isPreviousMonthlyPeriod(validTaxYear, validMonth)) {
+      ): Future[Result] =
+        authorised(request) { (enrolments, hc) =>
+          implicit val headerCarrier: HeaderCarrier = hc
+          ValidationHelper.validateParams(zReference, taxYear, month) match {
+            case Right((validZReference, validTaxYear, validMonth)) =>
+              isPreviousMonthlyPeriod(validZReference, validTaxYear, validMonth, checkPeriod).flatMap { periodIsValid =>
+                if (!periodIsValid) {
                   logger.warn(
                     s"[RequestAuthAndValidationAction] Monthly return request is outside the allowed period for zReference [$validZReference], taxYear [$validTaxYear], month [$validMonth]"
                   )
@@ -94,39 +99,84 @@ class RequestAuthAndValidationActionImpl @Inject() (
                   )
                   Future.successful(Forbidden)
                 }
+              }
 
-              case Left(errorMessage) =>
-                logger.warn(
-                  s"[RequestAuthAndValidationAction] Invalid monthly return request parameters for zReference [$zReference], taxYear [$taxYear], month [$month]: [$errorMessage]"
-                )
-                Future.successful(BadRequest(Json.obj("message" -> errorMessage)))
-            }
+            case Left(errorMessage) =>
+              logger.warn(
+                s"[RequestAuthAndValidationAction] Invalid monthly return request parameters for zReference [$zReference], taxYear [$taxYear], month [$month]: [$errorMessage]"
+              )
+              Future.successful(BadRequest(Json.obj("message" -> errorMessage)))
           }
-          .recover {
-            case exception: InternalError =>
-              logger.error("[RequestAuthAndValidationAction] Auth request failed with internal error", exception)
-              ServiceUnavailable
-
-            case exception: NoActiveSession =>
-              logger.warn("[RequestAuthAndValidationAction] Bearer token is missing or invalid", exception)
-              Unauthorized
-
-            case exception: AuthorisationException =>
-              logger.warn("[RequestAuthAndValidationAction] Authorisation failed", exception)
-              Unauthorized
-
-            case NonFatal(exception) =>
-              logger.error("[RequestAuthAndValidationAction] Auth request failed unexpectedly", exception)
-              ServiceUnavailable
-          }
-      }
+        }
     }
 
-  private def isPreviousMonthlyPeriod(taxYear: String, month: Int): Boolean = {
-    val previousMonth = YearMonth.from(LocalDate.now(clock)).minusMonths(1)
+  override def apply(zReference: String): ActionBuilder[ValidatedZReferenceRequest, AnyContent] =
+    new ActionBuilder[ValidatedZReferenceRequest, AnyContent] {
+      override def parser: BodyParser[AnyContent] = cc.parsers.defaultBodyParser
 
-    taxYear == taxYearFor(previousMonth) && month == previousMonth.getMonthValue
+      override protected def executionContext: ExecutionContext = ec
+
+      override def invokeBlock[A](
+        request: Request[A],
+        block: ValidatedZReferenceRequest[A] => Future[Result]
+      ): Future[Result] =
+        authorised(request) { (enrolments, _) =>
+          val normalized = zReference.trim.toUpperCase(Locale.ROOT)
+          if (!ZReferenceValidator.isValid(normalized)) {
+            logger.warn(s"[RequestAuthAndValidationAction] Invalid zReference [$zReference]")
+            Future.successful(BadRequest(Json.obj("message" -> "Invalid field: [zReference]")))
+          } else if (hasMatchingDisaEnrolment(enrolments, normalized)) {
+            block(ValidatedZReferenceRequest(normalized, request))
+          } else {
+            logger.warn(
+              s"[RequestAuthAndValidationAction] DISA enrolment [$enrolmentKey/$identifierKey] does not match zReference [$normalized]"
+            )
+            Future.successful(Forbidden)
+          }
+        }
+    }
+
+  private def authorised[A](
+    request: Request[A]
+  )(block: (Enrolments, HeaderCarrier) => Future[Result]): Future[Result] = {
+    implicit val hc: HeaderCarrier = HeaderCarrierConverter.fromRequest(request)
+
+    authFunctions
+      .authorised()
+      .retrieve(Retrievals.allEnrolments)(enrolments => block(enrolments, hc))
+      .recover {
+        case exception: InternalError =>
+          logger.error("[RequestAuthAndValidationAction] Auth request failed with internal error", exception)
+          ServiceUnavailable
+
+        case exception: NoActiveSession =>
+          logger.warn("[RequestAuthAndValidationAction] Bearer token is missing or invalid", exception)
+          Unauthorized
+
+        case exception: AuthorisationException =>
+          logger.warn("[RequestAuthAndValidationAction] Authorisation failed", exception)
+          Unauthorized
+
+        case NonFatal(exception) =>
+          logger.error("[RequestAuthAndValidationAction] Auth request failed unexpectedly", exception)
+          ServiceUnavailable
+      }
   }
+
+  private def isPreviousMonthlyPeriod(
+    zReference: String,
+    taxYear: String,
+    month: Int,
+    checkPeriod: Boolean
+  )(implicit hc: HeaderCarrier): Future[Boolean] =
+    if (!checkPeriod) {
+      Future.successful(true)
+    } else {
+      timeSource.instant(zReference).map { instant =>
+        val previousMonth = YearMonth.from(LocalDate.ofInstant(instant, ZoneOffset.UTC)).minusMonths(1)
+        taxYear == taxYearFor(previousMonth) && month == previousMonth.getMonthValue
+      }
+    }
 
   private def taxYearFor(period: YearMonth): String = {
     val startYear = if (period.getMonthValue >= 4) period.getYear else period.getYear - 1

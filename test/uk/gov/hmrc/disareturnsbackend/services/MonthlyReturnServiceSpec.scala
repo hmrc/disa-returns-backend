@@ -22,21 +22,18 @@ import org.mockito.Mockito.{reset, verify, verifyNoInteractions, when}
 import org.scalatest.BeforeAndAfterEach
 import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector
 import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector.{CreateMonthlyReturnSubmissionResult, DeclareMonthlyReturnSubmissionResult}
-import uk.gov.hmrc.disareturnsbackend.config.AppConfig
 import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.repositories.{CreateFileUploadRepositoryResult, MonthlyReturnRepository, UpdateNilReturnRepositoryResult}
 import uk.gov.hmrc.disareturnsbackend.services.CreateMonthlyReturnResult.{AlreadyExists, Created}
 import uk.gov.hmrc.http.HeaderCarrier
 
-import java.time.{Clock, Instant, LocalDate, ZoneOffset}
 import scala.concurrent.Future
 
 class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
 
   private val mockMonthlyReturnRepository    = mock[MonthlyReturnRepository]
   private val mockReturnsSubmissionConnector = mock[ReturnsSubmissionConnector]
-  private val appConfig                      = inject[AppConfig]
-  private val service                        = buildService(testCreatedOn)
+  private val service                        = buildService()
 
   private implicit val hc: HeaderCarrier = HeaderCarrier()
 
@@ -62,6 +59,8 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
     super.beforeEach()
     reset(mockMonthlyReturnRepository)
     reset(mockReturnsSubmissionConnector)
+    when(mockReturnsSubmissionConnector.isReportingWindowOpen(eqTo(zReference))(any(), any()))
+      .thenReturn(Future.successful(true))
   }
 
   "MonthlyReturnService" - {
@@ -295,6 +294,19 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
         service.declare(zReference, taxYear, month).futureValue mustBe DeclareMonthlyReturnResult.AlreadyDeclared
       }
 
+      "must return OutsideDeclarationPeriod when submission reports that the declaration period is closed" in {
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(Some(monthlyReturn)))
+        when(
+          mockReturnsSubmissionConnector
+            .declareMonthlyReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), any())(any(), any())
+        )
+          .thenReturn(Future.successful(DeclareMonthlyReturnSubmissionResult.OutsideDeclarationPeriod))
+
+        service.declare(zReference, taxYear, month).futureValue mustBe
+          DeclareMonthlyReturnResult.OutsideDeclarationPeriod
+      }
+
       "must return MonthlyReturnNotFound when the repository cannot find the MonthlyReturn" in {
         when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
           .thenReturn(Future.successful(None))
@@ -314,55 +326,22 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
         service.declare(zReference, taxYear, month).futureValue mustBe DeclareMonthlyReturnResult.MonthlyReturnNotFound
       }
 
-      "must allow declarations from the configured start day" in {
-        val nilReturn       = false
-        val startDayService = buildService(declarationPeriodStartsAt)
-        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
-          .thenReturn(Future.successful(Some(monthlyReturn)))
-        when(
-          mockReturnsSubmissionConnector
-            .declareMonthlyReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), eqTo(nilReturn))(any(), any())
-        )
-          .thenReturn(Future.successful(DeclareMonthlyReturnSubmissionResult.Declared))
+      "must return OutsideDeclarationPeriod when submission reports that the window is closed" in {
+        when(mockReturnsSubmissionConnector.isReportingWindowOpen(eqTo(zReference))(any(), any()))
+          .thenReturn(Future.successful(false))
 
-        startDayService.declare(zReference, taxYear, month).futureValue mustBe
-          DeclareMonthlyReturnResult.Declared
-      }
-
-      "must return OutsideDeclarationPeriod and not call the repository before the configured start day" in {
-        val beforeStartDayService = buildService(
-          now = Instant.parse("2026-05-05T23:59:59Z"),
-          serviceAppConfig = declarationPeriodAppConfig(startDay = 6, endDay = 19)
-        )
-
-        beforeStartDayService.declare(zReference, taxYear, month).futureValue mustBe
+        service.declare(zReference, taxYear, month).futureValue mustBe
           DeclareMonthlyReturnResult.OutsideDeclarationPeriod
 
         verifyNoInteractions(mockMonthlyReturnRepository)
       }
 
-      "must allow declarations until the end of the configured end day" in {
-        val endDayService = buildService(declarationPeriodEndsAt)
-        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
-          .thenReturn(Future.successful(Some(monthlyReturn)))
-        when(
-          mockReturnsSubmissionConnector
-            .declareMonthlyReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), any())(any(), any())
-        )
-          .thenReturn(Future.successful(DeclareMonthlyReturnSubmissionResult.Declared))
+      "must fail when the reporting window status check fails" in {
+        val exception = new RuntimeException(testMongoDownMessage)
+        when(mockReturnsSubmissionConnector.isReportingWindowOpen(eqTo(zReference))(any(), any()))
+          .thenReturn(Future.failed(exception))
 
-        endDayService.declare(zReference, taxYear, month).futureValue mustBe
-          DeclareMonthlyReturnResult.Declared
-      }
-
-      "must return OutsideDeclarationPeriod and not call the repository after the configured end day" in {
-        val afterEndDayService = buildService(
-          now = Instant.parse("2026-05-20T00:00:00Z"),
-          serviceAppConfig = declarationPeriodAppConfig(startDay = 6, endDay = 19)
-        )
-
-        afterEndDayService.declare(zReference, taxYear, month).futureValue mustBe
-          DeclareMonthlyReturnResult.OutsideDeclarationPeriod
+        service.declare(zReference, taxYear, month).failed.futureValue mustBe exception
 
         verifyNoInteractions(mockMonthlyReturnRepository)
       }
@@ -762,32 +741,11 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
     }
   }
 
-  private def buildService(now: Instant, serviceAppConfig: AppConfig = appConfig): MonthlyReturnService =
+  private def buildService(): MonthlyReturnService =
     new MonthlyReturnService(
       monthlyReturnRepository = mockMonthlyReturnRepository,
-      returnsSubmissionConnector = mockReturnsSubmissionConnector,
-      appConfig = serviceAppConfig,
-      clock = Clock.fixed(now, ZoneOffset.UTC)
+      returnsSubmissionConnector = mockReturnsSubmissionConnector
     )
-
-  private def declarationPeriodAppConfig(startDay: Int, endDay: Int): AppConfig = {
-    val configuredAppConfig = mock[AppConfig]
-    when(configuredAppConfig.declarationPeriodStart).thenReturn(startDay)
-    when(configuredAppConfig.declarationPeriodEnd).thenReturn(endDay)
-    configuredAppConfig
-  }
-
-  private def declarationPeriodStartsAt: Instant =
-    LocalDate
-      .of(2026, 5, appConfig.declarationPeriodStart)
-      .atStartOfDay(ZoneOffset.UTC)
-      .toInstant
-
-  private def declarationPeriodEndsAt: Instant =
-    LocalDate
-      .of(2026, 5, appConfig.declarationPeriodEnd)
-      .atTime(23, 59, 59)
-      .toInstant(ZoneOffset.UTC)
 
   private def createdFileUpload(): FileUpload =
     FileUpload(

@@ -19,7 +19,24 @@ script:pre-request {
   let response;
   
   try {
-    response = await bru.sendRequest({ method: "DELETE", url, timeout: 3000 });
+    const zReferences = [
+      "zReference",
+      "nilZReference",
+      "missingZReference",
+      "declarationZReference",
+      "declarationMissingZReference",
+      "submissionDeclaredZReference",
+      "outsidePeriodZReference",
+      "deleteZReference",
+      "callbackZReference"
+    ].map(name => bru.getEnvVar(name));
+    response = await bru.sendRequest({
+      method: "POST",
+      url,
+      headers: { "Content-Type": "application/json" },
+      data: { zReferences },
+      timeout: 3000
+    });
   } catch (error) {
     response = error.response;
   }

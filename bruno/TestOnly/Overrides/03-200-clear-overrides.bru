@@ -1,0 +1,49 @@
+meta {
+  name: 03-200-clear-overrides
+  type: http
+  seq: 3
+}
+
+delete {
+  url: {{baseUrl}}{{servicePath}}/test-only/overrides/{{zReference}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.clock: isNull
+  res.body.reportingWindow: isNull
+}
+
+script:pre-request {
+  const zReferenceVariableNames = bru.getVar("runValidationHelpers") === "true"
+    ? ["callbackZReference"]
+    : [
+        "zReference",
+        "nilZReference",
+        "missingZReference",
+        "declarationZReference",
+        "declarationMissingZReference",
+        "submissionDeclaredZReference",
+        "outsidePeriodZReference",
+        "deleteZReference",
+        "callbackZReference"
+      ];
+
+  for (const variableName of zReferenceVariableNames) {
+    const zReference = bru.getVar(variableName) || bru.getEnvVar(variableName);
+    const url = `${bru.getEnvVar("baseUrl")}${bru.getEnvVar("servicePath")}/test-only/overrides/${zReference}`;
+    let response;
+
+    try {
+      response = await bru.sendRequest({ method: "DELETE", url, timeout: 3000 });
+    } catch (error) {
+      response = error.response;
+    }
+
+    if (!response || response.status !== 200) {
+      throw new Error(`Expected backend override cleanup for ${zReference} to respond with 200, got ${response?.status ?? "no response"}. URL: ${url}`);
+    }
+  }
+}

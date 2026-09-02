@@ -20,14 +20,13 @@ import play.api.Logging
 import play.api.libs.json.JsValue
 import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector
 import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector.*
-import uk.gov.hmrc.disareturnsbackend.config.AppConfig
 import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.repositories.*
 import uk.gov.hmrc.disareturnsbackend.services.CreateFileUploadResult.*
 import uk.gov.hmrc.disareturnsbackend.services.CreateMonthlyReturnResult.*
 import uk.gov.hmrc.http.HeaderCarrier
 
-import java.time.{Clock, Instant, LocalDate}
+import java.time.Instant
 import java.util.UUID
 import javax.inject.{Inject, Singleton}
 import scala.concurrent.{ExecutionContext, Future}
@@ -36,9 +35,7 @@ import scala.util.control.NonFatal
 @Singleton
 class MonthlyReturnService @Inject() (
   monthlyReturnRepository: MonthlyReturnRepository,
-  returnsSubmissionConnector: ReturnsSubmissionConnector,
-  appConfig: AppConfig,
-  clock: Clock
+  returnsSubmissionConnector: ReturnsSubmissionConnector
 )(implicit ec: ExecutionContext)
     extends Logging {
 
@@ -188,50 +185,62 @@ class MonthlyReturnService @Inject() (
   def declare(zReference: String, taxYear: String, month: Int)(implicit
     hc: HeaderCarrier
   ): Future[DeclareMonthlyReturnResult] =
-    if (!isWithinDeclarationPeriod) {
-      logger.warn(
-        s"[MonthlyReturnService][declare] Declaration period is closed for zReference [$zReference], taxYear [$taxYear], month [$month]"
-      )
-      Future.successful(DeclareMonthlyReturnResult.OutsideDeclarationPeriod)
-    } else {
-      monthlyReturnRepository
-        .get(zReference, taxYear, month)
-        .flatMap {
-          case Some(monthlyReturn) =>
-            returnsSubmissionConnector.declareMonthlyReturn(zReference, taxYear, month, monthlyReturn.nilReturn).map {
-              case DeclareMonthlyReturnSubmissionResult.Declared =>
-                logger.info(
-                  s"[MonthlyReturnService][declare] Declared monthly return for zReference [$zReference], taxYear [$taxYear], month [$month]"
-                )
-                DeclareMonthlyReturnResult.Declared
-
-              case DeclareMonthlyReturnSubmissionResult.AlreadyDeclared =>
-                logger.warn(
-                  s"[MonthlyReturnService][declare] Monthly return already declared in submission for zReference [$zReference], taxYear [$taxYear], month [$month]"
-                )
-                DeclareMonthlyReturnResult.AlreadyDeclared
-
-              case DeclareMonthlyReturnSubmissionResult.MonthlyReturnNotFound =>
-                logger.warn(
-                  s"[MonthlyReturnService][declare] No monthly return found in submission for zReference [$zReference], taxYear [$taxYear], month [$month]"
-                )
-                DeclareMonthlyReturnResult.MonthlyReturnNotFound
-            }
-
-          case None =>
-            logger.warn(
-              s"[MonthlyReturnService][declare] No monthly return found for zReference [$zReference], taxYear [$taxYear], month [$month]"
-            )
-            Future.successful(DeclareMonthlyReturnResult.MonthlyReturnNotFound)
-        }
-        .recoverWith { case NonFatal(exception) =>
-          logger.error(
-            s"[MonthlyReturnService][declare] Failed to declare monthly return for zReference [$zReference], taxYear [$taxYear], month [$month]",
-            exception
+    returnsSubmissionConnector
+      .isReportingWindowOpen(zReference)
+      .flatMap {
+        case false =>
+          logger.warn(
+            s"[MonthlyReturnService][declare] Declaration period is closed for zReference [$zReference], taxYear [$taxYear], month [$month]"
           )
-          Future.failed(exception)
-        }
-    }
+          Future.successful(DeclareMonthlyReturnResult.OutsideDeclarationPeriod)
+
+        case true =>
+          monthlyReturnRepository
+            .get(zReference, taxYear, month)
+            .flatMap {
+              case Some(monthlyReturn) =>
+                returnsSubmissionConnector
+                  .declareMonthlyReturn(zReference, taxYear, month, monthlyReturn.nilReturn)
+                  .map {
+                    case DeclareMonthlyReturnSubmissionResult.Declared =>
+                      logger.info(
+                        s"[MonthlyReturnService][declare] Declared monthly return for zReference [$zReference], taxYear [$taxYear], month [$month]"
+                      )
+                      DeclareMonthlyReturnResult.Declared
+
+                    case DeclareMonthlyReturnSubmissionResult.AlreadyDeclared =>
+                      logger.warn(
+                        s"[MonthlyReturnService][declare] Monthly return already declared in submission for zReference [$zReference], taxYear [$taxYear], month [$month]"
+                      )
+                      DeclareMonthlyReturnResult.AlreadyDeclared
+
+                    case DeclareMonthlyReturnSubmissionResult.MonthlyReturnNotFound =>
+                      logger.warn(
+                        s"[MonthlyReturnService][declare] No monthly return found in submission for zReference [$zReference], taxYear [$taxYear], month [$month]"
+                      )
+                      DeclareMonthlyReturnResult.MonthlyReturnNotFound
+
+                    case DeclareMonthlyReturnSubmissionResult.OutsideDeclarationPeriod =>
+                      logger.warn(
+                        s"[MonthlyReturnService][declare] Submission rejected the declaration because the period is closed for zReference [$zReference], taxYear [$taxYear], month [$month]"
+                      )
+                      DeclareMonthlyReturnResult.OutsideDeclarationPeriod
+                  }
+
+              case None =>
+                logger.warn(
+                  s"[MonthlyReturnService][declare] No monthly return found for zReference [$zReference], taxYear [$taxYear], month [$month]"
+                )
+                Future.successful(DeclareMonthlyReturnResult.MonthlyReturnNotFound)
+            }
+      }
+      .recoverWith { case NonFatal(exception) =>
+        logger.error(
+          s"[MonthlyReturnService][declare] Failed to declare monthly return for zReference [$zReference], taxYear [$taxYear], month [$month]",
+          exception
+        )
+        Future.failed(exception)
+      }
 
   def createFileUpload(
     zReference: String,
@@ -378,14 +387,6 @@ class MonthlyReturnService @Inject() (
         )
         Future.failed(exception)
       }
-  }
-
-  private def isWithinDeclarationPeriod: Boolean = {
-    val dayOfMonth                        = LocalDate.now(clock).getDayOfMonth
-    val isOnOrAfterDeclarationPeriodStart = dayOfMonth >= appConfig.declarationPeriodStart
-    val isOnOrBeforeDeclarationPeriodEnd  = dayOfMonth <= appConfig.declarationPeriodEnd
-
-    isOnOrAfterDeclarationPeriodStart && isOnOrBeforeDeclarationPeriodEnd
   }
 
   private def declaredOn(monthlyReturn: JsValue): Option[Instant] =

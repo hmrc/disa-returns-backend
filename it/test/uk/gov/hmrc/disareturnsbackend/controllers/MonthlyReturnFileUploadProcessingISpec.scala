@@ -60,12 +60,12 @@ class MonthlyReturnFileUploadProcessingISpec
   private val expectedRowsValidatedForLimit = 3L
   private val expectedValidationErrorsLimit = 9L
 
-  private val expectedInlineErrorCodes = Seq(
+  private val expectedInlineErrorCodes     = Seq(
     invalidNationalInsuranceErrorCode,
     invalidFirstNameErrorCode,
     invalidCurrentYearSubscriptionsErrorCode
   )
-  private val expectedRowLevelErrorCodes = expectedInlineErrorCodes.mkString(";")
+  private val expectedRowLevelErrorCodes   = expectedInlineErrorCodes.mkString(";")
   private val expectedEmptyRowInlineErrors = Seq(
     accountNumberRequiredErrorCode,
     nationalInsuranceRequiredErrorCode,
@@ -79,11 +79,11 @@ class MonthlyReturnFileUploadProcessingISpec
     currentYearSubscriptionsRequiredErrorCode,
     marketValueRequiredErrorCode
   )
-  private val expectedEmptyRowErrorCodes = expectedEmptyRowInlineErrors.mkString(";")
-  private val errorsWorkbookSheetName       = "Errors"
-  private val rowNumberHeader               = "RowNumber"
-  private val errorCodesHeader              = "ErrorCodes"
-  private val uploadedFileSize              = 123L
+  private val expectedEmptyRowErrorCodes   = expectedEmptyRowInlineErrors.mkString(";")
+  private val errorsWorkbookSheetName      = "Errors"
+  private val rowNumberHeader              = "RowNumber"
+  private val errorCodesHeader             = "ErrorCodes"
+  private val uploadedFileSize             = 123L
 
   private val validFixtures = Seq(
     csvFixture("ISA open valid", "isa-open-valid"),
@@ -123,33 +123,28 @@ class MonthlyReturnFileUploadProcessingISpec
   "monthly return file-upload processing" should {
 
     validFixtures.foreach { fixture =>
-      s"process ${fixture.scenarioName} successfully" in {
+      s"process ${fixture.scenarioName} successfully" in
         assertValidFileProcessed(fixture)
-      }
     }
 
     rowErrorsInvalidFixtures.foreach { fixture =>
-      s"process ${fixture.scenarioName} with row-level validation errors and upload an errors workbook" in {
+      s"process ${fixture.scenarioName} with row-level validation errors and upload an errors workbook" in
         assertRowErrorsFileProcessed(fixture)
-      }
     }
 
     emptyRowInvalidFixtures.foreach { fixture =>
-      s"process ${fixture.scenarioName} as row-level validation failure" in {
+      s"process ${fixture.scenarioName} as row-level validation failure" in
         assertEmptyRowInvalidFileProcessed(fixture)
-      }
     }
 
     inlineErrorLimitExceededFixtures.foreach { fixture =>
-      s"process ${fixture.scenarioName} with inline errors capped and full errors workbook uploaded" in {
+      s"process ${fixture.scenarioName} with inline errors capped and full errors workbook uploaded" in
         assertInlineErrorLimitExceededFileProcessed(fixture)
-      }
     }
 
     invalidFileFixtures.foreach { fixture =>
-      s"process ${fixture.scenarioName} as InvalidFile without uploading an errors workbook" in {
+      s"process ${fixture.scenarioName} as InvalidFile without uploading an errors workbook" in
         assertInvalidFileProcessed(fixture)
-      }
     }
   }
 
@@ -162,11 +157,11 @@ class MonthlyReturnFileUploadProcessingISpec
     val details    = (fileUpload \ fileUploadDetailsFieldName).as[JsObject]
     val validation = (details \ validationFieldName).as[JsObject]
 
-    (fileUpload \ statusFieldName).as[String] shouldBe validationSuccessStatusString
-    (validation \ statusFieldName).as[String] shouldBe validationSuccessValue
-    (validation \ rowsValidatedFieldName).as[Long] shouldBe expectedRowsValidated
-    (validation \ validationErrorsFieldName).as[Long] shouldBe expectedNoValidationErrors
-    (details \ objectStoreFileLocationFieldName).as[String] shouldBe scenario.reference
+    (fileUpload \ statusFieldName).as[String]                   shouldBe validationSuccessStatusString
+    (validation \ statusFieldName).as[String]                   shouldBe validationSuccessValue
+    (validation \ rowsValidatedFieldName).as[Long]              shouldBe expectedRowsValidated
+    (validation \ validationErrorsFieldName).as[Long]           shouldBe expectedNoValidationErrors
+    (details \ objectStoreFileLocationFieldName).as[String]     shouldBe scenario.reference
     (details \ objectStoreFileErrorsLocationFieldName).toOption shouldBe None
     verifyObjectStorePut(scenario.reference)
     verifyObjectStorePutNotMade(scenario.errorsReference)
@@ -192,17 +187,17 @@ class MonthlyReturnFileUploadProcessingISpec
     val details    = (fileUpload \ fileUploadDetailsFieldName).as[JsObject]
     val validation = (details \ validationFieldName).as[JsObject]
 
-    (fileUpload \ statusFieldName).as[String] shouldBe validationFailureStatusString
-    (validation \ statusFieldName).as[String] shouldBe validationFailedValue
-    (validation \ rowsValidatedFieldName).as[Long] shouldBe expectedRowsValidated
+    (fileUpload \ statusFieldName).as[String]         shouldBe validationFailureStatusString
+    (validation \ statusFieldName).as[String]         shouldBe validationFailedValue
+    (validation \ rowsValidatedFieldName).as[Long]    shouldBe expectedRowsValidated
     (validation \ validationErrorsFieldName).as[Long] shouldBe expectedEmptyRowErrors
 
     val inlineErrors = (validation \ inlineErrorsFieldName).as[Seq[JsObject]]
-    inlineErrors.size shouldBe 1
-    (inlineErrors.head \ rowNumberFieldName).as[Long] shouldBe expectedInlineErrorRow
+    inlineErrors.size                                         shouldBe 1
+    (inlineErrors.head \ rowNumberFieldName).as[Long]         shouldBe expectedInlineErrorRow
     (inlineErrors.head \ errorCodesFieldName).as[Seq[String]] shouldBe expectedEmptyRowInlineErrors
 
-    (details \ objectStoreFileLocationFieldName).as[String] shouldBe scenario.reference
+    (details \ objectStoreFileLocationFieldName).as[String]       shouldBe scenario.reference
     (details \ objectStoreFileErrorsLocationFieldName).as[String] shouldBe scenario.errorsReference
     verifyObjectStorePut(scenario.reference)
     verifyObjectStorePut(scenario.errorsReference)
@@ -218,19 +213,19 @@ class MonthlyReturnFileUploadProcessingISpec
     val details    = (fileUpload \ fileUploadDetailsFieldName).as[JsObject]
     val validation = (details \ validationFieldName).as[JsObject]
 
-    (fileUpload \ statusFieldName).as[String] shouldBe validationFailureStatusString
-    (validation \ statusFieldName).as[String] shouldBe validationFailedValue
-    (validation \ rowsValidatedFieldName).as[Long] shouldBe expectedRowsValidatedForLimit
+    (fileUpload \ statusFieldName).as[String]         shouldBe validationFailureStatusString
+    (validation \ statusFieldName).as[String]         shouldBe validationFailedValue
+    (validation \ rowsValidatedFieldName).as[Long]    shouldBe expectedRowsValidatedForLimit
     (validation \ validationErrorsFieldName).as[Long] shouldBe expectedValidationErrorsLimit
 
     val inlineErrors = (validation \ inlineErrorsFieldName).as[Seq[JsObject]]
-    inlineErrors.size shouldBe configuredInlineErrorLimit
-    (inlineErrors.head \ rowNumberFieldName).as[Long] shouldBe 1L
+    inlineErrors.size                                         shouldBe configuredInlineErrorLimit
+    (inlineErrors.head \ rowNumberFieldName).as[Long]         shouldBe 1L
     (inlineErrors.head \ errorCodesFieldName).as[Seq[String]] shouldBe expectedInlineErrorCodes
-    (inlineErrors(1) \ rowNumberFieldName).as[Long] shouldBe 2L
-    (inlineErrors(1) \ errorCodesFieldName).as[Seq[String]] shouldBe expectedInlineErrorCodes
+    (inlineErrors(1) \ rowNumberFieldName).as[Long]           shouldBe 2L
+    (inlineErrors(1) \ errorCodesFieldName).as[Seq[String]]   shouldBe expectedInlineErrorCodes
 
-    (details \ objectStoreFileLocationFieldName).as[String] shouldBe scenario.reference
+    (details \ objectStoreFileLocationFieldName).as[String]       shouldBe scenario.reference
     (details \ objectStoreFileErrorsLocationFieldName).as[String] shouldBe scenario.errorsReference
     verifyObjectStorePut(scenario.reference)
     verifyObjectStorePut(scenario.errorsReference)
@@ -256,7 +251,7 @@ class MonthlyReturnFileUploadProcessingISpec
     scenario: FileScenario,
     expectErrorsUpload: Boolean = false
   ): Unit = {
-    postJson(scenario.monthlyPath, nilReturnFalseRequest).status shouldBe CREATED
+    postJson(scenario.monthlyPath, nilReturnFalseRequest).status                            shouldBe CREATED
     postJson(scenario.filesPath, Json.obj(referenceFieldName -> scenario.reference)).status shouldBe CREATED
 
     stubObjectStorePut(scenario.reference)
@@ -272,14 +267,14 @@ class MonthlyReturnFileUploadProcessingISpec
     val details    = (fileUpload \ fileUploadDetailsFieldName).as[JsObject]
     val validation = (details \ validationFieldName).as[JsObject]
 
-    (fileUpload \ statusFieldName).as[String] shouldBe validationFailureStatusString
-    (validation \ statusFieldName).as[String] shouldBe validationFailedValue
-    (validation \ rowsValidatedFieldName).as[Long] shouldBe expectedRowsValidated
+    (fileUpload \ statusFieldName).as[String]         shouldBe validationFailureStatusString
+    (validation \ statusFieldName).as[String]         shouldBe validationFailedValue
+    (validation \ rowsValidatedFieldName).as[Long]    shouldBe expectedRowsValidated
     (validation \ validationErrorsFieldName).as[Long] shouldBe expectedRowValidationErrors
     val inlineError = (validation \ inlineErrorsFieldName).as[Seq[JsObject]].head
-    (inlineError \ rowNumberFieldName).as[Long] shouldBe expectedInlineErrorRow
-    (inlineError \ errorCodesFieldName).as[Seq[String]] shouldBe expectedInlineErrorCodes
-    (details \ objectStoreFileLocationFieldName).as[String] shouldBe scenario.reference
+    (inlineError \ rowNumberFieldName).as[Long]                   shouldBe expectedInlineErrorRow
+    (inlineError \ errorCodesFieldName).as[Seq[String]]           shouldBe expectedInlineErrorCodes
+    (details \ objectStoreFileLocationFieldName).as[String]       shouldBe scenario.reference
     (details \ objectStoreFileErrorsLocationFieldName).as[String] shouldBe scenario.errorsReference
     verifyObjectStorePut(scenario.reference)
     verifyObjectStorePut(scenario.errorsReference)
@@ -291,13 +286,13 @@ class MonthlyReturnFileUploadProcessingISpec
     val details    = (fileUpload \ fileUploadDetailsFieldName).as[JsObject]
     val validation = (details \ validationFieldName).as[JsObject]
 
-    (fileUpload \ statusFieldName).as[String] shouldBe validationFailureStatusString
-    (validation \ statusFieldName).as[String] shouldBe invalidFileValue
-    (validation \ rowsValidatedFieldName).as[Long] shouldBe expectedNoValidationErrors
-    (validation \ validationErrorsFieldName).as[Long] shouldBe expectedNoValidationErrors
+    (fileUpload \ statusFieldName).as[String]                                shouldBe validationFailureStatusString
+    (validation \ statusFieldName).as[String]                                shouldBe invalidFileValue
+    (validation \ rowsValidatedFieldName).as[Long]                           shouldBe expectedNoValidationErrors
+    (validation \ validationErrorsFieldName).as[Long]                        shouldBe expectedNoValidationErrors
     (validation \ inlineErrorsFieldName).asOpt[Seq[JsObject]].getOrElse(Nil) shouldBe Nil
-    (details \ objectStoreFileLocationFieldName).as[String] shouldBe scenario.reference
-    (details \ objectStoreFileErrorsLocationFieldName).toOption shouldBe None
+    (details \ objectStoreFileLocationFieldName).as[String]                  shouldBe scenario.reference
+    (details \ objectStoreFileErrorsLocationFieldName).toOption              shouldBe None
     verifyObjectStorePut(scenario.reference)
     verifyObjectStorePutNotMade(scenario.errorsReference)
   }
@@ -345,7 +340,7 @@ class MonthlyReturnFileUploadProcessingISpec
       expectedRows.zipWithIndex.foreach { case ((expectedRowNumber, expectedErrorCodes), index) =>
         val workbookRow = sheet.getRow(index + 1)
         workbookRow.getCell(0).getNumericCellValue shouldBe expectedRowNumber
-        workbookRow.getCell(1).getStringCellValue shouldBe expectedErrorCodes
+        workbookRow.getCell(1).getStringCellValue  shouldBe expectedErrorCodes
       }
     }
   }
@@ -365,7 +360,12 @@ class MonthlyReturnFileUploadProcessingISpec
   private def xlsxFixture(scenarioName: String, baseName: String): UploadFixture =
     uploadFixture(scenarioName, baseName, "xlsx", XLSX_MIME_TYPE)
 
-  private def uploadFixture(scenarioName: String, baseName: String, extension: String, mimeType: String): UploadFixture = {
+  private def uploadFixture(
+    scenarioName: String,
+    baseName: String,
+    extension: String,
+    mimeType: String
+  ): UploadFixture = {
     val fileName = s"$baseName.$extension"
 
     UploadFixture(

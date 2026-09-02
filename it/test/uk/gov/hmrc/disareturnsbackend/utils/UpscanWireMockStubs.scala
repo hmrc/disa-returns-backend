@@ -45,7 +45,7 @@ trait UpscanWireMockStubs { self: WireMockSupport =>
     s"$wireMockUrl$path"
   }
 
-  protected def readResourceBytes(resourcePath: String): Array[Byte] = {
+  protected def readResourceBytes(resourcePath: String): Array[Byte] =
     Option(getClass.getClassLoader.getResourceAsStream(resourcePath)) match {
       case Some(input) =>
         try input.readAllBytes()
@@ -55,5 +55,4 @@ trait UpscanWireMockStubs { self: WireMockSupport =>
         if (Files.exists(path)) Files.readAllBytes(path)
         else fail(s"Resource [$resourcePath] was not found")
     }
-  }
 }

@@ -1,0 +1,27 @@
+meta {
+  name: 01-200-get-overrides
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}{{servicePath}}/test-only/overrides/{{zReference}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("response includes only aggregate override state", function() {
+    const responseBody = res.body ?? res.getBody();
+    const body = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
+
+    expect(body.zReference).to.equal(bru.getEnvVar("zReference"));
+    expect(body).to.have.property("clock");
+    expect(body).to.have.property("reportingWindow");
+    expect(Object.keys(body).sort()).to.deep.equal(["clock", "reportingWindow", "zReference"]);
+  });
+}
