@@ -32,9 +32,6 @@ class AppConfig @Inject() (
 
   val appName: String = config.get[String]("appName")
 
-  val declarationPeriodEnd: Int   = config.get[Int]("declarationPeriodEnd")
-  val declarationPeriodStart: Int = config.get[Int]("declarationPeriodStart")
-
   val fileUploadMaxInlineErrors: Int = config.getOptional[Int]("fileUploadMaxInlineErrors").getOrElse(25)
 
   val internalAuthService: String = servicesConfig.baseUrl("internal-auth")
@@ -56,4 +53,5 @@ class AppConfig @Inject() (
     .toScala
 
   val monthlyReturnTimeToLiveInDays: Long = config.get[Long]("mongodb.monthlyReturnTimeToLiveInDays")
+
 }

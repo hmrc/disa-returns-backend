@@ -46,7 +46,7 @@ class TestOnlyMonthlyReturnFileUploadWorkItemControllerISpec extends BaseIntegra
         )
         .futureValue
 
-      delete(path).status shouldBe NO_CONTENT
+      delete(path).status                                                  shouldBe NO_CONTENT
       repository.pullOutstanding(testCreatedOn, testCreatedOn).futureValue shouldBe None
 
       val workItem = repository

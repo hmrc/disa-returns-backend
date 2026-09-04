@@ -33,6 +33,7 @@ import uk.gov.hmrc.http.{HeaderCarrier, StringContextOps, UpstreamErrorResponse}
 import java.util.UUID
 import javax.inject.{Inject, Singleton}
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Try
 
 @Singleton
 class ReturnsSubmissionConnector @Inject() (
@@ -41,6 +42,22 @@ class ReturnsSubmissionConnector @Inject() (
   override val configuration: Config,
   override val actorSystem: ActorSystem
 ) extends BaseConnector {
+
+  def isReportingWindowOpen(
+    zReference: String
+  )(implicit hc: HeaderCarrier, ec: ExecutionContext): Future[Boolean] =
+    retryFor[Boolean]("get reporting window status from disa-returns-submission")(retryCondition) {
+      httpClient
+        .get(url"${appConfig.returnsSubmissionService}/disa-returns-submission/reporting-window/status/$zReference")
+        .setHeader(authorizationHeader)
+        .execute
+        .flatMap { response =>
+          response.status match {
+            case OK     => Future.successful((response.json \ "reportingWindowOpen").as[Boolean])
+            case status => Future.failed(UpstreamErrorResponse(response.body, status))
+          }
+        }
+    }
 
   def createMonthlyReturn(
     zReference: String,
@@ -59,7 +76,8 @@ class ReturnsSubmissionConnector @Inject() (
             case CREATED              => Future.successful(Created(readSubmissionId(response.json.as[CreateMonthlyReturnResponse])))
             case CONFLICT             =>
               Future.successful(AlreadyExists(readSubmissionId(response.json.as[CreateMonthlyReturnResponse])))
-            case UNPROCESSABLE_ENTITY => Future.successful(OutsideDeclarationPeriod)
+            case UNPROCESSABLE_ENTITY =>
+              Future.successful(CreateMonthlyReturnSubmissionResult.OutsideDeclarationPeriod)
             case status               => Future.failed(UpstreamErrorResponse(response.body, status))
           }
         }
@@ -90,23 +108,31 @@ class ReturnsSubmissionConnector @Inject() (
     month: Int,
     nilReturn: Boolean
   )(implicit hc: HeaderCarrier, ec: ExecutionContext): Future[DeclareMonthlyReturnSubmissionResult] =
-    retryFor[DeclareMonthlyReturnSubmissionResult]("declare monthly return in disa-returns-submission")(retryCondition) {
-      httpClient
-        .post(
-          url"${appConfig.returnsSubmissionService}/disa-returns-submission/monthly/$zReference/$taxYear/$month/declarations"
-        )
-        .setHeader(authorizationHeader)
-        .withBody(Json.obj("nilReturn" -> nilReturn))
-        .execute
-        .flatMap { response =>
-          response.status match {
-            case OK                   => Future.successful(Declared)
-            case NOT_FOUND            => Future.successful(MonthlyReturnNotFound)
-            case UNPROCESSABLE_ENTITY => Future.successful(AlreadyDeclared)
-            case status               => Future.failed(UpstreamErrorResponse(response.body, status))
-          }
+    httpClient
+      .post(
+        url"${appConfig.returnsSubmissionService}/disa-returns-submission/monthly/$zReference/$taxYear/$month/declarations"
+      )
+      .setHeader(authorizationHeader)
+      .withBody(Json.obj("nilReturn" -> nilReturn))
+      .execute
+      .flatMap { response =>
+        response.status match {
+          case OK                   => Future.successful(Declared)
+          case NOT_FOUND            => Future.successful(MonthlyReturnNotFound)
+          case UNPROCESSABLE_ENTITY =>
+            declarationErrorCode(response.body) match {
+              case Some("MONTHLY_RETURN_ALREADY_DECLARED") => Future.successful(AlreadyDeclared)
+              case Some("DECLARATION_PERIOD_CLOSED")       =>
+                Future.successful(DeclareMonthlyReturnSubmissionResult.OutsideDeclarationPeriod)
+              case _                                       =>
+                Future.failed(UpstreamErrorResponse(response.body, UNPROCESSABLE_ENTITY))
+            }
+          case status               => Future.failed(UpstreamErrorResponse(response.body, status))
         }
-    }
+      }
+
+  private def declarationErrorCode(body: String): Option[String] =
+    Try((Json.parse(body) \ "code").as[String]).toOption
 
   private def readSubmissionId(response: CreateMonthlyReturnResponse): UUID =
     response.submissionId
@@ -131,5 +157,6 @@ object ReturnsSubmissionConnector {
     case object Declared extends DeclareMonthlyReturnSubmissionResult
     case object AlreadyDeclared extends DeclareMonthlyReturnSubmissionResult
     case object MonthlyReturnNotFound extends DeclareMonthlyReturnSubmissionResult
+    case object OutsideDeclarationPeriod extends DeclareMonthlyReturnSubmissionResult
   }
 }

@@ -19,11 +19,11 @@ package uk.gov.hmrc.disareturnsbackend
 import config.{InternalAuthTokenInitialiser, InternalAuthTokenInitialiserImpl, NoOpInternalAuthTokenInitialiser}
 import play.api.{Configuration, Environment}
 import play.api.inject.{Binding, Module as AppModule, bind as binding}
-import uk.gov.hmrc.disareturnsbackend.controllers.actions.{RequestAuthAndValidationAction, RequestAuthAndValidationActionImpl}
+import uk.gov.hmrc.disareturnsbackend.controllers.actions.{RequestAuthAction, RequestAuthAndValidationAction, RequestAuthAndValidationActionImpl}
 import uk.gov.hmrc.disareturnsbackend.jobs.MonthlyReturnWorkItemJob
 import uk.gov.hmrc.disareturnsbackend.mappers.{UpscanCallbackMapper, UpscanCallbackMapperImpl}
-import uk.gov.hmrc.disareturnsbackend.services.{MonthlyReturnAuditService, MonthlyReturnFileUploadProcessingService, MonthlyReturnFileUploadProcessingServiceImpl}
-import uk.gov.hmrc.disareturnsbackend.testOnly.MutableClock
+import uk.gov.hmrc.disareturnsbackend.services.{MonthlyReturnAuditService, MonthlyReturnFileUploadProcessingService, MonthlyReturnFileUploadProcessingServiceImpl, SystemClock, TimeSource}
+import uk.gov.hmrc.disareturnsbackend.testOnly.TestOnlySubmissionTimeSource
 
 import java.time.{Clock, ZoneOffset}
 
@@ -47,24 +47,25 @@ class Module extends AppModule:
         )
       }
 
-    val clockBindings: Seq[Binding[?]] =
+    val timeSourceBindings: Seq[Binding[?]] =
       if (configuration.getOptional[String]("application.router").contains("testOnlyDoNotUseInAppConf.Routes")) {
         Seq(
-          binding[MutableClock].toSelf,
-          binding[Clock].to[MutableClock]
+          binding[TimeSource].to[TestOnlySubmissionTimeSource]
         )
       } else {
         Seq(
-          binding[Clock].to(Clock.systemDefaultZone.withZone(ZoneOffset.UTC))
+          binding[TimeSource].to[SystemClock]
         )
       }
 
     Seq(
       binding[RequestAuthAndValidationAction].to[RequestAuthAndValidationActionImpl],
+      binding[RequestAuthAction].to[RequestAuthAndValidationActionImpl],
       binding[MonthlyReturnWorkItemJob].toSelf,
       binding[MonthlyReturnFileUploadProcessingService].to[MonthlyReturnFileUploadProcessingServiceImpl],
       binding[MonthlyReturnAuditService].toSelf,
       binding[UpscanCallbackMapper].to[UpscanCallbackMapperImpl],
+      binding[Clock].to(Clock.systemDefaultZone.withZone(ZoneOffset.UTC)),
       binding[AppInitialiser].toSelf.eagerly()
-    ) ++ clockBindings ++ authTokenInitialiserBindings
+    ) ++ timeSourceBindings ++ authTokenInitialiserBindings
   }

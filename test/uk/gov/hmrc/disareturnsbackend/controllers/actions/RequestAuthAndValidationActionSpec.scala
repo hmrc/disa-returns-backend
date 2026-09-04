@@ -25,8 +25,10 @@ import play.api.mvc.Results.Ok
 import play.api.test.FakeRequest
 import play.api.test.Helpers.*
 import uk.gov.hmrc.auth.core.{AuthConnector, BearerTokenExpired, Enrolment, EnrolmentIdentifier, Enrolments, InternalError, InvalidBearerToken, MissingBearerToken}
+import uk.gov.hmrc.disareturnsbackend.services.TimeSource
+import uk.gov.hmrc.http.HeaderCarrier
 
-import java.time.{Clock, Instant, ZoneOffset}
+import java.time.Instant
 import scala.concurrent.Future
 
 class RequestAuthAndValidationActionSpec extends SpecBase with BeforeAndAfterEach {
@@ -38,7 +40,10 @@ class RequestAuthAndValidationActionSpec extends SpecBase with BeforeAndAfterEac
     new RequestAuthAndValidationActionImpl(
       stubControllerComponents(),
       mockAuthConnector,
-      Clock.fixed(Instant.parse(now), ZoneOffset.UTC)
+      new TimeSource {
+        override def instant(zReference: String)(implicit hc: HeaderCarrier): Future[Instant] =
+          Future.successful(Instant.parse(now))
+      }
     )
 
   override protected def beforeEach(): Unit = {

@@ -5,6 +5,7 @@
 
 | Method | Endpoint | Description |
 | --- | --- | --- |
+| `GET` | `/disa-returns-backend/reporting-window/status/:zReference` | Gets submission's authoritative reporting-window status. |
 | `GET` | `/disa-returns-backend/monthly/:zReference/:taxYear/:month` | Gets an existing monthly return. |
 | `GET` | `/disa-returns-backend/monthly/:zReference/:taxYear/:month/files/:reference` | Gets a file upload for a monthly return. |
 | `DELETE` | `/disa-returns-backend/monthly/:zReference/:taxYear/:month/files/:reference` | Deletes a file upload from a monthly return. |
@@ -22,11 +23,30 @@ Path parameters:
 
 Invalid path parameters return `400 Bad Request`.
 
-The monthly return endpoints above require a valid bearer token with DISA enrolment `HMRC-DISA-ORG`.
+The monthly return and reporting-window status endpoints above require a valid bearer token with an activated
+`HMRC-DISA-ORG` enrolment whose `ZREF` identifier matches the path Z-reference.
 Requests with no or invalid bearer token return `401 Unauthorized`.
 Requests with a valid bearer token but no matching DISA enrolment return `403 Forbidden`.
 
 The Upscan callback and test-only endpoints are not secured by this bearer-token/enrolment check.
+
+### Reporting Window Status
+
+`GET /disa-returns-backend/reporting-window/status/:zReference`
+
+The path Z-reference is normalized to uppercase after authentication and must be in `Z1234` format. The endpoint
+proxies `disa-returns-submission`, which remains the source of truth, and returns only:
+
+```json
+{
+  "reportingWindowOpen": true
+}
+```
+
+- Returns `400 Bad Request` for an invalid Z-reference.
+- Returns `401 Unauthorized` for a missing or invalid bearer token.
+- Returns `403 Forbidden` without an activated matching `HMRC-DISA-ORG`/`ZREF` enrolment.
+- Returns `503 Service Unavailable` when authentication fails internally or submission's status lookup still fails after its upstream-5xx retries.
 
 ### Create Monthly Return
 
@@ -64,7 +84,9 @@ Example response:
 - Returns `404 Not Found` when the monthly return does not exist.
 - Returns `422 Unprocessable Entity` when the request is outside the declaration period.
 - Returns `503 Service Unavailable` when MongoDB is unavailable.
-- The declaration period is from 00:00 on the configured start day to the end of the configured end day, inclusive.
+- The declaration window status is read from `disa-returns-submission` using the request Z-reference.
+- Before reading the local return, the backend checks submission's reporting-window status; a closed window returns `422`. The status GET retries upstream 5xx failures.
+- The declaration POST is not retried. Submission code `MONTHLY_RETURN_ALREADY_DECLARED` maps to backend `409`, and `DECLARATION_PERIOD_CLOSED` maps to backend `422`. An unknown, missing, or malformed submission `422` code is treated as an upstream failure and returns `503`.
 - Declarations are recorded in `disa-returns-submission`; this service does not store declaration state locally.
 
 ### Create File Upload
@@ -322,7 +344,7 @@ contexts {
 }
 
 monthly-return-file-upload-work-item-job {
-  pollInterval = 10 seconds
+  pollInterval = 1 second
   failedRetryAfter = 1 minute
   inProgressRetryAfter = 5 minutes
 }
@@ -447,33 +469,46 @@ If starting through service-manager, pass the same JVM parameter in the local se
 -Dapplication.router=testOnlyDoNotUseInAppConf.Routes
 ```
 
-Test-only clock routes are available only with that router:
+The following test-only routes are available only with that router:
 
-- `GET /disa-returns-backend/test-only/clock`
-- `PUT /disa-returns-backend/test-only/clock/yyyy-MM-dd`
-- `DELETE /disa-returns-backend/test-only/clock`
+- `GET /disa-returns-backend/test-only/overrides/:zReference`
+- `PUT /disa-returns-backend/test-only/overrides/:zReference`
+- `DELETE /disa-returns-backend/test-only/overrides/:zReference`
 - `DELETE /disa-returns-backend/test-only/monthly-returns`
 - `DELETE /disa-returns-backend/test-only/monthly-return-file-upload-work-items`
+- `GET /disa-returns-backend/test-only/file-upload/monthly/:filename`
+- `GET /disa-returns-backend/test-only/file-upload/monthly-expired-download`
 
-Use `GET` to inspect the app clock:
+`disa-returns-submission` must also run with the same test-only router before the aggregate override routes can be used.
 
-```bash
-curl http://localhost:1207/disa-returns-backend/test-only/clock
-```
+Monthly-period validation uses the Z-reference-scoped `TimeSource` abstraction. With the normal router, `SystemClock`
+returns the current system time in UTC. With the test-only router, `TestOnlySubmissionTimeSource` uses submission's optional
+clock override date at midnight UTC, falling back to the backend `SystemClock` when no clock override is present.
 
-Use `PUT` to set the app date for declaration-period testing. The date must be in `yyyy-MM-dd` format and is applied at `00:00:00Z`:
-
-```bash
-curl -X PUT http://localhost:1207/disa-returns-backend/test-only/clock/2026-05-20
-```
-
-Use `DELETE` to reset back to the system UTC clock:
+Use `GET` to inspect the configured overrides:
 
 ```bash
-curl -X DELETE http://localhost:1207/disa-returns-backend/test-only/clock
+curl http://localhost:1207/disa-returns-backend/test-only/overrides/Z1234
 ```
 
-For example, set the clock to `2026-05-20` to test declaration attempts outside the configured declaration period.
+Responses contain only `zReference` and nullable `clock` and `reportingWindow` objects. `PUT` fully replaces both
+overrides; use `null` to leave either override unset:
+
+```bash
+curl -X PUT -H 'Content-Type: application/json' \
+  -d '{"clock":{"date":"2026-05-20"},"reportingWindow":null}' \
+  http://localhost:1207/disa-returns-backend/test-only/overrides/Z1234
+```
+
+Use `DELETE` to clear both overrides:
+
+```bash
+curl -X DELETE http://localhost:1207/disa-returns-backend/test-only/overrides/Z1234
+```
+
+The backend routes proxy the corresponding Z-reference-scoped aggregate route in `disa-returns-submission` and return
+submission's JSON response. Submission is the sole source of truth; backend does not persist overrides. All three
+routes return `503 Service Unavailable` when submission cannot satisfy the request.
 
 Use the monthly returns cleanup route to remove all backend monthly returns from the local database before automation runs:
 
@@ -487,7 +522,7 @@ Use the monthly return file-upload work-item cleanup route to delete all monthly
 curl -X DELETE http://localhost:1207/disa-returns-backend/test-only/monthly-return-file-upload-work-items
 ```
 
-This removes queued or failed local file-upload validation jobs created during Bruno runs. It does not drop the collection.
+This deletes all local file-upload validation work-item documents, regardless of status; it does not drop the collection.
 
 ### Running the test suite
 
@@ -505,22 +540,40 @@ sbt it/test
 
 ### Test-Only Endpoints
 
-Test-only endpoints require the service to be running with `-Dapplication.router=testOnlyDoNotUseInAppConf.Routes`. 
+Test-only endpoints require the service to be running with `-Dapplication.router=testOnlyDoNotUseInAppConf.Routes`.
 Otherwise the routes will not be available.
 
 | Endpoint | Used by | Purpose |
 | --- | --- | --- |
-| `GET /disa-returns-backend/test-only/clock` | `bruno/TestOnly/Clock` | Inspect the app clock used by declaration-period logic. |
-| `PUT /disa-returns-backend/test-only/clock/:date` | `bruno/TestOnly/Clock` | Set the app date in `yyyy-MM-dd` format for declaration-period testing. |
-| `DELETE /disa-returns-backend/test-only/clock` | `bruno/TestOnly/Clock` | Reset the app clock back to the system UTC clock. |
+| `GET /disa-returns-backend/test-only/overrides/:zReference` | Frontend test utility and `bruno/TestOnly/Overrides` | Read submission's aggregate overrides. |
+| `PUT /disa-returns-backend/test-only/overrides/:zReference` | Frontend test utility and `bruno/TestOnly/Overrides` | Fully replace submission's clock and reporting-window overrides. |
+| `DELETE /disa-returns-backend/test-only/overrides/:zReference` | Frontend test utility and `bruno/TestOnly/Overrides` | Clear both submission overrides. |
 | `DELETE /disa-returns-backend/test-only/monthly-returns` | `bruno/TestOnly/MonthlyReturns` | Remove all backend monthly returns from the local database before automation runs. |
-| `DELETE /disa-returns-backend/test-only/monthly-return-file-upload-work-items` | `bruno/TestOnly/MonthlyReturnFileUploadWorkItems` | Delete queued or failed local file-upload validation work-item documents from `monthlyReturnFileUploadWorkItems`. |
+| `DELETE /disa-returns-backend/test-only/monthly-return-file-upload-work-items` | `bruno/TestOnly/MonthlyReturnFileUploadWorkItems` | Delete all local file-upload validation work-item documents from `monthlyReturnFileUploadWorkItems`. |
 | `GET /disa-returns-backend/test-only/file-upload/monthly/:filename` | `bruno/MonthlyReturn/Validation` | Serve copied local validation tests from `conf/test-only/file-upload/monthly` so Bruno can use them as Upscan `downloadUrl` values. |
 | `GET /disa-returns-backend/test-only/file-upload/monthly-expired-download` | `bruno/MonthlyReturn/Validation/21-200-upscan-expired` | Return an S3-style expired Upscan download response so Bruno can verify `UPSCAN_EXPIRED` processing. |
 
-`bruno/TestOnly/MonthlyReturns/01-204-clear-monthly-returns` also clears monthly returns from `disa-returns-submission` before calling the backend cleanup route, so Bruno scenarios start from a clean declaration source of truth.
+`bruno/TestOnly/MonthlyReturns/01-204-clear-monthly-returns` also clears monthly returns for the collection's configured Z-references from `disa-returns-submission` before calling the backend cleanup route, so Bruno scenarios start from a clean declaration source of truth.
 
 The monthly file-upload test endpoint only serves simple `.csv` and `.xlsx` filenames copied into `conf/test-only/file-upload/monthly`. The files are runtime resources so they are available when running locally or through service-manager with the test-only router enabled. The expired-download endpoint does not serve a file; it returns `403 Forbidden` with an S3 `AccessDenied` / `Request has expired` XML body.
+
+#### Override test utilities
+
+The aggregate override routes proxy state maintained by `disa-returns-submission`; backend does not persist override
+state locally. `PUT` is a full replacement, not a patch. `DELETE` clears both the clock and reporting-window override.
+
+```json
+{
+  "clock": { "date": "2026-06-20" },
+  "reportingWindow": {
+    "startDate": "2026-06-19T23:59:00Z",
+    "endDate": "2026-06-20T00:01:00Z"
+  }
+}
+```
+
+Each route returns aggregate JSON containing only `zReference` and nullable `clock` and `reportingWindow` objects.
+Invalid Z-references or malformed replacement bodies return `400`; submission failures return `503`.
 
 Monthly file-upload validation tests are maintained in `it/resources/file-upload/monthly` for integration tests and copied to `conf/test-only/file-upload/monthly` for local Bruno/service-manager use. The same filenames exist in both locations.
 
@@ -579,22 +632,22 @@ The Bruno collection is under `bruno/MonthlyReturn` and is organised into:
 - `UpscanCallback`
 - `Validation`
 
-Monthly return Bruno setup requests call the test-only cleanup route before generating `Zxxxx` references. This avoids collisions with old backend and `disa-returns-submission` data while keeping generated references inside the allowed zReference format. Upscan callback setup also clears monthly return file-upload work items before creating a fresh callback scenario. Do not run these Bruno folders in parallel, because cleanup requests delete monthly returns from the backend and `disa-returns-submission`, and delete monthly return file-upload work items from the local database.
+Monthly return Bruno setup requests call the test-only cleanup route for the collection's configured Z-references. This avoids collisions with old backend and `disa-returns-submission` data. Upscan callback setup also clears monthly return file-upload work items before creating a fresh callback scenario. Do not run these Bruno folders in parallel, because cleanup requests delete all monthly returns from the backend, delete scoped monthly returns from `disa-returns-submission`, and delete monthly return file-upload work items from the local database.
 
 These Bruno requests clear monthly returns by calling `TestOnly/MonthlyReturns/01-204-clear-monthly-returns` in their pre-request script:
 
 | Request | Why it clears monthly returns |
 | --- | --- |
-| `MonthlyReturn/Create/01-201-create-nil-return-false` | Creates a clean baseline return and generates `zReference`, `nilZReference`, and `missingZReference`. |
+| `MonthlyReturn/Create/01-201-create-nil-return-false` | Creates a clean baseline return using the configured `zReference`, `nilZReference`, and `missingZReference`. |
 | `MonthlyReturn/Create/05-409-create-after-submission-declaration` | Creates and declares a return directly in `disa-returns-submission`, then verifies backend create is blocked. |
-| `MonthlyReturn/Declarations/00-201-create-return-for-declaration` | Creates a clean return to declare and generates declaration references. |
+| `MonthlyReturn/Declarations/00-201-create-return-for-declaration` | Creates a clean return using the configured declaration references. |
 | `MonthlyReturn/Declarations/04-404-declare-missing` | Ensures the declaration reference is missing. |
-| `MonthlyReturn/Declarations/06-200-set-clock-outside-period` | Creates a clean outside-period scenario and generates `outsidePeriodZReference`. |
+| `MonthlyReturn/Declarations/07-201-create-return-outside-period` | Clears existing returns, then creates the clean return used for the outside-period declaration scenario; request `06` only applies the outside-period clock override. |
 | `MonthlyReturn/Declarations/11-409-declare-after-submission-declaration` | Creates a backend return, declares it directly in `disa-returns-submission`, then verifies backend declaration is blocked. |
 | `MonthlyReturn/Declarations/12-422-create-file-after-submission-declaration` | Creates a backend return, declares it directly in `disa-returns-submission`, then verifies file creation is blocked. |
-| `MonthlyReturn/Delete/00-201-create-return-for-delete` | Creates a clean return for file delete tests and generates `deleteZReference`. |
+| `MonthlyReturn/Delete/00-201-create-return-for-delete` | Creates a clean return for file delete tests using the configured `deleteZReference`. |
 | `MonthlyReturn/Update/07-422-update-after-submission-declaration` | Creates a backend return, declares it directly in `disa-returns-submission`, then verifies nil-return updates are blocked. |
-| `MonthlyReturn/UpscanCallback/00-201-create-return-for-success-callback` | Clears monthly return file-upload work items, creates a clean return for callback tests, and generates `callbackZReference`. |
+| `MonthlyReturn/UpscanCallback/00-201-create-return-for-success-callback` | Clears monthly return file-upload work items and creates a clean callback scenario using the configured `callbackZReference`. |
 
 Many later requests run one of these setup requests from their pre-request script, so they can also clear monthly returns indirectly. For example, `MonthlyReturn/Get/01-200-get-existing` runs `MonthlyReturn/Create/01-201-create-nil-return-false`, and `MonthlyReturn/Update/02-200-set-nil-return-false` runs the update setup chain.
 
@@ -604,6 +657,14 @@ The Validation folder uses the copied monthly file-upload tests as local Upscan 
 
 `bruno/TestOnly/ValidationHelpers` contains support requests used by the validation scenarios. They are guarded with the runtime variable `runValidationHelpers`, so they no-op safely if the whole collection runs them directly.
 
+`bruno/TestOnly/Overrides` verifies aggregate GET, replacement, deletion, combined clock/reporting-window payloads,
+and invalid Z-reference handling. Shared clock setup and cleanup requests operate on the configured monthly-return
+Z-references; the combined-field request uses `overrideZReference`, `reportingWindowOverrideStart`, and
+`reportingWindowOverrideEnd`.
+
+The backend override Bruno helpers call backend only; backend proxies each scoped operation to submission. They do not
+test the production reporting-window status route.
+
 `validationProcessingPollIntervalMs` is defined in `bruno/environments/Local.bru` and defaults to `1000`. It is used by the processed validation requests in `bruno/MonthlyReturn/Validation`, currently the test-specific `01` to `21` checks. The polling gives the asynchronous monthly return file-upload work-item job time to download, validate, upload to object-store, and update Mongo before Bruno performs the final GET/assertions.
 
 To change it permanently for local runs, edit `bruno/environments/Local.bru`:
@@ -612,7 +673,12 @@ To change it permanently for local runs, edit `bruno/environments/Local.bru`:
 validationProcessingPollIntervalMs: 1500
 ```
 
-Generated Bruno `zReference` values are set as runtime variables with `bru.setVar`, not environment variables, so running Bruno should not rewrite `bruno/environments/Local.bru`.
+Bruno Z-references are configured in `bruno/environments/Local.bru` and copied into runtime variables with
+`bru.setVar`; requests do not generate random references or rewrite the environment file.
+
+The collection pre-request script logs in through `auth-login-api` once per run and creates an activated
+`HMRC-DISA-ORG`/`ZREF` enrolment for every configured monthly-return Z-reference. It supplies the returned bearer token
+to secured backend requests.
 
 The callback requests return `202 Accepted`. Completed file upload details appear on the GET after the READY callback in the collection run. Duplicate callback details appear on the GET after the duplicate callback with status `DUPLICATE`.
 
@@ -623,8 +689,8 @@ This service leverages scalaFmt to ensure that the code is formatted correctly.
 Before you commit, please run the following commands to check that the code is formatted correctly:
 
 ```bash
-# runs a scala format check, runs unit tests, runs integration tests and produces a coverage report.
-sbt runAllChecks
+# formats all source files, runs unit and integration tests, and produces a coverage report
+sbt precommit
 
 # checks all source and sbt files are correctly formatted
 sbt prePrChecks
@@ -643,4 +709,4 @@ sbt scalafmt
 
 ### License
 
-This code is open source software licensed under the [Apache 2.0 License]("http://www.apache.org/licenses/LICENSE-2.0.html").
+This code is open source software licensed under the [Apache 2.0 License](https://www.apache.org/licenses/LICENSE-2.0.html).

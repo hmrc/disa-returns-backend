@@ -17,17 +17,7 @@
 package uk.gov.hmrc.disareturnsbackend.controllers
 
 import play.api.http.HeaderNames.LOCATION
-import play.api.http.Status.{
-  BAD_REQUEST,
-  CONFLICT,
-  CREATED,
-  FORBIDDEN,
-  NO_CONTENT,
-  NOT_FOUND,
-  OK,
-  UNAUTHORIZED,
-  UNPROCESSABLE_ENTITY
-}
+import play.api.http.Status.{BAD_REQUEST, CONFLICT, CREATED, FORBIDDEN, NOT_FOUND, NO_CONTENT, OK, SERVICE_UNAVAILABLE, UNAUTHORIZED, UNPROCESSABLE_ENTITY}
 import play.api.libs.json.{JsValue, Json}
 import play.api.libs.ws.WSResponse
 import play.api.libs.ws.readableAsString
@@ -35,24 +25,24 @@ import uk.gov.hmrc.disareturnsbackend.BaseIntegrationSpec
 
 class MonthlyReturnControllerISpec extends BaseIntegrationSpec {
 
-  private val monthlyPath = s"$testServicePath/monthly/$testZReference/$testTaxYear/$testMonth"
-  private val outOfPeriodMonthlyPath = s"$testServicePath/monthly/$testZReference/$testTaxYear/6"
-  private val invalidMonthlyPath =
+  private val monthlyPath                 = s"$testServicePath/monthly/$testZReference/$testTaxYear/$testMonth"
+  private val outOfPeriodMonthlyPath      = s"$testServicePath/monthly/$testZReference/$testTaxYear/6"
+  private val invalidMonthlyPath          =
     s"$testServicePath/monthly/$invalidTestZReference/$invalidTestTaxYear/$invalidTestMonth"
-  private val nilReturnPath = s"$monthlyPath/nilReturn"
-  private val isoInstantPattern = "\\d{4}-\\d{2}-\\d{2}T.*Z"
-  private val declarationsPath = s"$monthlyPath/declarations"
+  private val nilReturnPath               = s"$monthlyPath/nilReturn"
+  private val isoInstantPattern           = "\\d{4}-\\d{2}-\\d{2}T.*Z"
+  private val declarationsPath            = s"$monthlyPath/declarations"
   private val outOfPeriodDeclarationsPath = s"$outOfPeriodMonthlyPath/declarations"
-  private val filesPath = s"$monthlyPath/files"
-  private val outOfPeriodFilesPath = s"$outOfPeriodMonthlyPath/files"
-  private val filePath = s"$filesPath/$testUploadReference"
+  private val filesPath                   = s"$monthlyPath/files"
+  private val outOfPeriodFilesPath        = s"$outOfPeriodMonthlyPath/files"
+  private val filePath                    = s"$filesPath/$testUploadReference"
 
-  private val nilReturnTrueRequest = Json.obj(nilReturnFieldName -> true)
-  private val invalidNilReturnRequest = Json.obj(nilReturnFieldName -> "false")
-  private val nilReturnValueTrueRequest = Json.obj(valueFieldName -> true)
-  private val nilReturnValueFalseRequest = Json.obj(valueFieldName -> false)
+  private val nilReturnTrueRequest         = Json.obj(nilReturnFieldName -> true)
+  private val invalidNilReturnRequest      = Json.obj(nilReturnFieldName -> "false")
+  private val nilReturnValueTrueRequest    = Json.obj(valueFieldName -> true)
+  private val nilReturnValueFalseRequest   = Json.obj(valueFieldName -> false)
   private val invalidNilReturnValueRequest = Json.obj(valueFieldName -> "yes")
-  private val createFileUploadRequest = Json.obj(referenceFieldName -> testUploadReference)
+  private val createFileUploadRequest      = Json.obj(referenceFieldName -> testUploadReference)
 
   "secured monthly return endpoints" should {
 
@@ -93,14 +83,14 @@ class MonthlyReturnControllerISpec extends BaseIntegrationSpec {
 
       val result = get(monthlyPath)
 
-      result.status                 shouldBe OK
-      (result.json \ zReferenceFieldName).as[String] shouldBe testZReference
+      result.status                                    shouldBe OK
+      (result.json \ zReferenceFieldName).as[String]   shouldBe testZReference
       (result.json \ submissionIdFieldName).as[String] shouldBe submissionId
-      (result.json \ taxYearFieldName).as[String]    shouldBe testTaxYear
-      (result.json \ monthFieldName).as[Int]         shouldBe testMonth
-      (result.json \ nilReturnFieldName).as[Boolean] shouldBe false
-      (result.json \ createdOnFieldName).as[String] should fullyMatch regex isoInstantPattern
-      (result.json \ lastUpdatedFieldName).as[String] should fullyMatch regex isoInstantPattern
+      (result.json \ taxYearFieldName).as[String]      shouldBe testTaxYear
+      (result.json \ monthFieldName).as[Int]           shouldBe testMonth
+      (result.json \ nilReturnFieldName).as[Boolean]   shouldBe false
+      (result.json \ createdOnFieldName).as[String]      should fullyMatch regex isoInstantPattern
+      (result.json \ lastUpdatedFieldName).as[String]    should fullyMatch regex isoInstantPattern
     }
 
     "return 404 Not Found when the MonthlyReturn does not exist" in {
@@ -113,8 +103,8 @@ class MonthlyReturnControllerISpec extends BaseIntegrationSpec {
       val result = get(invalidMonthlyPath)
 
       result.status shouldBe BAD_REQUEST
-      result.body   should include(zReferenceFieldName)
-      result.body   should include(taxYearFieldName)
+      result.body     should include(zReferenceFieldName)
+      result.body     should include(taxYearFieldName)
     }
   }
 
@@ -123,8 +113,8 @@ class MonthlyReturnControllerISpec extends BaseIntegrationSpec {
     "return 201 Created with the resource Location when the MonthlyReturn is created" in {
       val result = postJson(monthlyPath, nilReturnTrueRequest)
 
-      result.status        shouldBe CREATED
-      result.header(LOCATION) shouldBe Some(monthlyPath)
+      result.status                                  shouldBe CREATED
+      result.header(LOCATION)                        shouldBe Some(monthlyPath)
       (result.json \ submissionIdFieldName).as[String] should not be empty
     }
 
@@ -167,11 +157,11 @@ class MonthlyReturnControllerISpec extends BaseIntegrationSpec {
 
       val result = putJson(nilReturnPath, nilReturnValueTrueRequest)
 
-      result.status                 shouldBe OK
-      (result.json \ submissionIdFieldName).as[String] shouldBe submissionId
-      (result.json \ nilReturnFieldName).as[Boolean] shouldBe true
+      result.status                                         shouldBe OK
+      (result.json \ submissionIdFieldName).as[String]      shouldBe submissionId
+      (result.json \ nilReturnFieldName).as[Boolean]        shouldBe true
       (result.json \ fileUploadsFieldName).as[Seq[JsValue]] shouldBe empty
-      (result.json \ createdOnFieldName).as[String] should fullyMatch regex isoInstantPattern
+      (result.json \ createdOnFieldName).as[String]           should fullyMatch regex isoInstantPattern
     }
 
     "return 200 OK when setting nilReturn to false" in {
@@ -180,11 +170,11 @@ class MonthlyReturnControllerISpec extends BaseIntegrationSpec {
 
       val result = putJson(nilReturnPath, nilReturnValueFalseRequest)
 
-      result.status                 shouldBe OK
-      (result.json \ submissionIdFieldName).as[String] shouldBe submissionId
-      (result.json \ nilReturnFieldName).as[Boolean] shouldBe false
+      result.status                                         shouldBe OK
+      (result.json \ submissionIdFieldName).as[String]      shouldBe submissionId
+      (result.json \ nilReturnFieldName).as[Boolean]        shouldBe false
       (result.json \ fileUploadsFieldName).as[Seq[JsValue]] shouldBe empty
-      (result.json \ createdOnFieldName).as[String] should fullyMatch regex isoInstantPattern
+      (result.json \ createdOnFieldName).as[String]           should fullyMatch regex isoInstantPattern
     }
 
     "return 404 Not Found when the MonthlyReturn does not exist" in {
@@ -195,7 +185,7 @@ class MonthlyReturnControllerISpec extends BaseIntegrationSpec {
 
     "return 422 Unprocessable Entity when the MonthlyReturn has already been declared" in {
       postJson(monthlyPath, nilReturnFalseRequest).status shouldBe CREATED
-      postJson(declarationsPath, Json.obj()).status shouldBe NO_CONTENT
+      postJson(declarationsPath, Json.obj()).status       shouldBe NO_CONTENT
       stubReturnsSubmissionGetMonthlyReturn(declaredSubmissionMonthlyReturn)
 
       val result = putJson(nilReturnPath, nilReturnValueTrueRequest)
@@ -237,7 +227,49 @@ class MonthlyReturnControllerISpec extends BaseIntegrationSpec {
       stubReturnsSubmissionGetMonthlyReturn(declaredSubmissionMonthlyReturn)
 
       val getResult = get(monthlyPath)
-      (getResult.json \ declaredOnFieldName).as[String]   shouldBe testCreatedOnString
+      (getResult.json \ declaredOnFieldName).as[String] shouldBe testCreatedOnString
+    }
+
+    "return 422 Unprocessable Entity when submission reports that the declaration window is closed" in {
+      postJson(monthlyPath, nilReturnFalseRequest)
+      stubReturnsSubmissionReportingWindow(open = false)
+
+      val result = postJson(declarationsPath, Json.obj())
+
+      result.status shouldBe UNPROCESSABLE_ENTITY
+    }
+
+    "return 422 Unprocessable Entity when submission rejects the declaration because its period is closed" in {
+      postJson(monthlyPath, nilReturnFalseRequest)
+      stubReturnsSubmissionDeclareMonthlyReturn(
+        UNPROCESSABLE_ENTITY,
+        Json.obj("code" -> "DECLARATION_PERIOD_CLOSED")
+      )
+
+      val result = postJson(declarationsPath, Json.obj())
+
+      result.status shouldBe UNPROCESSABLE_ENTITY
+    }
+
+    "return 409 Conflict when submission reports that the MonthlyReturn was already declared" in {
+      postJson(monthlyPath, nilReturnFalseRequest)
+      stubReturnsSubmissionDeclareMonthlyReturn(
+        UNPROCESSABLE_ENTITY,
+        Json.obj("code" -> "MONTHLY_RETURN_ALREADY_DECLARED")
+      )
+
+      val result = postJson(declarationsPath, Json.obj())
+
+      result.status shouldBe CONFLICT
+    }
+
+    "return 503 Service Unavailable when submission returns an unknown declaration error code" in {
+      postJson(monthlyPath, nilReturnFalseRequest)
+      stubReturnsSubmissionDeclareMonthlyReturn(UNPROCESSABLE_ENTITY, Json.obj("code" -> "UNKNOWN"))
+
+      val result = postJson(declarationsPath, Json.obj())
+
+      result.status shouldBe SERVICE_UNAVAILABLE
     }
 
     "return 409 Conflict when the MonthlyReturn has already been declared" in {
@@ -278,8 +310,8 @@ class MonthlyReturnControllerISpec extends BaseIntegrationSpec {
       val result = postJson(s"$invalidMonthlyPath/declarations", Json.obj())
 
       result.status shouldBe BAD_REQUEST
-      result.body   should include(zReferenceFieldName)
-      result.body   should include(taxYearFieldName)
+      result.body     should include(zReferenceFieldName)
+      result.body     should include(taxYearFieldName)
     }
   }
 
@@ -343,7 +375,7 @@ class MonthlyReturnControllerISpec extends BaseIntegrationSpec {
 
       val result = get(createResult.header(LOCATION).get)
 
-      result.status shouldBe OK
+      result.status                                 shouldBe OK
       (result.json \ referenceFieldName).as[String] shouldBe testUploadReference
       (result.json \ statusFieldName).as[String]    shouldBe createdStatusString
     }
@@ -387,12 +419,12 @@ class MonthlyReturnControllerISpec extends BaseIntegrationSpec {
   }
 
   private val declaredSubmissionMonthlyReturn = Json.obj(
-    zReferenceFieldName -> testZReference,
+    zReferenceFieldName   -> testZReference,
     submissionIdFieldName -> testSubmissionId,
-    taxYearFieldName -> testTaxYear,
-    monthFieldName -> testMonth,
-    declaredOnFieldName -> testCreatedOnString,
-    lastUpdatedFieldName -> testCreatedOnString
+    taxYearFieldName      -> testTaxYear,
+    monthFieldName        -> testMonth,
+    declaredOnFieldName   -> testCreatedOnString,
+    lastUpdatedFieldName  -> testCreatedOnString
   )
 
   private case class SecuredEndpoint(

@@ -35,7 +35,7 @@ script:pre-request {
   
   if (bru.getVar("runValidationHelpers") !== "true") {
     req.setMethod("GET");
-    req.setUrl(`${baseUrl}${servicePath}/test-only/clock`);
+    req.setUrl(`${baseUrl}${servicePath}/test-only/overrides/${bru.getEnvVar("zReference")}`);
     return;
   }
   
@@ -52,7 +52,7 @@ script:pre-request {
   bru.setVar("validationDownloadUrl", validationDownloadUrl);
   const backendHeaders = { "Content-Type": "application/json", "Authorization": bru.getVar("bearerToken") };
   
-  const clockResponse = await bru.runRequest("TestOnly/Clock/04-200-set-clock-inside-declaration-period");
+  const clockResponse = await bru.runRequest("TestOnly/Overrides/04-200-set-clock-inside-declaration-period");
   
   if (clockResponse.status !== 200) {
     throw new Error(`Expected clock setup to respond with 200, got ${clockResponse.status}`);

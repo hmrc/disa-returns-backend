@@ -22,14 +22,7 @@ import play.api.http.Status.*
 import play.api.libs.json.*
 import play.api.libs.ws.readableAsString
 import uk.gov.hmrc.disareturnsbackend.BaseIntegrationSpec
-import uk.gov.hmrc.disareturnsbackend.models.{
-  UpscanDetails,
-  UpscanFailure,
-  UpscanFailureDetails,
-  UpscanFailureReason,
-  UpscanResult,
-  UpscanSuccess
-}
+import uk.gov.hmrc.disareturnsbackend.models.{UpscanDetails, UpscanFailure, UpscanFailureDetails, UpscanFailureReason, UpscanResult, UpscanSuccess}
 
 class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
 
@@ -40,7 +33,7 @@ class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
   private val monthlyPath = s"$testServicePath/monthly/$testZReference/$testTaxYear/$testRouteMonth"
   private val filesPath   = s"$monthlyPath/files"
 
-  private val upscanReference = testUploadReference
+  private val upscanReference          = testUploadReference
   private val duplicateUploadReference = s"$testUploadReference-duplicate"
 
   private val uploadDetails = UpscanDetails(
@@ -72,8 +65,8 @@ class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
     }
 
     "set the file upload status to DUPLICATE when the checksum already exists" in {
-      postJson(monthlyPath, nilReturnFalseRequest).status shouldBe CREATED
-      postJson(filesPath, Json.obj(referenceFieldName -> upscanReference)).status shouldBe CREATED
+      postJson(monthlyPath, nilReturnFalseRequest).status                                  shouldBe CREATED
+      postJson(filesPath, Json.obj(referenceFieldName -> upscanReference)).status          shouldBe CREATED
       postJson(filesPath, Json.obj(referenceFieldName -> duplicateUploadReference)).status shouldBe CREATED
 
       postUploadResult(successfulUploadResult).status shouldBe ACCEPTED
@@ -84,7 +77,8 @@ class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
 
       val monthlyReturn = get(monthlyPath)
       monthlyReturn.status shouldBe OK
-      (fileUpload(monthlyReturn.json, duplicateUploadReference) \ statusFieldName).as[String] shouldBe duplicateStatusString
+      (fileUpload(monthlyReturn.json, duplicateUploadReference) \ statusFieldName)
+        .as[String]        shouldBe duplicateStatusString
     }
 
     "return 202 Accepted for FAILED QUARANTINE callback payload" in {
@@ -121,7 +115,7 @@ class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
       )
 
       result.status shouldBe BAD_REQUEST
-      result.body   should include(invalidUpscanResultPayloadMessage)
+      result.body     should include(invalidUpscanResultPayloadMessage)
     }
 
     "return 400 Bad Request when failureReason is invalid" in {
@@ -137,7 +131,7 @@ class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
       )
 
       result.status shouldBe BAD_REQUEST
-      result.body   should include(invalidUpscanResultPayloadMessage)
+      result.body     should include(invalidUpscanResultPayloadMessage)
     }
 
     "return 400 Bad Request when the JSON body is malformed" in {

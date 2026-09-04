@@ -41,11 +41,11 @@ trait WireMockIntegrationSpec extends BaseIntegrationSpec with Eventually {
 
   override def config: Map[String, Any] =
     super.config ++ Map(
-      "microservice.services.object-store.protocol" -> "http",
-      "microservice.services.object-store.host"     -> "localhost",
-      "microservice.services.object-store.port"     -> wireMockPort,
-      "fileUploadMaxInlineErrors"                   -> 2,
-      "monthly-return-file-upload-work-item-job.pollInterval" -> "100 milliseconds",
+      "microservice.services.object-store.protocol"                   -> "http",
+      "microservice.services.object-store.host"                       -> "localhost",
+      "microservice.services.object-store.port"                       -> wireMockPort,
+      "fileUploadMaxInlineErrors"                                     -> 2,
+      "monthly-return-file-upload-work-item-job.pollInterval"         -> "100 milliseconds",
       "monthly-return-file-upload-work-item-job.inProgressRetryAfter" -> "1 second"
     )
 

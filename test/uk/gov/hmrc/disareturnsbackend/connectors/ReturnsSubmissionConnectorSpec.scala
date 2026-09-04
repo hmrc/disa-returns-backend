@@ -43,8 +43,37 @@ class ReturnsSubmissionConnectorSpec extends SpecBase with WireMockSupport with 
 
   private implicit val hc: HeaderCarrier = HeaderCarrier()
 
-  private val path            = s"/disa-returns-submission/monthly/$testZReference/$testTaxYear/$testMonth"
-  private val declarationPath = s"$path/declarations"
+  private val path                = s"/disa-returns-submission/monthly/$testZReference/$testTaxYear/$testMonth"
+  private val declarationPath     = s"$path/declarations"
+  private val reportingWindowPath = s"/disa-returns-submission/reporting-window/status/$testZReference"
+
+  "ReturnsSubmissionConnector.isReportingWindowOpen" - {
+
+    "must return the reporting window status" in {
+      stubFor(
+        get(urlEqualTo(reportingWindowPath))
+          .willReturn(
+            aResponse()
+              .withStatus(OK)
+              .withHeader("Content-Type", "application/json")
+              .withBody(Json.obj("reportingWindowOpen" -> true).toString())
+          )
+      )
+
+      connector.isReportingWindowOpen(testZReference).futureValue mustBe true
+
+      verify(
+        getRequestedFor(urlEqualTo(reportingWindowPath))
+          .withHeader("Authorization", equalTo(internalAuthToken))
+      )
+    }
+
+    "must fail when submission returns an unexpected response" in {
+      stubFor(get(urlEqualTo(reportingWindowPath)).willReturn(aResponse().withStatus(BAD_REQUEST)))
+
+      connector.isReportingWindowOpen(testZReference).failed.futureValue mustBe a[UpstreamErrorResponse]
+    }
+  }
 
   "ReturnsSubmissionConnector.createMonthlyReturn" - {
 
@@ -158,11 +187,53 @@ class ReturnsSubmissionConnectorSpec extends SpecBase with WireMockSupport with 
         DeclareMonthlyReturnSubmissionResult.MonthlyReturnNotFound
     }
 
-    "must return AlreadyDeclared when submission rejects the declaration" in {
-      stubFor(post(urlEqualTo(declarationPath)).willReturn(aResponse().withStatus(UNPROCESSABLE_ENTITY)))
+    "must return AlreadyDeclared when submission reports a duplicate declaration" in {
+      stubDeclarationError("MONTHLY_RETURN_ALREADY_DECLARED")
 
       connector.declareMonthlyReturn(testZReference, testTaxYear, testMonth, testNilReturn).futureValue mustBe
         DeclareMonthlyReturnSubmissionResult.AlreadyDeclared
+    }
+
+    "must return OutsideDeclarationPeriod when submission reports a closed declaration period" in {
+      stubDeclarationError("DECLARATION_PERIOD_CLOSED")
+
+      connector.declareMonthlyReturn(testZReference, testTaxYear, testMonth, testNilReturn).futureValue mustBe
+        DeclareMonthlyReturnSubmissionResult.OutsideDeclarationPeriod
+    }
+
+    Seq(
+      "an unknown code" -> Json.obj("code" -> "UNKNOWN").toString(),
+      "a missing code"  -> Json.obj("message" -> "unprocessable").toString(),
+      "malformed JSON"  -> "not-json"
+    ).foreach { case (description, responseBody) =>
+      s"must fail when submission returns 422 with $description" in {
+        stubFor(
+          post(urlEqualTo(declarationPath)).willReturn(
+            aResponse()
+              .withStatus(UNPROCESSABLE_ENTITY)
+              .withHeader("Content-Type", "application/json")
+              .withBody(responseBody)
+          )
+        )
+
+        connector
+          .declareMonthlyReturn(testZReference, testTaxYear, testMonth, testNilReturn)
+          .failed
+          .futureValue mustBe a[UpstreamErrorResponse]
+
+        verify(1, postRequestedFor(urlEqualTo(declarationPath)))
+      }
+    }
+
+    "must not retry when submission returns a server error" in {
+      stubFor(post(urlEqualTo(declarationPath)).willReturn(aResponse().withStatus(INTERNAL_SERVER_ERROR)))
+
+      connector
+        .declareMonthlyReturn(testZReference, testTaxYear, testMonth, testNilReturn)
+        .failed
+        .futureValue mustBe a[UpstreamErrorResponse]
+
+      verify(1, postRequestedFor(urlEqualTo(declarationPath)))
     }
 
     "must fail when submission returns an unexpected response" in {
@@ -184,6 +255,16 @@ class ReturnsSubmissionConnectorSpec extends SpecBase with WireMockSupport with 
             .withHeader("Content-Type", "application/json")
             .withBody(Json.obj("submissionId" -> testSubmissionId).toString())
         )
+    )
+
+  private def stubDeclarationError(code: String): Unit =
+    stubFor(
+      post(urlEqualTo(declarationPath)).willReturn(
+        aResponse()
+          .withStatus(UNPROCESSABLE_ENTITY)
+          .withHeader("Content-Type", "application/json")
+          .withBody(Json.obj("code" -> code).toString())
+      )
     )
 
   private def verifySubmissionRequest(nilReturn: Boolean): Unit =
