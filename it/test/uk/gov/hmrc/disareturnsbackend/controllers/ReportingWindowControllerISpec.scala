@@ -31,7 +31,7 @@ class ReportingWindowControllerISpec extends BaseIntegrationSpec {
       val result = get(s"$testServicePath/reporting-window/status/$lowercaseTestZReference")
 
       result.status shouldBe OK
-      result.json shouldBe Json.obj("reportingWindowOpen" -> false)
+      result.json   shouldBe Json.obj("reportingWindowOpen" -> false)
       verify(getRequestedFor(urlEqualTo(s"/disa-returns-submission/reporting-window/status/$testZReference")))
     }
 
