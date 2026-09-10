@@ -55,7 +55,7 @@ class TestOnlyOverridesController @Inject() (
   def delete(zReference: String): Action[AnyContent] = Action.async { implicit request =>
     withZReference(zReference) { normalized =>
       implicit val hc: HeaderCarrier = HeaderCarrierConverter.fromRequest(request)
-      asResult(connector.deleteOverrides(normalized))
+      asResult(connector.deleteOverrides(normalized).map(_ => TestOverride(normalized, None, None)))
     }
   }
 

@@ -20,7 +20,7 @@ import base.SpecBase
 import com.github.tomakehurst.wiremock.client.WireMock.*
 import org.scalatest.BeforeAndAfterEach
 import play.api.Application
-import play.api.http.Status.{BAD_GATEWAY, OK}
+import play.api.http.Status.{BAD_GATEWAY, NO_CONTENT, OK}
 import play.api.libs.json.Json
 import uk.gov.hmrc.disareturnsbackend.testOnly.models.{ClockOverride, TestOverride, TestOverrideRequest}
 import uk.gov.hmrc.http.{HeaderCarrier, UpstreamErrorResponse}
@@ -39,32 +39,57 @@ class TestOnlyReturnsSubmissionConnectorSpec extends SpecBase with WireMockSuppo
 
   private val connector                  = inject[TestOnlyReturnsSubmissionConnector]
   private implicit val hc: HeaderCarrier = HeaderCarrier()
-  private val path                       = s"/disa-returns-submission/test-only/overrides/$testZReference"
+  private val basePath                   = "/disa-returns-submission/test-only/overrides"
+  private val getPath                    = s"$basePath/$testZReference"
   private val replacement                = TestOverrideRequest(Some(ClockOverride(LocalDate.parse("2026-06-20"))), None)
   private val response                   = TestOverride(testZReference, replacement.clock, replacement.reportingWindow)
 
   "TestOnlyReturnsSubmissionConnector" - {
-    "must proxy aggregate GET, PUT and DELETE requests" in {
-      Seq(get(path), put(path), delete(path)).foreach { mapping =>
-        stubFor(
-          mapping.willReturn(
-            aResponse()
-              .withStatus(OK)
-              .withHeader("Content-Type", "application/json")
-              .withBody(Json.toJson(response).toString())
-          )
+    "must get aggregate overrides" in {
+      stubFor(
+        get(getPath).willReturn(
+          aResponse()
+            .withStatus(OK)
+            .withHeader("Content-Type", "application/json")
+            .withBody(Json.toJson(response).toString())
         )
-      }
+      )
 
       connector.getOverrides(testZReference).futureValue mustBe response
-      connector.setOverrides(testZReference, replacement).futureValue mustBe response
-      connector.deleteOverrides(testZReference).futureValue mustBe response
+    }
 
-      verify(putRequestedFor(urlEqualTo(path)).withRequestBody(equalToJson(Json.toJson(replacement).toString())))
+    "must set overrides in bulk and return the updated aggregate" in {
+      stubFor(put(basePath).willReturn(aResponse().withStatus(NO_CONTENT)))
+      stubFor(
+        get(getPath).willReturn(
+          aResponse()
+            .withStatus(OK)
+            .withHeader("Content-Type", "application/json")
+            .withBody(Json.toJson(response).toString())
+        )
+      )
+
+      connector.setOverrides(testZReference, replacement).futureValue mustBe response
+
+      val expectedBody = Json.obj("zReferences" -> Seq(testZReference)) ++ Json.toJsObject(replacement)
+      verify(putRequestedFor(urlEqualTo(basePath)).withRequestBody(equalToJson(expectedBody.toString())))
+      verify(getRequestedFor(urlEqualTo(getPath)))
+    }
+
+    "must delete overrides in bulk" in {
+      stubFor(post(s"$basePath/delete").willReturn(aResponse().withStatus(NO_CONTENT)))
+
+      connector.deleteOverrides(testZReference).futureValue mustBe (())
+
+      verify(
+        postRequestedFor(urlEqualTo(s"$basePath/delete"))
+          .withRequestBody(equalToJson(Json.obj("zReferences" -> Seq(testZReference)).toString()))
+      )
+      verify(0, getRequestedFor(urlEqualTo(getPath)))
     }
 
     "must fail for an unexpected submission response" in {
-      stubFor(get(path).willReturn(aResponse().withStatus(BAD_GATEWAY)))
+      stubFor(get(getPath).willReturn(aResponse().withStatus(BAD_GATEWAY)))
 
       connector.getOverrides(testZReference).failed.futureValue mustBe a[UpstreamErrorResponse]
     }

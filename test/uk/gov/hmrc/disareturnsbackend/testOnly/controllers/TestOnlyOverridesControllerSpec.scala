@@ -69,13 +69,12 @@ class TestOnlyOverridesControllerSpec extends SpecBase {
     }
 
     "must clear all overrides" in {
-      val cleared = TestOverride(testZReference, None, None)
-      when(connector.deleteOverrides(eqTo(testZReference))(any())).thenReturn(Future.successful(cleared))
+      when(connector.deleteOverrides(eqTo(testZReference))(any())).thenReturn(Future.successful(()))
 
       val result = controller.delete(testZReference)(FakeRequest())
 
       status(result) mustBe OK
-      contentAsJson(result) mustBe Json.toJson(cleared)
+      contentAsJson(result) mustBe Json.toJson(TestOverride(testZReference, None, None))
       verify(connector).deleteOverrides(eqTo(testZReference))(any())
     }
 

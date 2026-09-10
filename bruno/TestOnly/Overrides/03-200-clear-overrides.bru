@@ -12,6 +12,7 @@ delete {
 
 assert {
   res.status: eq 200
+  res.body.zReference: eq {{zReference}}
   res.body.clock: isNull
   res.body.reportingWindow: isNull
 }

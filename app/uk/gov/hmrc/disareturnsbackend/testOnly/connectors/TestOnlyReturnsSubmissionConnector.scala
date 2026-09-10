@@ -40,10 +40,14 @@ class TestOnlyReturnsSubmissionConnector @Inject() (
 
   def setOverrides(zReference: String, request: TestOverrideRequest)(implicit hc: HeaderCarrier): Future[TestOverride] =
     httpClient
-      .put(url"$overridesBaseUrl/$zReference")
-      .withBody(Json.toJson(request))
-      .execute[TestOverride]
+      .put(url"$overridesBaseUrl")
+      .withBody(Json.obj("zReferences" -> Seq(zReference)) ++ Json.toJsObject(request))
+      .execute[Unit]
+      .flatMap(_ => getOverrides(zReference))
 
-  def deleteOverrides(zReference: String)(implicit hc: HeaderCarrier): Future[TestOverride] =
-    httpClient.delete(url"$overridesBaseUrl/$zReference").execute[TestOverride]
+  def deleteOverrides(zReference: String)(implicit hc: HeaderCarrier): Future[Unit] =
+    httpClient
+      .post(url"$overridesBaseUrl/delete")
+      .withBody(Json.obj("zReferences" -> Seq(zReference)))
+      .execute[Unit]
 }

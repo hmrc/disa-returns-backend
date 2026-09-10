@@ -41,27 +41,30 @@ class TestOnlyOverridesControllerISpec extends BaseIntegrationSpec {
       val result = get(s"$testServicePath/test-only/overrides/${testZReference.toLowerCase}")
 
       result.status shouldBe OK
-      result.json shouldBe Json.obj("zReference" -> testZReference, "clock" -> None, "reportingWindow" -> None)
+      result.json   shouldBe Json.obj("zReference" -> testZReference, "clock" -> None, "reportingWindow" -> None)
     }
 
     "replace overrides and use the clock date for monthly period checks" in {
       stubReturnsSubmissionTestOnlyOverrides("2026-06-20", overridden = true)
 
-      putJson(overridesPath, replacement).status shouldBe OK
+      putJson(overridesPath, replacement).status          shouldBe OK
       postJson(monthlyPath, nilReturnFalseRequest).status shouldBe CREATED
     }
 
     "clear all overrides" in {
-      delete(overridesPath).status shouldBe OK
+      val result = delete(overridesPath)
+
+      result.status shouldBe OK
+      result.json   shouldBe Json.obj("zReference" -> testZReference, "clock" -> None, "reportingWindow" -> None)
     }
 
     "delete monthly returns" in {
       stubReturnsSubmissionTestOnlyOverrides("2026-06-20", overridden = true)
 
-      putJson(overridesPath, replacement).status                shouldBe OK
-      postJson(monthlyPath, nilReturnFalseRequest).status       shouldBe CREATED
-      delete(monthlyReturnsPath).status                         shouldBe NO_CONTENT
-      get(monthlyPath).status                                   shouldBe NOT_FOUND
+      putJson(overridesPath, replacement).status          shouldBe OK
+      postJson(monthlyPath, nilReturnFalseRequest).status shouldBe CREATED
+      delete(monthlyReturnsPath).status                   shouldBe NO_CONTENT
+      get(monthlyPath).status                             shouldBe NOT_FOUND
     }
   }
 }

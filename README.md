@@ -506,9 +506,10 @@ Use `DELETE` to clear both overrides:
 curl -X DELETE http://localhost:1207/disa-returns-backend/test-only/overrides/Z1234
 ```
 
-The backend routes proxy the corresponding Z-reference-scoped aggregate route in `disa-returns-submission` and return
-submission's JSON response. Submission is the sole source of truth; backend does not persist overrides. All three
-routes return `503 Service Unavailable` when submission cannot satisfy the request.
+The backend `GET` proxies submission's Z-reference-scoped aggregate route. `PUT` calls submission's bulk replacement
+route with one Z-reference and then returns that aggregate. `DELETE` calls submission's bulk delete route and returns
+the empty aggregate. Submission is the sole source of truth; backend does not persist overrides. All three routes
+return `503 Service Unavailable` when submission cannot satisfy the request.
 
 Use the monthly returns cleanup route to remove all backend monthly returns from the local database before automation runs:
 
@@ -573,7 +574,8 @@ state locally. `PUT` is a full replacement, not a patch. `DELETE` clears both th
 ```
 
 Each route returns aggregate JSON containing only `zReference` and nullable `clock` and `reportingWindow` objects.
-Invalid Z-references or malformed replacement bodies return `400`; submission failures return `503`.
+For `DELETE`, both override fields are null. Invalid Z-references or malformed replacement bodies return `400`;
+submission failures return `503`.
 
 Monthly file-upload validation tests are maintained in `it/resources/file-upload/monthly` for integration tests and copied to `conf/test-only/file-upload/monthly` for local Bruno/service-manager use. The same filenames exist in both locations.
 

@@ -27,7 +27,7 @@ import org.mongodb.scala.ObservableFuture
 import org.mongodb.scala.model.Filters
 import play.api.Application
 import play.api.http.HeaderNames.{AUTHORIZATION, WWW_AUTHENTICATE}
-import play.api.http.Status.{CREATED, OK, UNAUTHORIZED}
+import play.api.http.Status.{CREATED, NO_CONTENT, OK, UNAUTHORIZED}
 import play.api.inject.bind
 import play.api.inject.guice.GuiceApplicationBuilder
 import play.api.libs.json.{JsObject, Json}
@@ -114,17 +114,12 @@ trait BaseIntegrationSpec
         )
     )
     stubFor(
-      put(urlPathMatching("/disa-returns-submission/test-only/overrides/[^/]+"))
-        .willReturn(
-          aResponse().withStatus(OK).withHeader("Content-Type", "application/json").withBody(response.toString())
-        )
+      put(urlEqualTo("/disa-returns-submission/test-only/overrides"))
+        .willReturn(aResponse().withStatus(NO_CONTENT))
     )
     stubFor(
-      com.github.tomakehurst.wiremock.client.WireMock
-        .delete(urlPathMatching("/disa-returns-submission/test-only/overrides/[^/]+"))
-        .willReturn(
-          aResponse().withStatus(OK).withHeader("Content-Type", "application/json").withBody(response.toString())
-        )
+      post(urlEqualTo("/disa-returns-submission/test-only/overrides/delete"))
+        .willReturn(aResponse().withStatus(NO_CONTENT))
     )
   }
 
