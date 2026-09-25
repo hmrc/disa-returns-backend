@@ -18,11 +18,13 @@ package uk.gov.hmrc.disareturnsbackend.connectors
 
 import com.typesafe.config.Config
 import org.apache.pekko.actor.ActorSystem
-import org.apache.pekko.stream.scaladsl.FileIO
+import org.apache.pekko.NotUsed
+import org.apache.pekko.stream.scaladsl.*
+import org.apache.pekko.util.ByteString
 import uk.gov.hmrc.http.HeaderCarrier
 import uk.gov.hmrc.objectstore.client.http.Payload
 import uk.gov.hmrc.objectstore.client.play.PlayObjectStoreClient
-import uk.gov.hmrc.objectstore.client.{Md5Hash, Path}
+import uk.gov.hmrc.objectstore.client.*
 
 import java.nio.file.{Files, Path as FilePath}
 import java.security.MessageDigest
@@ -70,6 +72,16 @@ class ObjectStoreConnector @Inject() (
           .map(_.location.asUri)
       }
     }(ec)
+
+  def getFile(objectName: String)(implicit hc: HeaderCarrier): Future[Source[ByteString, NotUsed]] =
+    retryFor[Source[ByteString, NotUsed]]("get object-store file")(retryCondition) {
+      client
+        .getObject[Source[ByteString, NotUsed]](Path.Directory("").file(objectName))
+        .flatMap {
+          case Some(obj) => Future.successful(obj.content)
+          case None      => Future.failed(new NoSuchElementException(s"Object-store file [$objectName] not found"))
+        }
+    }
 
   private def md5Base64(file: FilePath): Md5Hash = {
     val digest = MessageDigest.getInstance("MD5")

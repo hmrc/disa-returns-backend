@@ -18,15 +18,15 @@ package uk.gov.hmrc.disareturnsbackend.controllers
 
 import base.SpecBase
 import org.mockito.ArgumentMatchers.{any, eq as eqTo}
-import org.mockito.Mockito.{verify, when}
+import org.mockito.Mockito.*
 import play.api.http.HeaderNames.AUTHORIZATION
 import play.api.libs.json.Json
 import play.api.test.FakeRequest
 import play.api.test.Helpers.*
-import uk.gov.hmrc.auth.core.{AuthConnector, Enrolment, EnrolmentIdentifier, Enrolments, MissingBearerToken}
+import uk.gov.hmrc.auth.core.*
 import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector
 import uk.gov.hmrc.disareturnsbackend.controllers.actions.RequestAuthAndValidationActionImpl
-import uk.gov.hmrc.disareturnsbackend.services.TimeSource
+import uk.gov.hmrc.disareturnsbackend.utils.TimeSource
 
 import scala.concurrent.Future
 

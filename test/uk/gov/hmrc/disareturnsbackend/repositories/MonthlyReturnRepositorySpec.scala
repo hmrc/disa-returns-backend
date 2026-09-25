@@ -23,13 +23,14 @@ import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.mongo.test.DefaultPlayMongoRepositorySupport
 
 import java.time.{Clock, Instant, ZoneOffset}
+import java.time.temporal.ChronoUnit
 import scala.concurrent.Future
 
 class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoRepositorySupport[MonthlyReturn] {
 
   override protected def databaseName: String = "disa-returns-backend-monthly-return-repository-test"
 
-  private val fixedNow: Instant = testCreatedOn
+  private val fixedNow: Instant = Instant.now().truncatedTo(ChronoUnit.MILLIS)
   private val fixedClock: Clock = Clock.fixed(fixedNow, ZoneOffset.UTC)
 
   private lazy val appConfig: AppConfig = inject[AppConfig]
@@ -411,6 +412,32 @@ class MonthlyReturnRepositorySpec extends SpecBase with DefaultPlayMongoReposito
         insertMonthlyReturn(buildMonthlyReturn(fileUploads = List(createdFileUpload(testUploadReference))))
 
         repository.markUpscanExpired(zReference, taxYear, month, testUploadReference).futureValue mustBe false
+      }
+    }
+
+    "markFileUploadSubmitted" - {
+      "must mark a validated upload with an object-store location as submitted" in {
+        val validated = completedFileUpload(testUploadReference).copy(
+          status = FileUploadStatus.ValidationSuccess,
+          fileUploadDetails = Some(fileUploadDetails.copy(objectStoreFileLocation = Some("stored-location")))
+        )
+        insertMonthlyReturn(buildMonthlyReturn(fileUploads = List(validated)))
+
+        repository.markFileUploadSubmitted(zReference, taxYear, month, testUploadReference).futureValue mustBe true
+        repository
+          .get(zReference, taxYear, month)
+          .futureValue
+          .value
+          .getFileUpload(testUploadReference)
+          .value
+          .status mustBe
+          FileUploadStatus.Submitted
+      }
+
+      "must not mark an upload submitted without validation and object-store storage" in {
+        insertMonthlyReturn(buildMonthlyReturn(fileUploads = List(completedFileUpload(testUploadReference))))
+
+        repository.markFileUploadSubmitted(zReference, taxYear, month, testUploadReference).futureValue mustBe false
       }
     }
 

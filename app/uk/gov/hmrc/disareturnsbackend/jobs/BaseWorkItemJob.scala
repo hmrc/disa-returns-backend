@@ -19,12 +19,12 @@ package uk.gov.hmrc.disareturnsbackend.jobs
 import org.apache.pekko.actor.ActorSystem
 import play.api.Logging
 import play.api.inject.ApplicationLifecycle
-import uk.gov.hmrc.mongo.workitem.{WorkItem, WorkItemRepository}
+import uk.gov.hmrc.mongo.workitem.*
 
 import java.time.{Clock, Duration}
 import java.util.concurrent.atomic.AtomicBoolean
 import scala.concurrent.duration.FiniteDuration
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.*
 
 abstract class BaseWorkItemJob[A](
   actorSystem: ActorSystem,
@@ -33,13 +33,12 @@ abstract class BaseWorkItemJob[A](
   workItemRepository: WorkItemRepository[A],
   dispatcherName: String,
   pollInterval: FiniteDuration,
-  failedRetryAfter: Duration
+  failedRetryAfter: Duration,
+  workerCount: Int = math.max(1, Runtime.getRuntime.availableProcessors() / 2)
 ) extends Logging {
 
-  private val workerCount =
-    math.max(1, Runtime.getRuntime.availableProcessors() / 2)
-  private val started     = new AtomicBoolean(false)
-  private val stopping    = new AtomicBoolean(false)
+  private val started  = new AtomicBoolean(false)
+  private val stopping = new AtomicBoolean(false)
 
   protected implicit val workerExecutionContext: ExecutionContext =
     actorSystem.dispatchers.lookup(dispatcherName)

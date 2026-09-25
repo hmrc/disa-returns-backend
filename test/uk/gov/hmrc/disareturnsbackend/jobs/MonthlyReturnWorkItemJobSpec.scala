@@ -21,13 +21,13 @@ import org.apache.pekko.actor.ActorSystem
 import org.bson.types.ObjectId
 import org.mockito.ArgumentMatchers.any
 import org.mockito.ArgumentMatchers.eq as eqTo
-import org.mockito.Mockito.{doReturn, verify, verifyNoInteractions, when}
+import org.mockito.Mockito.*
 import play.api.inject.ApplicationLifecycle
 import uk.gov.hmrc.disareturnsbackend.config.AppConfig
 import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnFileUploadWorkItemRepository
-import uk.gov.hmrc.disareturnsbackend.services.{FileUploadProcessingResult, MonthlyReturnFileUploadProcessingService, MonthlyReturnService}
-import uk.gov.hmrc.mongo.workitem.{ProcessingStatus, WorkItem}
+import uk.gov.hmrc.disareturnsbackend.services.*
+import uk.gov.hmrc.mongo.workitem.*
 
 import java.time.{Clock, Duration, Instant, ZoneOffset}
 import scala.concurrent.duration.DurationInt

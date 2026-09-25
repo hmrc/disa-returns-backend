@@ -16,19 +16,19 @@
 
 package uk.gov.hmrc.disareturnsbackend.connectors
 
-import com.typesafe.config.Config
-import org.apache.pekko.actor.ActorSystem
-import play.api.http.Status.{CONFLICT, CREATED, NOT_FOUND, OK, UNPROCESSABLE_ENTITY}
-import play.api.libs.json.{JsValue, Json}
-import play.api.libs.ws.writeableOf_JsValue
+import org.apache.pekko.stream.scaladsl.Source
+import org.apache.pekko.util.ByteString
+import play.api.http.Status.*
+import play.api.libs.json.*
+import play.api.libs.ws.*
 import uk.gov.hmrc.disareturnsbackend.config.AppConfig
-import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector.{CreateMonthlyReturnSubmissionResult, DeclareMonthlyReturnSubmissionResult}
+import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector.*
 import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector.CreateMonthlyReturnSubmissionResult.*
 import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector.DeclareMonthlyReturnSubmissionResult.*
 import uk.gov.hmrc.disareturnsbackend.models.CreateMonthlyReturnResponse
 import uk.gov.hmrc.http.HttpReads.Implicits.readRaw
 import uk.gov.hmrc.http.client.HttpClientV2
-import uk.gov.hmrc.http.{HeaderCarrier, StringContextOps, UpstreamErrorResponse}
+import uk.gov.hmrc.http.*
 
 import java.util.UUID
 import javax.inject.{Inject, Singleton}
@@ -38,26 +38,25 @@ import scala.util.Try
 @Singleton
 class ReturnsSubmissionConnector @Inject() (
   httpClient: HttpClientV2,
-  appConfig: AppConfig,
-  override val configuration: Config,
-  override val actorSystem: ActorSystem
-) extends BaseConnector {
+  appConfig: AppConfig
+) {
+
+  private implicit val ndjsonBodyWritable: BodyWritable[Source[ByteString, ?]] =
+    BodyWritable(SourceBody(_), "application/x-ndjson")
 
   def isReportingWindowOpen(
     zReference: String
   )(implicit hc: HeaderCarrier, ec: ExecutionContext): Future[Boolean] =
-    retryFor[Boolean]("get reporting window status from disa-returns-submission")(retryCondition) {
-      httpClient
-        .get(url"${appConfig.returnsSubmissionService}/disa-returns-submission/reporting-window/status/$zReference")
-        .setHeader(authorizationHeader)
-        .execute
-        .flatMap { response =>
-          response.status match {
-            case OK     => Future.successful((response.json \ "reportingWindowOpen").as[Boolean])
-            case status => Future.failed(UpstreamErrorResponse(response.body, status))
-          }
+    httpClient
+      .get(url"${appConfig.returnsSubmissionService}/disa-returns-submission/reporting-window/status/$zReference")
+      .setHeader(authorizationHeader)
+      .execute
+      .flatMap { response =>
+        response.status match {
+          case OK     => Future.successful((response.json \ "reportingWindowOpen").as[Boolean])
+          case status => Future.failed(UpstreamErrorResponse(response.body, status))
         }
-    }
+      }
 
   def createMonthlyReturn(
     zReference: String,
@@ -65,55 +64,52 @@ class ReturnsSubmissionConnector @Inject() (
     month: Int,
     nilReturn: Boolean
   )(implicit hc: HeaderCarrier, ec: ExecutionContext): Future[CreateMonthlyReturnSubmissionResult] =
-    retryFor[CreateMonthlyReturnSubmissionResult]("create monthly return in disa-returns-submission")(retryCondition) {
-      httpClient
-        .post(url"${appConfig.returnsSubmissionService}/disa-returns-submission/monthly/$zReference/$taxYear/$month")
-        .setHeader(authorizationHeader)
-        .withBody(Json.obj("nilReturn" -> nilReturn))
-        .execute
-        .flatMap { response =>
-          response.status match {
-            case CREATED              => Future.successful(Created(readSubmissionId(response.json.as[CreateMonthlyReturnResponse])))
-            case CONFLICT             =>
-              Future.successful(AlreadyExists(readSubmissionId(response.json.as[CreateMonthlyReturnResponse])))
-            case UNPROCESSABLE_ENTITY =>
-              Future.successful(CreateMonthlyReturnSubmissionResult.OutsideDeclarationPeriod)
-            case status               => Future.failed(UpstreamErrorResponse(response.body, status))
-          }
+    httpClient
+      .post(url"${appConfig.returnsSubmissionService}/disa-returns-submission/monthly/$zReference/$taxYear/$month")
+      .setHeader(authorizationHeader)
+      .withBody(Json.obj("nilReturn" -> nilReturn))
+      .execute
+      .flatMap { response =>
+        response.status match {
+          case CREATED              => Future.successful(Created(readSubmissionId(response.json.as[CreateMonthlyReturnResponse])))
+          case CONFLICT             =>
+            Future.successful(AlreadyExists(readSubmissionId(response.json.as[CreateMonthlyReturnResponse])))
+          case UNPROCESSABLE_ENTITY =>
+            Future.successful(CreateMonthlyReturnSubmissionResult.OutsideDeclarationPeriod)
+          case status               => Future.failed(UpstreamErrorResponse(response.body, status))
         }
-    }
+      }
 
   def getMonthlyReturn(
     zReference: String,
     taxYear: String,
     month: Int
   )(implicit hc: HeaderCarrier, ec: ExecutionContext): Future[Option[JsValue]] =
-    retryFor[Option[JsValue]]("get monthly return from disa-returns-submission")(retryCondition) {
-      httpClient
-        .get(url"${appConfig.returnsSubmissionService}/disa-returns-submission/monthly/$zReference/$taxYear/$month")
-        .setHeader(authorizationHeader)
-        .execute
-        .flatMap { response =>
-          response.status match {
-            case OK        => Future.successful(Some(response.json))
-            case NOT_FOUND => Future.successful(None)
-            case status    => Future.failed(UpstreamErrorResponse(response.body, status))
-          }
+    httpClient
+      .get(url"${appConfig.returnsSubmissionService}/disa-returns-submission/monthly/$zReference/$taxYear/$month")
+      .setHeader(authorizationHeader)
+      .execute
+      .flatMap { response =>
+        response.status match {
+          case OK        => Future.successful(Some(response.json))
+          case NOT_FOUND => Future.successful(None)
+          case status    => Future.failed(UpstreamErrorResponse(response.body, status))
         }
-    }
+      }
 
   def declareMonthlyReturn(
     zReference: String,
     taxYear: String,
     month: Int,
-    nilReturn: Boolean
+    nilReturn: Boolean,
+    pendingSubmissionIds: List[String] = Nil
   )(implicit hc: HeaderCarrier, ec: ExecutionContext): Future[DeclareMonthlyReturnSubmissionResult] =
     httpClient
       .post(
         url"${appConfig.returnsSubmissionService}/disa-returns-submission/monthly/$zReference/$taxYear/$month/declarations"
       )
       .setHeader(authorizationHeader)
-      .withBody(Json.obj("nilReturn" -> nilReturn))
+      .withBody(Json.obj("nilReturn" -> nilReturn, "pendingSubmissionIds" -> pendingSubmissionIds))
       .execute
       .flatMap { response =>
         response.status match {
@@ -128,6 +124,28 @@ class ReturnsSubmissionConnector @Inject() (
                 Future.failed(UpstreamErrorResponse(response.body, UNPROCESSABLE_ENTITY))
             }
           case status               => Future.failed(UpstreamErrorResponse(response.body, status))
+        }
+      }
+
+  def sendSubmission(
+    zReference: String,
+    taxYear: String,
+    month: Int,
+    submissionId: String,
+    body: Source[ByteString, ?]
+  )(implicit hc: HeaderCarrier, ec: ExecutionContext): Future[Unit] =
+    httpClient
+      .put(
+        url"${appConfig.returnsSubmissionService}/disa-returns-submission/monthly/$zReference/$taxYear/$month/submissions/$submissionId"
+      )
+      .setHeader(authorizationHeader)
+      .withBody(body)
+      .execute
+      .flatMap { response =>
+        if (response.status == OK || response.status == CONFLICT) {
+          Future.successful(())
+        } else {
+          Future.failed(UpstreamErrorResponse(response.body, response.status))
         }
       }
 

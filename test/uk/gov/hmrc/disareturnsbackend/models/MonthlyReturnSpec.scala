@@ -17,7 +17,7 @@
 package uk.gov.hmrc.disareturnsbackend.models
 
 import base.SpecBase
-import play.api.libs.json.{JsError, JsObject, JsString, Json}
+import play.api.libs.json.*
 import uk.gov.hmrc.disareturnsbackend.models.FileUploadFailureReason.*
 import uk.gov.hmrc.disareturnsbackend.models.FileUploadStatus.*
 
@@ -50,6 +50,28 @@ class MonthlyReturnSpec extends SpecBase {
     fileUploads = Nil,
     lastUpdated = testExistingUpdatedOn
   )
+
+  "fileUploadsReadyForSubmission" - {
+    "must include only validated uploads with an object-store location" in {
+      val ready      = FileUpload(
+        testUploadReference,
+        FileUploadStatus.ValidationSuccess,
+        testCreatedOn,
+        Some(fileUploadDetails.copy(objectStoreFileLocation = Some("object-store-location")))
+      )
+      val noLocation = FileUpload(
+        "no-location",
+        FileUploadStatus.ValidationSuccess,
+        testCreatedOn,
+        Some(fileUploadDetails)
+      )
+      val failed     = ready.copy(reference = "failed", status = FileUploadStatus.ValidationFailure)
+
+      emptyMonthlyReturn.copy(fileUploads = List(ready, noLocation, failed)).fileUploadsReadyForSubmission mustBe List(
+        ready
+      )
+    }
+  }
 
   "MonthlyReturn format" - {
 
@@ -471,7 +493,8 @@ class MonthlyReturnSpec extends SpecBase {
       UpscanExpired                      -> upscanExpiredStatusString,
       Duplicate                          -> duplicateStatusString,
       FileUploadStatus.ValidationSuccess -> validationSuccessStatusString,
-      FileUploadStatus.ValidationFailure -> validationFailureStatusString
+      FileUploadStatus.ValidationFailure -> validationFailureStatusString,
+      FileUploadStatus.Submitted         -> "SUBMITTED"
     ).foreach { case (modelValue, jsonValue) =>
       s"must serialise and deserialise $jsonValue" in {
         Json.toJson[FileUploadStatus](modelValue) mustBe JsString(jsonValue)

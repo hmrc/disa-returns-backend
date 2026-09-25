@@ -14,9 +14,7 @@
  * limitations under the License.
  */
 
-package uk.gov.hmrc.disareturnsbackend.services
-
-import uk.gov.hmrc.disareturnsbackend.models.FileUploadValidationResult
+package uk.gov.hmrc.disareturnsbackend.models
 
 sealed trait FileUploadProcessingResult
 

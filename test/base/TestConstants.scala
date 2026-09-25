@@ -26,6 +26,7 @@ trait TestConstants {
   protected val testServicePath                                = "/disa-returns-backend"
   protected val monthlyReturnsCollectionName                   = "monthlyReturns"
   protected val monthlyReturnFileUploadWorkItemsCollectionName = "monthlyReturnFileUploadWorkItems"
+  protected val monthlyReturnSubmissionWorkItemsCollectionName = "monthlyReturnSubmissionWorkItems"
 
   protected val testZReference          = "Z1234"
   protected val lowercaseTestZReference = "z1234"

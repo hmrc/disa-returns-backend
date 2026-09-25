@@ -18,19 +18,19 @@ package uk.gov.hmrc.disareturnsbackend.controllers.actions
 
 import play.api.Logging
 import play.api.libs.json.Json
-import play.api.mvc.{ActionBuilder, AnyContent, BodyParser, ControllerComponents, Request, Result, Results}
+import play.api.mvc.*
 import uk.gov.hmrc.auth.core.retrieve.v2.Retrievals
-import uk.gov.hmrc.auth.core.{AuthConnector, AuthorisationException, AuthorisedFunctions, Enrolments, InternalError, NoActiveSession}
-import uk.gov.hmrc.disareturnsbackend.models.{ValidatedMonthlyReturnRequest, ValidatedZReferenceRequest}
-import uk.gov.hmrc.disareturnsbackend.services.TimeSource
-import uk.gov.hmrc.disareturnsbackend.validators.{ValidationHelper, ZReferenceValidator}
+import uk.gov.hmrc.auth.core.*
+import uk.gov.hmrc.disareturnsbackend.models.*
+import uk.gov.hmrc.disareturnsbackend.utils.TimeSource
+import uk.gov.hmrc.disareturnsbackend.validators.*
 import uk.gov.hmrc.http.HeaderCarrier
 import uk.gov.hmrc.play.http.HeaderCarrierConverter
 
-import java.time.{LocalDate, YearMonth, ZoneOffset}
+import java.time.*
 import java.util.Locale
-import javax.inject.{Inject, Singleton}
-import scala.concurrent.{ExecutionContext, Future}
+import javax.inject.*
+import scala.concurrent.*
 import scala.util.control.NonFatal
 
 trait RequestAuthAndValidationAction {
@@ -38,8 +38,15 @@ trait RequestAuthAndValidationAction {
   def apply(
     zReference: String,
     taxYear: String,
+    month: String
+  ): ActionBuilder[ValidatedMonthlyReturnRequest, AnyContent] =
+    apply(zReference, taxYear, month, checkPeriod = false)
+
+  def apply(
+    zReference: String,
+    taxYear: String,
     month: String,
-    checkPeriod: Boolean = false
+    checkPeriod: Boolean
   ): ActionBuilder[ValidatedMonthlyReturnRequest, AnyContent]
 }
 
@@ -70,7 +77,7 @@ class RequestAuthAndValidationActionImpl @Inject() (
     zReference: String,
     taxYear: String,
     month: String,
-    checkPeriod: Boolean = false
+    checkPeriod: Boolean
   ): ActionBuilder[ValidatedMonthlyReturnRequest, AnyContent] =
     new ActionBuilder[ValidatedMonthlyReturnRequest, AnyContent] {
       override def parser: BodyParser[AnyContent] = cc.parsers.defaultBodyParser

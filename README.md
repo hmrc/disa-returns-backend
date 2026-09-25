@@ -307,6 +307,10 @@ The work item contains the monthly return key and upload reference:
 
 The `MonthlyReturnWorkItemJob` polls the `monthlyReturnFileUploadWorkItems` collection and processes outstanding work items asynchronously.
 
+After declaration, validated monthly return uploads with an object-store location are queued separately in `monthlyReturnSubmissionWorkItems`. `MonthlyReturnSubmissionWorkItemJob` converts each CSV/XLSX file to NDJSON and transfers it to `disa-returns-submission`, then marks the upload `SUBMITTED`. The file upload reference is also its submission ID.
+
+`monthly-return-submission-work-item-job.submissionTransferEnqueueAttempts` sets the total attempts to enqueue each monthly-return submission transfer work item in Mongo after declaration, including the first attempt (default `3`). It does not control retries when transferring the file to `disa-returns-submission`.
+
 The `MonthlyReturnWorkItemJob` job validates the file upload in `MonthlyReturnFileUploadProcessingService`, and stores the validation result in `FileUploadDetails.validation` field.
 
 The original uploaded file is stored in object-store. If row-level validation errors are found, an errors file is also uploaded to object-store containing the row number and semicolon-separated error codes for each invalid row.
@@ -318,7 +322,7 @@ Example errors file:
 | `1` | `E010;E022;E132` |
 | `2` | `E020;E030` |
 
-The `MonthlyReturnWorkItemJob` is started by `AppInitialiser` after internal-auth token initialisation succeeds. Startup is not blocked while internal-auth initialisation is in progress, but the work item job is not started until it completes successfully.
+`AppInitialiser` starts the enabled monthly-return work item jobs after internal-auth token initialisation succeeds. Set `monthly-return-file-upload-work-item-job.enabled` or `monthly-return-submission-work-item-job.enabled` to `false` to independently stop validation or submission-transfer workers from starting. Both default to `true`; this does not prevent work items from being enqueued.
 
 Work item configuration lives in `conf/application.conf`:
 
@@ -344,9 +348,19 @@ contexts {
 }
 
 monthly-return-file-upload-work-item-job {
+  enabled = true
   pollInterval = 1 second
   failedRetryAfter = 1 minute
   inProgressRetryAfter = 5 minutes
+}
+
+monthly-return-submission-work-item-job {
+  enabled = true
+  pollInterval = 10 seconds
+  failedRetryAfter = 10 minutes
+  inProgressRetryAfter = 15 minutes
+  workerCount = 2
+  submissionTransferEnqueueAttempts = 3
 }
 
 fileUploadMaxInlineErrors = 25
@@ -363,6 +377,10 @@ Config purpose:
 - `monthly-return-file-upload-work-item-job.pollInterval` controls how long the job waits before polling again when no work item is available.
 - `monthly-return-file-upload-work-item-job.failedRetryAfter` controls how long a failed work item waits before it can be retried.
 - `monthly-return-file-upload-work-item-job.inProgressRetryAfter` controls when an `InProgress` work item becomes eligible to be pulled again if it has not completed. This prevents stuck work items from being hidden forever.
+- `monthly-return-submission-work-item-job.pollInterval` controls how often the submission-transfer queue is polled when idle.
+- `monthly-return-submission-work-item-job.failedRetryAfter` delays retries of failed transfers.
+- `monthly-return-submission-work-item-job.inProgressRetryAfter` makes stuck transfers eligible to be pulled again.
+- `monthly-return-submission-work-item-job.workerCount` limits the number of concurrent submission-transfer workers.
 - `fileUploadMaxInlineErrors` controls how many row-level validation error entries are stored inline on `FileUploadValidationResult`. The full errors workbook still contains all row-level validation errors.
 
 ### Monthly File Upload Error Codes
@@ -469,15 +487,20 @@ If starting through service-manager, pass the same JVM parameter in the local se
 -Dapplication.router=testOnlyDoNotUseInAppConf.Routes
 ```
 
+### Test only endpoints
+
 The following test-only routes are available only with that router:
 
-- `GET /disa-returns-backend/test-only/overrides/:zReference`
-- `PUT /disa-returns-backend/test-only/overrides/:zReference`
-- `DELETE /disa-returns-backend/test-only/overrides/:zReference`
-- `DELETE /disa-returns-backend/test-only/monthly-returns`
-- `DELETE /disa-returns-backend/test-only/monthly-return-file-upload-work-items`
-- `GET /disa-returns-backend/test-only/file-upload/monthly/:filename`
-- `GET /disa-returns-backend/test-only/file-upload/monthly-expired-download`
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/disa-returns-backend/test-only/overrides/:zReference` | Gets the aggregate clock and reporting-window overrides. |
+| `PUT` | `/disa-returns-backend/test-only/overrides/:zReference` | Replaces the aggregate overrides. |
+| `DELETE` | `/disa-returns-backend/test-only/overrides/:zReference` | Clears the aggregate overrides. |
+| `DELETE` | `/disa-returns-backend/test-only/monthly-returns` | Removes backend monthly returns. |
+| `DELETE` | `/disa-returns-backend/test-only/monthly-return-file-upload-work-items` | Removes monthly file-upload validation work items. |
+| `DELETE` | `/disa-returns-backend/test-only/monthly-return-submission-work-items` | Removes monthly submission-transfer work items. |
+| `GET` | `/disa-returns-backend/test-only/file-upload/monthly/:filename` | Serves a local monthly CSV or XLSX test file. |
+| `GET` | `/disa-returns-backend/test-only/file-upload/monthly-expired-download` | Simulates an expired Upscan download. |
 
 `disa-returns-submission` must also run with the same test-only router before the aggregate override routes can be used.
 
@@ -525,6 +548,12 @@ curl -X DELETE http://localhost:1207/disa-returns-backend/test-only/monthly-retu
 
 This deletes all local file-upload validation work-item documents, regardless of status; it does not drop the collection.
 
+Use the separate submission work-item cleanup route to delete all monthly return submission-transfer work items from `monthlyReturnSubmissionWorkItems` without dropping the collection or affecting validation work items:
+
+```bash
+curl -X DELETE http://localhost:1207/disa-returns-backend/test-only/monthly-return-submission-work-items
+```
+
 ### Running the test suite
 
 To run the unit tests:
@@ -551,6 +580,7 @@ Otherwise the routes will not be available.
 | `DELETE /disa-returns-backend/test-only/overrides/:zReference` | Frontend test utility and `bruno/TestOnly/Overrides` | Clear both submission overrides. |
 | `DELETE /disa-returns-backend/test-only/monthly-returns` | `bruno/TestOnly/MonthlyReturns` | Remove all backend monthly returns from the local database before automation runs. |
 | `DELETE /disa-returns-backend/test-only/monthly-return-file-upload-work-items` | `bruno/TestOnly/MonthlyReturnFileUploadWorkItems` | Delete all local file-upload validation work-item documents from `monthlyReturnFileUploadWorkItems`. |
+| `DELETE /disa-returns-backend/test-only/monthly-return-submission-work-items` | `bruno/TestOnly/MonthlyReturnSubmissionWorkItems` | Delete all local submission-transfer work-item documents from `monthlyReturnSubmissionWorkItems`. |
 | `GET /disa-returns-backend/test-only/file-upload/monthly/:filename` | `bruno/MonthlyReturn/Validation` | Serve copied local validation tests from `conf/test-only/file-upload/monthly` so Bruno can use them as Upscan `downloadUrl` values. |
 | `GET /disa-returns-backend/test-only/file-upload/monthly-expired-download` | `bruno/MonthlyReturn/Validation/21-200-upscan-expired` | Return an S3-style expired Upscan download response so Bruno can verify `UPSCAN_EXPIRED` processing. |
 
@@ -633,6 +663,7 @@ The Bruno collection is under `bruno/MonthlyReturn` and is organised into:
 - `Update`
 - `UpscanCallback`
 - `Validation`
+- `SubmissionTransfer`
 
 Monthly return Bruno setup requests call the test-only cleanup route for the collection's configured Z-references. This avoids collisions with old backend and `disa-returns-submission` data. Upscan callback setup also clears monthly return file-upload work items before creating a fresh callback scenario. Do not run these Bruno folders in parallel, because cleanup requests delete all monthly returns from the backend, delete scoped monthly returns from `disa-returns-submission`, and delete monthly return file-upload work items from the local database.
 
@@ -657,6 +688,8 @@ Run executable Bruno folders explicitly against a running local service, for exa
 
 The Validation folder uses the copied monthly file-upload tests as local Upscan downloads. Each validation request creates a fresh file-upload scenario, sends a READY callback with a test-only file URL, waits for processing to reach the expected upload status, then asserts the final validation result and object-store locations. Scenario `21-200-upscan-expired` uses the expired-download test endpoint and asserts the terminal `UPSCAN_EXPIRED` status.
 
+The `SubmissionTransfer` folder declares a monthly return with validated CSV and XLSX uploads and an invalid upload. It waits for the valid uploads to become `SUBMITTED` and checks `disa-returns-submission` stores only those two as NDJSON submissions.
+
 `bruno/TestOnly/ValidationHelpers` contains support requests used by the validation scenarios. They are guarded with the runtime variable `runValidationHelpers`, so they no-op safely if the whole collection runs them directly.
 
 `bruno/TestOnly/Overrides` verifies aggregate GET, replacement, deletion, combined clock/reporting-window payloads,
@@ -679,8 +712,7 @@ Bruno Z-references are configured in `bruno/environments/Local.bru` and copied i
 `bru.setVar`; requests do not generate random references or rewrite the environment file.
 
 The collection pre-request script logs in through `auth-login-api` once per run and creates an activated
-`HMRC-DISA-ORG`/`ZREF` enrolment for every configured monthly-return Z-reference. It supplies the returned bearer token
-to secured backend requests.
+`HMRC-DISA-ORG`/`ZREF` enrolment for every configured monthly-return Z-reference.
 
 The callback requests return `202 Accepted`. Completed file upload details appear on the GET after the READY callback in the collection run. Duplicate callback details appear on the GET after the duplicate callback with status `DUPLICATE`.
 

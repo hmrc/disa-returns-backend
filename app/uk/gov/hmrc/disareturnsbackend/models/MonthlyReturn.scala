@@ -48,6 +48,12 @@ final case class MonthlyReturn(
   def getFileUpload(reference: String): Option[FileUpload] =
     fileUploads.find(_.reference == reference)
 
+  def fileUploadsReadyForSubmission: List[FileUpload] =
+    fileUploads.filter(upload =>
+      upload.status == FileUploadStatus.ValidationSuccess &&
+        upload.fileUploadDetails.exists(_.objectStoreFileLocation.isDefined)
+    )
+
   def createFileUpload(reference: String, createdOn: Instant): MonthlyReturn = {
     val cannotAcceptFileUpload = nilReturn || fileUploads.exists(_.reference == reference)
 

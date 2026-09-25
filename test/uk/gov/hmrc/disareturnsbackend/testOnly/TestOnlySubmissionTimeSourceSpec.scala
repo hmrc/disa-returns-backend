@@ -18,13 +18,13 @@ package uk.gov.hmrc.disareturnsbackend.testOnly
 
 import base.SpecBase
 import org.mockito.ArgumentMatchers.{any, eq as eqTo}
-import org.mockito.Mockito.{verify, when}
-import uk.gov.hmrc.disareturnsbackend.services.SystemClock
+import org.mockito.Mockito.*
+import uk.gov.hmrc.disareturnsbackend.utils.SystemClock
 import uk.gov.hmrc.disareturnsbackend.testOnly.connectors.TestOnlyReturnsSubmissionConnector
-import uk.gov.hmrc.disareturnsbackend.testOnly.models.{ClockOverride, TestOverride}
+import uk.gov.hmrc.disareturnsbackend.testOnly.models.*
 import uk.gov.hmrc.http.HeaderCarrier
 
-import java.time.{Instant, LocalDate}
+import java.time.*
 import scala.concurrent.Future
 
 class TestOnlySubmissionTimeSourceSpec extends SpecBase {

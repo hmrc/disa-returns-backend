@@ -18,6 +18,9 @@ package uk.gov.hmrc.disareturnsbackend.services
 
 import play.api.Logging
 import play.api.libs.json.JsValue
+import org.apache.pekko.actor.ActorSystem
+import org.mongodb.scala.MongoException
+import uk.gov.hmrc.disareturnsbackend.config.AppConfig
 import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector
 import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector.*
 import uk.gov.hmrc.disareturnsbackend.models.*
@@ -28,14 +31,18 @@ import uk.gov.hmrc.http.HeaderCarrier
 
 import java.time.Instant
 import java.util.UUID
-import javax.inject.{Inject, Singleton}
-import scala.concurrent.{ExecutionContext, Future}
+import javax.inject.*
+import scala.concurrent.duration.DurationInt
+import scala.concurrent.*
 import scala.util.control.NonFatal
 
 @Singleton
 class MonthlyReturnService @Inject() (
+  actorSystem: ActorSystem,
+  appConfig: AppConfig,
   monthlyReturnRepository: MonthlyReturnRepository,
-  returnsSubmissionConnector: ReturnsSubmissionConnector
+  returnsSubmissionConnector: ReturnsSubmissionConnector,
+  monthlyReturnSubmissionWorkItemRepository: MonthlyReturnSubmissionWorkItemRepository
 )(implicit ec: ExecutionContext)
     extends Logging {
 
@@ -186,53 +193,77 @@ class MonthlyReturnService @Inject() (
     hc: HeaderCarrier
   ): Future[DeclareMonthlyReturnResult] =
     returnsSubmissionConnector
-      .isReportingWindowOpen(zReference)
+      .getMonthlyReturn(zReference, taxYear, month)
       .flatMap {
-        case false =>
-          logger.warn(
-            s"[MonthlyReturnService][declare] Declaration period is closed for zReference [$zReference], taxYear [$taxYear], month [$month]"
-          )
-          Future.successful(DeclareMonthlyReturnResult.OutsideDeclarationPeriod)
+        case Some(submissionReturn) if declaredOn(submissionReturn).isDefined =>
+          monthlyReturnRepository.get(zReference, taxYear, month).flatMap {
+            case Some(monthlyReturn) =>
+              enqueueTransferWorkItems(monthlyReturn, monthlyReturn.fileUploadsReadyForSubmission)
+                .map(_ => DeclareMonthlyReturnResult.AlreadyDeclared)
+            case None                => Future.successful(DeclareMonthlyReturnResult.AlreadyDeclared)
+          }
 
-        case true =>
-          monthlyReturnRepository
-            .get(zReference, taxYear, month)
-            .flatMap {
-              case Some(monthlyReturn) =>
-                returnsSubmissionConnector
-                  .declareMonthlyReturn(zReference, taxYear, month, monthlyReturn.nilReturn)
-                  .map {
-                    case DeclareMonthlyReturnSubmissionResult.Declared =>
-                      logger.info(
-                        s"[MonthlyReturnService][declare] Declared monthly return for zReference [$zReference], taxYear [$taxYear], month [$month]"
+        case _ =>
+          returnsSubmissionConnector.isReportingWindowOpen(zReference).flatMap {
+            case false =>
+              logger.warn(
+                s"[MonthlyReturnService][declare] Declaration period is closed for zReference [$zReference], taxYear [$taxYear], month [$month]"
+              )
+              Future.successful(DeclareMonthlyReturnResult.OutsideDeclarationPeriod)
+
+            case true =>
+              monthlyReturnRepository
+                .get(zReference, taxYear, month)
+                .flatMap {
+                  case Some(monthlyReturn) =>
+                    val readyUploads = if (monthlyReturn.nilReturn) {
+                      Nil
+                    } else {
+                      monthlyReturn.fileUploadsReadyForSubmission
+                    }
+                    returnsSubmissionConnector
+                      .declareMonthlyReturn(
+                        zReference,
+                        taxYear,
+                        month,
+                        monthlyReturn.nilReturn,
+                        readyUploads.map(_.reference)
                       )
-                      DeclareMonthlyReturnResult.Declared
+                      .flatMap {
+                        case DeclareMonthlyReturnSubmissionResult.Declared =>
+                          logger.info(
+                            s"[MonthlyReturnService][declare] Declared monthly return for zReference [$zReference], taxYear [$taxYear], month [$month]"
+                          )
+                          enqueueTransferWorkItems(monthlyReturn, readyUploads)
+                            .map(_ => DeclareMonthlyReturnResult.Declared)
 
-                    case DeclareMonthlyReturnSubmissionResult.AlreadyDeclared =>
-                      logger.warn(
-                        s"[MonthlyReturnService][declare] Monthly return already declared in submission for zReference [$zReference], taxYear [$taxYear], month [$month]"
-                      )
-                      DeclareMonthlyReturnResult.AlreadyDeclared
+                        case DeclareMonthlyReturnSubmissionResult.AlreadyDeclared =>
+                          logger.warn(
+                            s"[MonthlyReturnService][declare] Monthly return already declared in submission for zReference [$zReference], taxYear [$taxYear], month [$month]"
+                          )
+                          enqueueTransferWorkItems(monthlyReturn, readyUploads)
+                            .map(_ => DeclareMonthlyReturnResult.AlreadyDeclared)
 
-                    case DeclareMonthlyReturnSubmissionResult.MonthlyReturnNotFound =>
-                      logger.warn(
-                        s"[MonthlyReturnService][declare] No monthly return found in submission for zReference [$zReference], taxYear [$taxYear], month [$month]"
-                      )
-                      DeclareMonthlyReturnResult.MonthlyReturnNotFound
+                        case DeclareMonthlyReturnSubmissionResult.MonthlyReturnNotFound =>
+                          logger.warn(
+                            s"[MonthlyReturnService][declare] No monthly return found in submission for zReference [$zReference], taxYear [$taxYear], month [$month]"
+                          )
+                          Future.successful(DeclareMonthlyReturnResult.MonthlyReturnNotFound)
 
-                    case DeclareMonthlyReturnSubmissionResult.OutsideDeclarationPeriod =>
-                      logger.warn(
-                        s"[MonthlyReturnService][declare] Submission rejected the declaration because the period is closed for zReference [$zReference], taxYear [$taxYear], month [$month]"
-                      )
-                      DeclareMonthlyReturnResult.OutsideDeclarationPeriod
-                  }
+                        case DeclareMonthlyReturnSubmissionResult.OutsideDeclarationPeriod =>
+                          logger.warn(
+                            s"[MonthlyReturnService][declare] Submission rejected the declaration because the period is closed for zReference [$zReference], taxYear [$taxYear], month [$month]"
+                          )
+                          Future.successful(DeclareMonthlyReturnResult.OutsideDeclarationPeriod)
+                      }
 
-              case None =>
-                logger.warn(
-                  s"[MonthlyReturnService][declare] No monthly return found for zReference [$zReference], taxYear [$taxYear], month [$month]"
-                )
-                Future.successful(DeclareMonthlyReturnResult.MonthlyReturnNotFound)
-            }
+                  case None =>
+                    logger.warn(
+                      s"[MonthlyReturnService][declare] No monthly return found for zReference [$zReference], taxYear [$taxYear], month [$month]"
+                    )
+                    Future.successful(DeclareMonthlyReturnResult.MonthlyReturnNotFound)
+                }
+          }
       }
       .recoverWith { case NonFatal(exception) =>
         logger.error(
@@ -241,6 +272,32 @@ class MonthlyReturnService @Inject() (
         )
         Future.failed(exception)
       }
+
+  private def enqueueTransferWorkItems(monthlyReturn: MonthlyReturn, uploads: List[FileUpload]): Future[Unit] =
+    retryMongo(appConfig.monthlyReturnSubmissionEnqueueAttempts) {
+      Future
+        .traverse(uploads)(upload =>
+          monthlyReturnSubmissionWorkItemRepository.enqueue(
+            MonthlyReturnSubmissionWorkItem(
+              monthlyReturn.zReference,
+              monthlyReturn.taxYear,
+              monthlyReturn.month,
+              upload.reference
+            )
+          )
+        )
+        .map(_ => ())
+    }
+
+  private def retryMongo[A](attemptsRemaining: Int)(operation: => Future[A]): Future[A] =
+    operation.recoverWith {
+      case _: MongoException if attemptsRemaining > 1 =>
+        val retry = Promise[A]()
+        actorSystem.scheduler.scheduleOnce(1.second) {
+          retry.completeWith(retryMongo(attemptsRemaining - 1)(operation))
+        }
+        retry.future
+    }
 
   def createFileUpload(
     zReference: String,
@@ -352,6 +409,9 @@ class MonthlyReturnService @Inject() (
       objectStoreFileLocation = objectStoreFileLocation,
       objectStoreFileErrorsLocation = objectStoreFileErrorsLocation
     )
+
+  def markFileUploadSubmitted(zReference: String, taxYear: String, month: Int, reference: String): Future[Boolean] =
+    monthlyReturnRepository.markFileUploadSubmitted(zReference, taxYear, month, reference)
 
   def markUpscanExpired(
     monthlyReturn: MonthlyReturn,

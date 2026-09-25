@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-package uk.gov.hmrc.disareturnsbackend.services
+package uk.gov.hmrc.disareturnsbackend.models
 
-import java.time.Instant
-import scala.concurrent.Future
-import uk.gov.hmrc.http.HeaderCarrier
+import play.api.libs.json.*
 
-trait TimeSource {
-  def instant(zReference: String)(implicit hc: HeaderCarrier): Future[Instant]
+final case class MonthlyReturnSubmissionWorkItem(zReference: String, taxYear: String, month: Int, reference: String)
+
+object MonthlyReturnSubmissionWorkItem {
+  implicit val format: OFormat[MonthlyReturnSubmissionWorkItem] = Json.format[MonthlyReturnSubmissionWorkItem]
 }

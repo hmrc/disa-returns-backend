@@ -18,19 +18,19 @@ package uk.gov.hmrc.disareturnsbackend
 
 import base.TestConstants
 import com.github.tomakehurst.wiremock.client.WireMock.*
-import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
+import org.scalatest.concurrent.*
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
+import org.scalatest.*
 import org.scalatestplus.play.guice.GuiceOneServerPerSuite
 import org.mongodb.scala.ObservableFuture
 import org.mongodb.scala.model.Filters
 import play.api.Application
-import play.api.http.HeaderNames.{AUTHORIZATION, WWW_AUTHENTICATE}
-import play.api.http.Status.{CREATED, NO_CONTENT, OK, UNAUTHORIZED}
+import play.api.http.HeaderNames.*
+import play.api.http.Status.*
 import play.api.inject.bind
 import play.api.inject.guice.GuiceApplicationBuilder
-import play.api.libs.json.{JsObject, Json}
+import play.api.libs.json.*
 import play.api.libs.ws.WSClient
 import play.api.test.DefaultAwaitTimeout
 import play.api.test.Helpers.await
@@ -39,7 +39,7 @@ import uk.gov.hmrc.http.test.WireMockSupport
 import uk.gov.hmrc.mongo.MongoComponent
 import uk.gov.hmrc.play.audit.http.connector.DatastreamMetrics
 
-import java.time.{Clock, Instant, ZoneOffset}
+import java.time.*
 import scala.concurrent.ExecutionContext
 import scala.reflect.ClassTag
 
@@ -237,7 +237,11 @@ trait BaseIntegrationSpec
   def clearMongoCollections(): Unit = {
     val database = inject[MongoComponent].database
 
-    Seq(monthlyReturnsCollectionName, monthlyReturnFileUploadWorkItemsCollectionName).foreach { collectionName =>
+    Seq(
+      monthlyReturnsCollectionName,
+      monthlyReturnFileUploadWorkItemsCollectionName,
+      monthlyReturnSubmissionWorkItemsCollectionName
+    ).foreach { collectionName =>
       await(
         database
           .getCollection(collectionName)

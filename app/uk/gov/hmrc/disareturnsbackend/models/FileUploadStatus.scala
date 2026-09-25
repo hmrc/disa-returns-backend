@@ -33,6 +33,7 @@ object FileUploadStatus {
   case object Duplicate extends FileUploadStatus { val value = "DUPLICATE" }
   case object ValidationSuccess extends FileUploadStatus { val value = "VALIDATION_SUCCESS" }
   case object ValidationFailure extends FileUploadStatus { val value = "VALIDATION_FAILURE" }
+  case object Submitted extends FileUploadStatus { val value = "SUBMITTED" }
 
   val values: Seq[FileUploadStatus] =
     Seq(
@@ -44,7 +45,8 @@ object FileUploadStatus {
       UpscanExpired,
       Duplicate,
       ValidationSuccess,
-      ValidationFailure
+      ValidationFailure,
+      Submitted
     )
 
   private def fromString(value: String): Option[FileUploadStatus] =

@@ -18,9 +18,9 @@ package uk.gov.hmrc.disareturnsbackend
 
 import org.apache.pekko.Done
 import play.api.Logging
+import uk.gov.hmrc.disareturnsbackend.config.AppConfig
 import uk.gov.hmrc.disareturnsbackend.config.InternalAuthTokenInitialiser
-import uk.gov.hmrc.disareturnsbackend.jobs.MonthlyReturnWorkItemJob
-
+import uk.gov.hmrc.disareturnsbackend.jobs.*
 import javax.inject.{Inject, Singleton}
 import scala.concurrent.duration.DurationInt
 import scala.concurrent.{Await, Future}
@@ -30,7 +30,9 @@ import scala.util.control.NonFatal
 @Singleton
 class AppInitialiser @Inject() (
   internalAuthTokenInitialiser: InternalAuthTokenInitialiser,
-  monthlyReturnWorkItemJob: MonthlyReturnWorkItemJob
+  appConfig: AppConfig,
+  monthlyReturnWorkItemJob: MonthlyReturnWorkItemJob,
+  monthlyReturnSubmissionWorkItemJob: MonthlyReturnSubmissionWorkItemJob
 ) extends Logging {
 
   val initialised: Future[Done] =
@@ -40,8 +42,15 @@ class AppInitialiser @Inject() (
     Await.result(initialised, 31.seconds)
     logger.info("[AppInitialiser] Internal auth initialiser completed")
 
-    Try(monthlyReturnWorkItemJob.start()).failed.foreach { exception =>
-      logger.error("[AppInitialiser] Monthly return work item job failed to start", exception)
+    if (appConfig.monthlyReturnFileUploadJobEnabled) {
+      Try(monthlyReturnWorkItemJob.start()).failed.foreach { exception =>
+        logger.error("[AppInitialiser] Monthly return work item job failed to start", exception)
+      }
+    }
+    if (appConfig.monthlyReturnSubmissionJobEnabled) {
+      Try(monthlyReturnSubmissionWorkItemJob.start()).failed.foreach { exception =>
+        logger.error("[AppInitialiser] Monthly return submission work item job failed to start", exception)
+      }
     }
   } catch {
     case NonFatal(exception) =>

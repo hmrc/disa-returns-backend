@@ -16,7 +16,7 @@
 
 package uk.gov.hmrc.disareturnsbackend.config
 
-import javax.inject.{Inject, Singleton}
+import javax.inject.*
 import play.api.Configuration
 import uk.gov.hmrc.play.bootstrap.config.ServicesConfig
 
@@ -39,6 +39,10 @@ class AppConfig @Inject() (
 
   val returnsSubmissionService: String = servicesConfig.baseUrl("disa-returns-submission")
 
+  val monthlyReturnFileUploadJobEnabled: Boolean = config
+    .getOptional[Boolean]("monthly-return-file-upload-work-item-job.enabled")
+    .getOrElse(true)
+
   val monthlyReturnFileUploadJobInProgressRetryAfter: Duration = config
     .getOptional[Duration]("monthly-return-file-upload-work-item-job.inProgressRetryAfter")
     .getOrElse(Duration.ofMinutes(5))
@@ -51,6 +55,35 @@ class AppConfig @Inject() (
     .getOptional[Duration]("monthly-return-file-upload-work-item-job.pollInterval")
     .getOrElse(Duration.ofSeconds(10))
     .toScala
+
+  val monthlyReturnSubmissionJobEnabled: Boolean = config
+    .getOptional[Boolean]("monthly-return-submission-work-item-job.enabled")
+    .getOrElse(true)
+
+  val monthlyReturnSubmissionJobFailedRetryAfter: Duration = config
+    .getOptional[Duration]("monthly-return-submission-work-item-job.failedRetryAfter")
+    .getOrElse(Duration.ofMinutes(5))
+
+  val monthlyReturnSubmissionJobInProgressRetryAfter: Duration = config
+    .getOptional[Duration]("monthly-return-submission-work-item-job.inProgressRetryAfter")
+    .getOrElse(Duration.ofMinutes(5))
+
+  val monthlyReturnSubmissionJobPollInterval: FiniteDuration = config
+    .getOptional[Duration]("monthly-return-submission-work-item-job.pollInterval")
+    .getOrElse(Duration.ofSeconds(10))
+    .toScala
+
+  val monthlyReturnSubmissionJobWorkerCount: Int = config
+    .getOptional[Int]("monthly-return-submission-work-item-job.workerCount")
+    .getOrElse(2)
+
+  val monthlyReturnSubmissionEnqueueAttempts: Int = config
+    .getOptional[Int]("monthly-return-submission-work-item-job.submissionTransferEnqueueAttempts")
+    .getOrElse(3)
+  require(
+    monthlyReturnSubmissionEnqueueAttempts > 0,
+    "Monthly return submissionTransferEnqueueAttempts must be positive"
+  )
 
   val monthlyReturnTimeToLiveInDays: Long = config.get[Long]("mongodb.monthlyReturnTimeToLiveInDays")
 

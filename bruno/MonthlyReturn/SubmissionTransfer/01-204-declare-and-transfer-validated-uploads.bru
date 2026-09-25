@@ -1,0 +1,147 @@
+meta {
+  name: 01-204-declare-and-transfer-validated-uploads
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}{{servicePath}}/monthly/{{callbackZReference}}/{{taxYear}}/{{month}}/declarations
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 204
+}
+
+script:pre-request {
+  const baseUrl = `${bru.getEnvVar("baseUrl")}${bru.getEnvVar("servicePath")}`;
+  const zReference = bru.getEnvVar("callbackZReference");
+  const taxYear = bru.getEnvVar("taxYear");
+  const month = bru.getEnvVar("month");
+  const uploads = [
+    { reference: "38b92c59-43a9-4a20-8888-91e7c25e31a0", fileName: "isa-open-valid.csv", mimeType: bru.getEnvVar("csvMimeType"), checksum: "028c6b56292afc7ab50a434d9efed905ee487f0afad6f97ef66fde328f63dbb7", size: 555, status: "VALIDATION_SUCCESS" },
+    { reference: "e0cc3171-21ee-4479-8877-d120772df42e", fileName: "isa-open-valid.xlsx", mimeType: bru.getEnvVar("xlsxMimeType"), checksum: "cbe7070b04ceb37971da16d0ee70a80e5181779f8de7533e2dd3d743f36ec277", size: 3242, status: "VALIDATION_SUCCESS" },
+    { reference: "20a7d655-e061-4005-9517-d11216fc687e", fileName: "invalid-header.csv", mimeType: bru.getEnvVar("csvMimeType"), checksum: "983c8f6f4feb46411c99d2c837b9f53c16440b358a86a29b0aca5795daa5a277", size: 557, status: "VALIDATION_FAILURE" }
+  ];
+  bru.setVar("callbackZReference", zReference);
+  bru.setVar("transferUploads", JSON.stringify(uploads));
+
+  for (const [request, label] of [
+    ["TestOnly/Overrides/04-200-set-clock-inside-declaration-period", "clock override"],
+    ["TestOnly/MonthlyReturnFileUploadWorkItems/01-204-clear-work-items", "validation queue cleanup"],
+    ["TestOnly/MonthlyReturnSubmissionWorkItems/01-204-clear-work-items", "transfer queue cleanup"],
+    ["TestOnly/MonthlyReturns/01-204-clear-monthly-returns", "monthly return cleanup"]
+  ]) {
+    const response = await bru.runRequest(request);
+    const expected = label === "clock override" ? 200 : 204;
+    if (response.status !== expected) {
+      throw new Error(`${label} returned ${response.status}, expected ${expected}`);
+    }
+  }
+
+  const returnUrl = `${baseUrl}/monthly/${zReference}/${taxYear}/${month}`;
+  const headers = { "Authorization": bru.getVar("bearerToken"), "Content-Type": "application/json" };
+  const created = await bru.sendRequest({ method: "POST", url: returnUrl, headers, data: { nilReturn: false }, timeout: 3000 });
+  if (created.status !== 201) {
+    throw new Error(`Monthly return create returned ${created.status}, expected 201`);
+  }
+
+  for (const upload of uploads) {
+    const fileUrl = `${returnUrl}/files/${upload.reference}`;
+    const placeholder = await bru.sendRequest({ method: "POST", url: `${returnUrl}/files`, headers, data: { reference: upload.reference }, timeout: 3000 });
+    if (placeholder.status !== 201) {
+      throw new Error(`File upload ${upload.fileName} create returned ${placeholder.status}, expected 201`);
+    }
+
+    const callback = await bru.sendRequest({
+      method: "POST",
+      url: `${baseUrl}/monthly/upscan/callback/${zReference}/${taxYear}/${month}`,
+      headers,
+      data: {
+        reference: upload.reference,
+        fileStatus: "READY",
+        downloadUrl: `${baseUrl}/test-only/file-upload/monthly/${upload.fileName}`,
+        uploadDetails: {
+          fileName: upload.fileName,
+          fileMimeType: upload.mimeType,
+          uploadTimestamp: bru.getEnvVar("uploadTimestamp"),
+          checksum: upload.checksum,
+          size: upload.size
+        }
+      },
+      timeout: 3000
+    });
+    if (callback.status !== 202) {
+      throw new Error(`Upscan callback ${upload.fileName} returned ${callback.status}, expected 202`);
+    }
+
+    let status;
+    for (let attempt = 0; attempt < 15; attempt++) {
+      const response = await bru.sendRequest({ method: "GET", url: fileUrl, headers, timeout: 3000 });
+      const responseBody = response.body ?? response.data;
+      const body = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
+      status = body.status;
+      if (status === upload.status) break;
+      await new Promise(resolve => setTimeout(resolve, Number(bru.getEnvVar("validationProcessingPollIntervalMs") ?? 1000)));
+    }
+    if (status !== upload.status) {
+      throw new Error(`${upload.fileName} validation status was ${status}, expected ${upload.status}`);
+    }
+  }
+}
+
+script:post-response {
+  if (res.status !== 204) return;
+
+  const uploads = JSON.parse(bru.getVar("transferUploads"));
+  const zReference = bru.getEnvVar("callbackZReference");
+  const taxYear = bru.getEnvVar("taxYear");
+  const month = bru.getEnvVar("month");
+  const returnUrl = `${bru.getEnvVar("baseUrl")}${bru.getEnvVar("servicePath")}/monthly/${zReference}/${taxYear}/${month}`;
+  const headers = { "Authorization": bru.getVar("bearerToken") };
+
+  for (const upload of uploads.filter(upload => upload.status === "VALIDATION_SUCCESS")) {
+    let status;
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const response = await bru.sendRequest({ method: "GET", url: `${returnUrl}/files/${upload.reference}`, headers, timeout: 3000 });
+      const responseBody = response.body ?? response.data;
+      const body = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
+      status = body.status;
+      if (status === "SUBMITTED") break;
+      await new Promise(resolve => setTimeout(resolve, Number(bru.getEnvVar("validationProcessingPollIntervalMs") ?? 1000)));
+    }
+    if (status !== "SUBMITTED") {
+      throw new Error(`${upload.fileName} transfer status was ${status}, expected SUBMITTED`);
+    }
+  }
+
+  const response = await bru.sendRequest({
+    method: "GET",
+    url: `${bru.getEnvVar("submissionBaseUrl")}${bru.getEnvVar("submissionServicePath")}/monthly/${zReference}/${taxYear}/${month}`,
+    headers: { "Authorization": bru.getEnvVar("internalAuthToken") },
+    timeout: 3000
+  });
+  if (response.status !== 200) {
+    throw new Error(`Submission monthly return GET returned ${response.status}, expected 200`);
+  }
+  const responseBody = response.body ?? response.data;
+  const body = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
+  bru.setVar("storedTransferSubmissions", JSON.stringify(body.submissions));
+}
+
+tests {
+  test("only validated CSV and XLSX uploads are stored as NDJSON submissions", function() {
+    const uploads = JSON.parse(bru.getVar("transferUploads"));
+    const submissions = JSON.parse(bru.getVar("storedTransferSubmissions"));
+    const expected = uploads.filter(upload => upload.status === "VALIDATION_SUCCESS");
+    expect(submissions.map(submission => submission.reference)).to.have.members(expected.map(upload => upload.reference));
+    expect(submissions).to.have.length(expected.length);
+    for (const submission of submissions) {
+      expect(submission.status).to.equal("STORED");
+      expect(submission.submissionDetails.fileMimeType).to.equal("application/x-ndjson");
+      expect(submission.submissionDetails.size).to.be.greaterThan(0);
+      expect(submission.submissionDetails.objectStoreFileLocation).to.include(submission.reference);
+    }
+  });
+}

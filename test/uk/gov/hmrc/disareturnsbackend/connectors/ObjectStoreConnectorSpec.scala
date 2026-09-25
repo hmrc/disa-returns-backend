@@ -18,6 +18,7 @@ package uk.gov.hmrc.disareturnsbackend.connectors
 
 import base.SpecBase
 import com.typesafe.config.{Config, ConfigFactory}
+import org.apache.pekko.NotUsed
 import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.stream.Materializer
 import org.apache.pekko.stream.scaladsl.{Sink, Source}
@@ -29,7 +30,7 @@ import play.api.http.Status.INTERNAL_SERVER_ERROR
 import uk.gov.hmrc.http.{HeaderCarrier, UpstreamErrorResponse}
 import uk.gov.hmrc.objectstore.client.http.Payload
 import uk.gov.hmrc.objectstore.client.play.PlayObjectStoreClient
-import uk.gov.hmrc.objectstore.client.{Md5Hash, ObjectSummaryWithMd5, Path}
+import uk.gov.hmrc.objectstore.client.{Md5Hash, Object as StoredObject, ObjectMetadata, ObjectSummaryWithMd5, Path}
 
 import java.nio.file.Files
 import java.security.MessageDigest
@@ -102,6 +103,53 @@ class ObjectStoreConnectorSpec extends SpecBase {
         verify(client, times(callAmountWithRetries))
           .putObject(any, any[Payload[Source[ByteString, ?]]], any, any, any, any)(any, any)
       } finally Files.deleteIfExists(file)
+    }
+
+    "must download the file as a stream" in {
+      val client  = mock[PlayObjectStoreClient]
+      val service = new ObjectStoreConnector(client, inject[ActorSystem], retryConfig)
+      val path    = Path.Directory("").file("object-name")
+      val content = Source.single(ByteString("file-content"))
+      val stored  = StoredObject(
+        path,
+        content,
+        ObjectMetadata("text/plain", 12L, Md5Hash(md5Base64("file-content")), Instant.now, Map.empty)
+      )
+
+      when(client.getObject[Source[ByteString, NotUsed]](any, any)(any, any))
+        .thenReturn(Future.successful(Some(stored)))
+
+      service
+        .getFile("object-name")
+        .futureValue
+        .runWith(Sink.fold(ByteString.empty)(_ ++ _))(inject[Materializer])
+        .futureValue mustBe ByteString("file-content")
+
+      verify(client).getObject[Source[ByteString, NotUsed]](any, any)(any, any)
+    }
+
+    "must fail without retrying when the object-store file is missing" in {
+      val client  = mock[PlayObjectStoreClient]
+      val service = new ObjectStoreConnector(client, inject[ActorSystem], retryConfig)
+
+      when(client.getObject[Source[ByteString, NotUsed]](any, any)(any, any))
+        .thenReturn(Future.successful(None))
+
+      service.getFile("missing-file").failed.futureValue mustBe a[NoSuchElementException]
+      verify(client).getObject[Source[ByteString, NotUsed]](any, any)(any, any)
+    }
+
+    "must retry when object-store returns a 5xx error while downloading" in {
+      val client       = mock[PlayObjectStoreClient]
+      val service      = new ObjectStoreConnector(client, inject[ActorSystem], retryConfig)
+      val errorMessage = "object-store download failed"
+
+      when(client.getObject[Source[ByteString, NotUsed]](any, any)(any, any))
+        .thenReturn(Future.failed(UpstreamErrorResponse(errorMessage, INTERNAL_SERVER_ERROR)))
+
+      service.getFile("object-name").failed.futureValue mustBe
+        UpstreamErrorResponse(errorMessage, INTERNAL_SERVER_ERROR)
+      verify(client, times(callAmountWithRetries)).getObject[Source[ByteString, NotUsed]](any, any)(any, any)
     }
   }
 

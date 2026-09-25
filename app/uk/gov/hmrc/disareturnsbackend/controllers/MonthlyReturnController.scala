@@ -19,8 +19,8 @@ package uk.gov.hmrc.disareturnsbackend.controllers
 import play.api.http.HeaderNames.LOCATION
 import play.api.Logging
 import play.api.libs.json.{JsValue, Json}
-import play.api.mvc.{Action, AnyContent, ControllerComponents}
-import uk.gov.hmrc.disareturnsbackend.controllers.actions.{MonthlyReturnNotDeclaredAction, RequestAuthAndValidationAction}
+import play.api.mvc.*
+import uk.gov.hmrc.disareturnsbackend.controllers.actions.*
 import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.services.*
 import uk.gov.hmrc.http.HeaderCarrier
@@ -103,8 +103,7 @@ class MonthlyReturnController @Inject() (
       }
 
   def declareMonthlyReturn(zReference: String, taxYear: String, month: String): Action[AnyContent] =
-    (requestAuthAndValidationAction(zReference, taxYear, month, checkPeriod = true) andThen
-      monthlyReturnNotDeclaredAction(Conflict)).async { implicit request =>
+    requestAuthAndValidationAction(zReference, taxYear, month, checkPeriod = true).async { implicit request =>
       logger.info(
         s"[MonthlyReturnController][declareMonthlyReturn] Declare monthly return request for zReference [$zReference], taxYear [$taxYear], month [$month]"
       )
