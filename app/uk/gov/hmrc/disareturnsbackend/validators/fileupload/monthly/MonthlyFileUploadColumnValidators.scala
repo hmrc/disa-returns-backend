@@ -60,9 +60,6 @@ trait MonthlyFileUploadColumnValidationSupport {
   protected def maxLength(value: String, maximum: Int, code: String): Option[String] =
     Option.when(value.length > maximum)(code)
 
-  protected def validMoney(value: String, code: String): Option[String] =
-    Option.when(value.nonEmpty && !moneyPattern.matches(value))(code)
-
   protected def invalidCharacters(value: String, allowedPattern: Regex, code: String): Option[String] =
     Option.when(value.nonEmpty && !allowedPattern.matches(value))(code)
 
@@ -79,9 +76,6 @@ trait MonthlyFileUploadColumnValidationSupport {
 
   protected def parseIsoDate(value: String): Option[LocalDate] =
     Try(LocalDate.parse(value, dateFormatter)).toOption
-
-  protected def validIsoDate(value: String, code: String): Option[String] =
-    Option.when(value.nonEmpty && parseIsoDate(value).isEmpty)(code)
 
   protected def presentErrors(errors: Option[String]*): Seq[String] =
     errors.flatten

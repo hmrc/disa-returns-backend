@@ -19,11 +19,13 @@ package uk.gov.hmrc.disareturnsbackend
 import config.{InternalAuthTokenInitialiser, InternalAuthTokenInitialiserImpl, NoOpInternalAuthTokenInitialiser}
 import play.api.{Configuration, Environment}
 import play.api.inject.{Binding, Module as AppModule, bind as binding}
+import uk.gov.hmrc.disareturnsbackend.converters.{MonthlyReturnCsvConverter, MonthlyReturnCsvConverterImpl, MonthlyReturnNdjsonWriter, MonthlyReturnNdjsonWriterImpl, MonthlyReturnXlsxConverter, MonthlyReturnXlsxConverterImpl}
 import uk.gov.hmrc.disareturnsbackend.controllers.actions.{RequestAuthAction, RequestAuthAndValidationAction, RequestAuthAndValidationActionImpl}
-import uk.gov.hmrc.disareturnsbackend.jobs.MonthlyReturnWorkItemJob
+import uk.gov.hmrc.disareturnsbackend.jobs.{MonthlyReturnSubmissionWorkItemJob, MonthlyReturnWorkItemJob}
 import uk.gov.hmrc.disareturnsbackend.mappers.{UpscanCallbackMapper, UpscanCallbackMapperImpl}
-import uk.gov.hmrc.disareturnsbackend.services.{MonthlyReturnAuditService, MonthlyReturnFileUploadProcessingService, MonthlyReturnFileUploadProcessingServiceImpl, SystemClock, TimeSource}
+import uk.gov.hmrc.disareturnsbackend.services.{MonthlyReturnAuditService, MonthlyReturnFileUploadProcessingService, MonthlyReturnFileUploadProcessingServiceImpl}
 import uk.gov.hmrc.disareturnsbackend.testOnly.TestOnlySubmissionTimeSource
+import uk.gov.hmrc.disareturnsbackend.utils.{SystemClock, TimeSource}
 
 import java.time.{Clock, ZoneOffset}
 
@@ -62,6 +64,10 @@ class Module extends AppModule:
       binding[RequestAuthAndValidationAction].to[RequestAuthAndValidationActionImpl],
       binding[RequestAuthAction].to[RequestAuthAndValidationActionImpl],
       binding[MonthlyReturnWorkItemJob].toSelf,
+      binding[MonthlyReturnSubmissionWorkItemJob].toSelf,
+      binding[MonthlyReturnCsvConverter].to[MonthlyReturnCsvConverterImpl],
+      binding[MonthlyReturnXlsxConverter].to[MonthlyReturnXlsxConverterImpl],
+      binding[MonthlyReturnNdjsonWriter].to[MonthlyReturnNdjsonWriterImpl],
       binding[MonthlyReturnFileUploadProcessingService].to[MonthlyReturnFileUploadProcessingServiceImpl],
       binding[MonthlyReturnAuditService].toSelf,
       binding[UpscanCallbackMapper].to[UpscanCallbackMapperImpl],

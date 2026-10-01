@@ -339,6 +339,27 @@ class MonthlyReturnRepository @Inject() (
         Future.successful(false)
     }
 
+  def markFileUploadSubmitted(zReference: String, taxYear: String, month: Int, reference: String): Future[Boolean] = {
+    val matchingValidatedUpload = Filters.elemMatch(
+      fileUploadsField,
+      Filters.and(
+        Filters.equal(referenceField, reference),
+        Filters.equal(statusField, FileUploadStatus.ValidationSuccess),
+        Filters.exists("fileUploadDetails.objectStoreFileLocation")
+      )
+    )
+    collection
+      .updateOne(
+        Filters.and(byKey(zReference, taxYear, month), matchingValidatedUpload),
+        Updates.combine(
+          Updates.set(matchingFileUploadStatusField, FileUploadStatus.Submitted),
+          Updates.set(lastUpdatedField, now())
+        )
+      )
+      .toFuture()
+      .map(_.getModifiedCount == 1)
+  }
+
   def updateNilReturn(
     zReference: String,
     taxYear: String,

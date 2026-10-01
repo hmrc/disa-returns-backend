@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-package uk.gov.hmrc.disareturnsbackend.services
+package uk.gov.hmrc.disareturnsbackend.utils
 
-import java.time.{Clock, Instant}
-import javax.inject.{Inject, Singleton}
+import java.time.*
+import javax.inject.*
 import scala.concurrent.Future
 import uk.gov.hmrc.http.HeaderCarrier
 

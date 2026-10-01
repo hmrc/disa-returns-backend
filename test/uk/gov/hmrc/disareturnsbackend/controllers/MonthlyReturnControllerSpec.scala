@@ -18,23 +18,20 @@ package uk.gov.hmrc.disareturnsbackend.controllers
 
 import base.SpecBase
 import org.mockito.ArgumentMatchers.{any, eq as eqTo}
-import org.mockito.Mockito.{never, reset, verify, when}
+import org.mockito.Mockito.*
 import org.scalatest.BeforeAndAfterEach
 import play.api.Application
 import play.api.http.HeaderNames.LOCATION
 import play.api.inject.bind
 import play.api.libs.json.Json
-import play.api.mvc.{ActionBuilder, AnyContent, BodyParser, ControllerComponents, Request, Result, Results}
+import play.api.mvc.*
 import play.api.test.FakeRequest
 import play.api.test.Helpers.*
 import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector
 import uk.gov.hmrc.disareturnsbackend.controllers.actions.RequestAuthAndValidationAction
 import uk.gov.hmrc.disareturnsbackend.models.*
-import uk.gov.hmrc.disareturnsbackend.services.CreateFileUploadResult
-import uk.gov.hmrc.disareturnsbackend.services.DeclareMonthlyReturnResult
-import uk.gov.hmrc.disareturnsbackend.services.CreateMonthlyReturnResult.{AlreadyExists, Created, OutsideDeclarationPeriod}
-import uk.gov.hmrc.disareturnsbackend.services.MonthlyReturnService
-import uk.gov.hmrc.disareturnsbackend.services.UpdateNilReturnResult
+import uk.gov.hmrc.disareturnsbackend.services.*
+import uk.gov.hmrc.disareturnsbackend.services.CreateMonthlyReturnResult.*
 import uk.gov.hmrc.disareturnsbackend.validators.ValidationHelper
 
 import java.time.{Clock, Instant, LocalDate, YearMonth, ZoneOffset}
@@ -221,8 +218,7 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
           any(),
           any()
         )
-      )
-        .thenReturn(Future.successful(Some(Json.obj(declaredOnFieldName -> testCreatedOnString))))
+      ).thenReturn(Future.successful(Some(Json.obj(declaredOnFieldName -> testCreatedOnString))))
 
       val result = controller.createMonthlyReturn(testZReference, testTaxYear, testRouteMonth)(
         FakeRequest("POST", path).withBody(
@@ -389,21 +385,16 @@ class MonthlyReturnControllerSpec extends SpecBase with BeforeAndAfterEach {
       status(result) mustBe CONFLICT
     }
 
-    "must return CONFLICT when disa-returns-submission already has a declared MonthlyReturn" in {
-      when(
-        mockReturnsSubmissionConnector.getMonthlyReturn(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth))(
-          any(),
-          any()
-        )
-      )
-        .thenReturn(Future.successful(Some(Json.obj(declaredOnFieldName -> testCreatedOnString))))
+    "must call the service when disa-returns-submission already has a declared MonthlyReturn to recover enqueueing" in {
+      when(mockMonthlyReturnService.declare(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth))(any()))
+        .thenReturn(Future.successful(DeclareMonthlyReturnResult.AlreadyDeclared))
 
       val result = controller.declareMonthlyReturn(testZReference, testTaxYear, testRouteMonth)(
         FakeRequest("POST", declarationsPath)
       )
 
       status(result) mustBe CONFLICT
-      verify(mockMonthlyReturnService, never()).declare(any[String](), any[String](), any[Int]())(any())
+      verify(mockMonthlyReturnService).declare(eqTo(testZReference), eqTo(testTaxYear), eqTo(testMonth))(any())
     }
 
     "must return NOT_FOUND when the MonthlyReturn does not exist" in {

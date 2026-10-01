@@ -17,21 +17,21 @@
 package uk.gov.hmrc.disareturnsbackend.controllers.actions
 
 import base.SpecBase
-import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{reset, when}
+import org.mockito.ArgumentMatchers.{any, eq as eqTo}
+import org.mockito.Mockito.*
 import org.scalatest.BeforeAndAfterEach
 import play.api.http.HeaderNames.AUTHORIZATION
 import play.api.mvc.Results.Ok
 import play.api.test.FakeRequest
 import play.api.test.Helpers.*
-import uk.gov.hmrc.auth.core.{AuthConnector, BearerTokenExpired, Enrolment, EnrolmentIdentifier, Enrolments, InternalError, InvalidBearerToken, MissingBearerToken}
-import uk.gov.hmrc.disareturnsbackend.services.TimeSource
+import uk.gov.hmrc.auth.core.*
+import uk.gov.hmrc.disareturnsbackend.utils.TimeSource
 import uk.gov.hmrc.http.HeaderCarrier
 
 import java.time.Instant
 import scala.concurrent.Future
 
-class RequestAuthAndValidationActionSpec extends SpecBase with BeforeAndAfterEach {
+class RequestAuthAndValidationActionImplSpec extends SpecBase with BeforeAndAfterEach {
 
   private val mockAuthConnector = mock[AuthConnector]
   private val authAction        = authActionAt()
@@ -53,6 +53,15 @@ class RequestAuthAndValidationActionSpec extends SpecBase with BeforeAndAfterEac
   }
 
   "RequestAuthAndValidationAction" - {
+
+    "must default to no period check when used through the injected interface" in {
+      val action: RequestAuthAndValidationAction = authActionAt("2027-06-07T12:00:00Z")
+
+      val result = action(testZReference, testTaxYear, testRouteMonth)
+        .async(_ => Future.successful(Ok))(authorisedRequest)
+
+      status(result) mustBe OK
+    }
 
     "must allow the request when the bearer token is valid and the DISA enrolment matches the zReference" in {
       val result = authAction(lowercaseTestZReference, testTaxYear, testRouteMonth)
@@ -178,6 +187,72 @@ class RequestAuthAndValidationActionSpec extends SpecBase with BeforeAndAfterEac
         .async(_ => Future.successful(Ok))(authorisedRequest)
 
       status(result) mustBe OK
+    }
+
+    "must return SERVICE_UNAVAILABLE when the time source fails during period checking" in {
+      val timeSource = mock[TimeSource]
+      when(timeSource.instant(eqTo(testZReference))(any()))
+        .thenReturn(Future.failed(new RuntimeException("time source unavailable")))
+      val action     = new RequestAuthAndValidationActionImpl(stubControllerComponents(), mockAuthConnector, timeSource)
+
+      val result = action(testZReference, testTaxYear, testRouteMonth, checkPeriod = true)
+        .async(_ => Future.successful(Ok))(authorisedRequest)
+
+      status(result) mustBe SERVICE_UNAVAILABLE
+    }
+  }
+
+  "RequestAuthAction" - {
+
+    "must trim and uppercase the Z-reference before invoking the action" in {
+      val result = authAction(s" $lowercaseTestZReference ")
+        .async(request => Future.successful(Ok(request.zReference)))(authorisedRequest)
+
+      status(result) mustBe OK
+      contentAsString(result) mustBe testZReference
+    }
+
+    "must reject an invalid Z-reference" in {
+      val result = authAction(invalidTestZReference)
+        .async(_ => Future.successful(Ok))(authorisedRequest)
+
+      status(result) mustBe BAD_REQUEST
+      contentAsString(result) must include(zReferenceFieldName)
+    }
+
+    "must reject an unmatched or inactive DISA enrolment" in
+      Seq(disaEnrolments("Z9999"), disaEnrolments(testZReference, state = "NotYetActivated")).foreach { enrolments =>
+        authoriseWith(enrolments)
+
+        val result = authAction(testZReference).async(_ => Future.successful(Ok))(authorisedRequest)
+
+        status(result) mustBe FORBIDDEN
+      }
+
+    "must reject a matching reference under a different identifier" in {
+      authoriseWith(
+        Enrolments(Set(Enrolment("HMRC-DISA-ORG", Seq(EnrolmentIdentifier("OTHER", testZReference)), "Activated")))
+      )
+
+      val result = authAction(testZReference).async(_ => Future.successful(Ok))(authorisedRequest)
+
+      status(result) mustBe FORBIDDEN
+    }
+
+    "must return UNAUTHORIZED when authentication fails" in {
+      failAuthorisationWith(InvalidBearerToken())
+
+      val result = authAction(testZReference).async(_ => Future.successful(Ok))(authorisedRequest)
+
+      status(result) mustBe UNAUTHORIZED
+    }
+
+    "must return SERVICE_UNAVAILABLE for an unexpected authentication failure" in {
+      failAuthorisationWith(new RuntimeException("auth unavailable"))
+
+      val result = authAction(testZReference).async(_ => Future.successful(Ok))(authorisedRequest)
+
+      status(result) mustBe SERVICE_UNAVAILABLE
     }
   }
 

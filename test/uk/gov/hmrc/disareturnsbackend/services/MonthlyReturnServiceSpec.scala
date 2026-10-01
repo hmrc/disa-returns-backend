@@ -17,23 +17,29 @@
 package uk.gov.hmrc.disareturnsbackend.services
 
 import base.SpecBase
+import org.apache.pekko.actor.ActorSystem
+import org.mongodb.scala.MongoException
 import org.mockito.ArgumentMatchers.{any, eq as eqTo}
-import org.mockito.Mockito.{reset, verify, verifyNoInteractions, when}
+import org.mockito.Mockito.*
 import org.scalatest.BeforeAndAfterEach
+import play.api.libs.json.Json
+import uk.gov.hmrc.disareturnsbackend.config.AppConfig
 import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector
-import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector.{CreateMonthlyReturnSubmissionResult, DeclareMonthlyReturnSubmissionResult}
+import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector.*
 import uk.gov.hmrc.disareturnsbackend.models.*
-import uk.gov.hmrc.disareturnsbackend.repositories.{CreateFileUploadRepositoryResult, MonthlyReturnRepository, UpdateNilReturnRepositoryResult}
-import uk.gov.hmrc.disareturnsbackend.services.CreateMonthlyReturnResult.{AlreadyExists, Created}
+import uk.gov.hmrc.disareturnsbackend.repositories.*
+import uk.gov.hmrc.disareturnsbackend.services.CreateMonthlyReturnResult.*
 import uk.gov.hmrc.http.HeaderCarrier
 
 import scala.concurrent.Future
 
 class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
 
-  private val mockMonthlyReturnRepository    = mock[MonthlyReturnRepository]
-  private val mockReturnsSubmissionConnector = mock[ReturnsSubmissionConnector]
-  private val service                        = buildService()
+  private val mockMonthlyReturnRepository                   = mock[MonthlyReturnRepository]
+  private val mockReturnsSubmissionConnector                = mock[ReturnsSubmissionConnector]
+  private val mockMonthlyReturnSubmissionWorkItemRepository = mock[MonthlyReturnSubmissionWorkItemRepository]
+  private val mockAppConfig                                 = mock[AppConfig]
+  private val service                                       = buildService()
 
   private implicit val hc: HeaderCarrier = HeaderCarrier()
 
@@ -59,6 +65,11 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
     super.beforeEach()
     reset(mockMonthlyReturnRepository)
     reset(mockReturnsSubmissionConnector)
+    reset(mockMonthlyReturnSubmissionWorkItemRepository)
+    reset(mockAppConfig)
+    when(mockAppConfig.monthlyReturnSubmissionEnqueueAttempts).thenReturn(3)
+    when(mockReturnsSubmissionConnector.getMonthlyReturn(eqTo(zReference), eqTo(taxYear), eqTo(month))(any(), any()))
+      .thenReturn(Future.successful(None))
     when(mockReturnsSubmissionConnector.isReportingWindowOpen(eqTo(zReference))(any(), any()))
       .thenReturn(Future.successful(true))
   }
@@ -272,14 +283,75 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
           .thenReturn(Future.successful(Some(monthlyReturn)))
         when(
           mockReturnsSubmissionConnector
-            .declareMonthlyReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), any())(any(), any())
+            .declareMonthlyReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), any(), eqTo(Nil))(any(), any())
         )
           .thenReturn(Future.successful(DeclareMonthlyReturnSubmissionResult.Declared))
 
         service.declare(zReference, taxYear, month).futureValue mustBe DeclareMonthlyReturnResult.Declared
 
         verify(mockReturnsSubmissionConnector)
-          .declareMonthlyReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), any())(any(), any())
+          .declareMonthlyReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), any(), eqTo(Nil))(any(), any())
+      }
+
+      "must declare and enqueue only validated uploads with an object-store location" in {
+        val upload           = FileUpload(
+          uploadReference,
+          FileUploadStatus.ValidationSuccess,
+          testCreatedOn,
+          Some(fileUploadDetails.copy(objectStoreFileLocation = Some("stored-location")))
+        )
+        val returnWithUpload = monthlyReturn.copy(fileUploads =
+          List(
+            upload,
+            upload.copy(reference = "not-ready", fileUploadDetails = Some(fileUploadDetails))
+          )
+        )
+        val item             = MonthlyReturnSubmissionWorkItem(zReference, taxYear, month, uploadReference)
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(Some(returnWithUpload)))
+        when(
+          mockReturnsSubmissionConnector.declareMonthlyReturn(
+            eqTo(zReference),
+            eqTo(taxYear),
+            eqTo(month),
+            eqTo(false),
+            eqTo(List(uploadReference))
+          )(any(), any())
+        ).thenReturn(Future.successful(DeclareMonthlyReturnSubmissionResult.Declared))
+        when(mockMonthlyReturnSubmissionWorkItemRepository.enqueue(eqTo(item)))
+          .thenReturn(Future.successful(()))
+
+        service.declare(zReference, taxYear, month).futureValue mustBe DeclareMonthlyReturnResult.Declared
+
+        verify(mockMonthlyReturnSubmissionWorkItemRepository).enqueue(item)
+      }
+
+      "must use the configured number of Mongo enqueue attempts after declaration succeeds" in {
+        val upload    = FileUpload(
+          uploadReference,
+          FileUploadStatus.ValidationSuccess,
+          testCreatedOn,
+          Some(fileUploadDetails.copy(objectStoreFileLocation = Some("stored-location")))
+        )
+        val item      = MonthlyReturnSubmissionWorkItem(zReference, taxYear, month, uploadReference)
+        val exception = new MongoException(testMongoDownMessage)
+        when(mockAppConfig.monthlyReturnSubmissionEnqueueAttempts).thenReturn(2)
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(Some(monthlyReturn.copy(fileUploads = List(upload)))))
+        when(
+          mockReturnsSubmissionConnector.declareMonthlyReturn(
+            eqTo(zReference),
+            eqTo(taxYear),
+            eqTo(month),
+            eqTo(false),
+            eqTo(List(uploadReference))
+          )(any(), any())
+        ).thenReturn(Future.successful(DeclareMonthlyReturnSubmissionResult.Declared))
+        when(mockMonthlyReturnSubmissionWorkItemRepository.enqueue(eqTo(item)))
+          .thenReturn(Future.failed(exception))
+
+        service.declare(zReference, taxYear, month).failed.futureValue mustBe exception
+        verify(mockMonthlyReturnSubmissionWorkItemRepository, times(2)).enqueue(item)
       }
 
       "must return AlreadyDeclared when submission rejects a duplicate declaration" in {
@@ -287,7 +359,7 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
           .thenReturn(Future.successful(Some(monthlyReturn)))
         when(
           mockReturnsSubmissionConnector
-            .declareMonthlyReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), any())(any(), any())
+            .declareMonthlyReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), any(), eqTo(Nil))(any(), any())
         )
           .thenReturn(Future.successful(DeclareMonthlyReturnSubmissionResult.AlreadyDeclared))
 
@@ -299,7 +371,7 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
           .thenReturn(Future.successful(Some(monthlyReturn)))
         when(
           mockReturnsSubmissionConnector
-            .declareMonthlyReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), any())(any(), any())
+            .declareMonthlyReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), any(), eqTo(Nil))(any(), any())
         )
           .thenReturn(Future.successful(DeclareMonthlyReturnSubmissionResult.OutsideDeclarationPeriod))
 
@@ -319,7 +391,7 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
           .thenReturn(Future.successful(Some(monthlyReturn)))
         when(
           mockReturnsSubmissionConnector
-            .declareMonthlyReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), any())(any(), any())
+            .declareMonthlyReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), any(), eqTo(Nil))(any(), any())
         )
           .thenReturn(Future.successful(DeclareMonthlyReturnSubmissionResult.MonthlyReturnNotFound))
 
@@ -329,11 +401,39 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
       "must return OutsideDeclarationPeriod when submission reports that the window is closed" in {
         when(mockReturnsSubmissionConnector.isReportingWindowOpen(eqTo(zReference))(any(), any()))
           .thenReturn(Future.successful(false))
+        when(
+          mockReturnsSubmissionConnector.getMonthlyReturn(eqTo(zReference), eqTo(taxYear), eqTo(month))(any(), any())
+        )
+          .thenReturn(Future.successful(None))
 
         service.declare(zReference, taxYear, month).futureValue mustBe
           DeclareMonthlyReturnResult.OutsideDeclarationPeriod
 
         verifyNoInteractions(mockMonthlyReturnRepository)
+      }
+
+      "must recover missing transfer enqueueing for an already-declared return after the window closes" in {
+        val upload         = FileUpload(
+          uploadReference,
+          FileUploadStatus.ValidationSuccess,
+          testCreatedOn,
+          Some(fileUploadDetails.copy(objectStoreFileLocation = Some("stored-location")))
+        )
+        val declaredReturn = Json.obj("declaredOn" -> testCreatedOnString)
+        val item           = MonthlyReturnSubmissionWorkItem(zReference, taxYear, month, uploadReference)
+        when(mockReturnsSubmissionConnector.isReportingWindowOpen(eqTo(zReference))(any(), any()))
+          .thenReturn(Future.successful(false))
+        when(
+          mockReturnsSubmissionConnector.getMonthlyReturn(eqTo(zReference), eqTo(taxYear), eqTo(month))(any(), any())
+        )
+          .thenReturn(Future.successful(Some(declaredReturn)))
+        when(mockMonthlyReturnRepository.get(eqTo(zReference), eqTo(taxYear), eqTo(month)))
+          .thenReturn(Future.successful(Some(monthlyReturn.copy(fileUploads = List(upload)))))
+        when(mockMonthlyReturnSubmissionWorkItemRepository.enqueue(eqTo(item)))
+          .thenReturn(Future.successful(()))
+
+        service.declare(zReference, taxYear, month).futureValue mustBe DeclareMonthlyReturnResult.AlreadyDeclared
+        verify(mockMonthlyReturnSubmissionWorkItemRepository).enqueue(item)
       }
 
       "must fail when the reporting window status check fails" in {
@@ -362,7 +462,7 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
           .thenReturn(Future.successful(Some(monthlyReturn)))
         when(
           mockReturnsSubmissionConnector
-            .declareMonthlyReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), any())(any(), any())
+            .declareMonthlyReturn(eqTo(zReference), eqTo(taxYear), eqTo(month), any(), eqTo(Nil))(any(), any())
         )
           .thenReturn(Future.failed(exception))
 
@@ -743,8 +843,11 @@ class MonthlyReturnServiceSpec extends SpecBase with BeforeAndAfterEach {
 
   private def buildService(): MonthlyReturnService =
     new MonthlyReturnService(
+      actorSystem = inject[ActorSystem],
+      appConfig = mockAppConfig,
       monthlyReturnRepository = mockMonthlyReturnRepository,
-      returnsSubmissionConnector = mockReturnsSubmissionConnector
+      returnsSubmissionConnector = mockReturnsSubmissionConnector,
+      monthlyReturnSubmissionWorkItemRepository = mockMonthlyReturnSubmissionWorkItemRepository
     )
 
   private def createdFileUpload(): FileUpload =

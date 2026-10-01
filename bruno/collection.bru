@@ -71,12 +71,11 @@ script:pre-request {
       throw new Error("auth-login-api did not return an authorization header");
     }
 
-    bru.setEnvVar("bearerToken", authorization);
     bru.setVar("bearerToken", authorization);
     bru.setVar("bearerTokenGenerated", "true");
   }
 
-  const bearerToken = bru.getVar("bearerToken") || bru.getEnvVar("bearerToken");
+  const bearerToken = bru.getVar("bearerToken");
   if (bearerToken && typeof req !== "undefined" && req.setHeader) {
     req.setHeader("Authorization", bearerToken);
   }

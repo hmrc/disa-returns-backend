@@ -18,12 +18,14 @@ package uk.gov.hmrc.disareturnsbackend.connectors
 
 import base.SpecBase
 import com.github.tomakehurst.wiremock.client.WireMock.*
+import org.apache.pekko.stream.scaladsl.Source
+import org.apache.pekko.util.ByteString
 import org.scalatest.BeforeAndAfterEach
 import play.api.Application
 import play.api.http.Status.*
 import play.api.libs.json.Json
-import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector.{CreateMonthlyReturnSubmissionResult, DeclareMonthlyReturnSubmissionResult}
-import uk.gov.hmrc.http.{HeaderCarrier, UpstreamErrorResponse}
+import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector.*
+import uk.gov.hmrc.http.*
 import uk.gov.hmrc.http.test.WireMockSupport
 
 class ReturnsSubmissionConnectorSpec extends SpecBase with WireMockSupport with BeforeAndAfterEach {
@@ -45,6 +47,7 @@ class ReturnsSubmissionConnectorSpec extends SpecBase with WireMockSupport with 
 
   private val path                = s"/disa-returns-submission/monthly/$testZReference/$testTaxYear/$testMonth"
   private val declarationPath     = s"$path/declarations"
+  private val submissionPath      = s"$path/submissions/$testUploadReference"
   private val reportingWindowPath = s"/disa-returns-submission/reporting-window/status/$testZReference"
 
   "ReturnsSubmissionConnector.isReportingWindowOpen" - {
@@ -180,12 +183,17 @@ class ReturnsSubmissionConnectorSpec extends SpecBase with WireMockSupport with 
     "must return Declared when submission declares the monthly return" in {
       stubFor(post(urlEqualTo(declarationPath)).willReturn(aResponse().withStatus(OK)))
 
-      connector.declareMonthlyReturn(testZReference, testTaxYear, testMonth, testNilReturn).futureValue mustBe
+      connector
+        .declareMonthlyReturn(testZReference, testTaxYear, testMonth, testNilReturn, List(testUploadReference))
+        .futureValue mustBe
         DeclareMonthlyReturnSubmissionResult.Declared
 
       verify(
         postRequestedFor(urlEqualTo(declarationPath))
           .withHeader("Authorization", equalTo(internalAuthToken))
+          .withRequestBody(
+            equalToJson(Json.obj("nilReturn" -> false, "pendingSubmissionIds" -> Seq(testUploadReference)).toString())
+          )
       )
     }
 
@@ -252,6 +260,47 @@ class ReturnsSubmissionConnectorSpec extends SpecBase with WireMockSupport with 
         .declareMonthlyReturn(testZReference, testTaxYear, testMonth, testNilReturn)
         .failed
         .futureValue mustBe a[UpstreamErrorResponse]
+    }
+  }
+
+  "ReturnsSubmissionConnector.sendSubmission" - {
+    "must PUT an NDJSON body and treat a repeated submission as successful" in {
+      val line = "{\"accountNumber\":\"ACC123\"}\n"
+      stubFor(put(urlEqualTo(submissionPath)).willReturn(aResponse().withStatus(CONFLICT)))
+
+      connector
+        .sendSubmission(
+          testZReference,
+          testTaxYear,
+          testMonth,
+          testUploadReference,
+          Source.single(ByteString(line))
+        )
+        .futureValue mustBe (())
+
+      verify(
+        putRequestedFor(urlEqualTo(submissionPath))
+          .withHeader("Authorization", equalTo(internalAuthToken))
+          .withHeader("Content-Type", containing("application/x-ndjson"))
+          .withRequestBody(equalTo(line))
+      )
+    }
+
+    "must not automatically retry an upstream server error" in {
+      stubFor(put(urlEqualTo(submissionPath)).willReturn(aResponse().withStatus(INTERNAL_SERVER_ERROR)))
+
+      connector
+        .sendSubmission(
+          testZReference,
+          testTaxYear,
+          testMonth,
+          testUploadReference,
+          Source.single(ByteString("{}\n"))
+        )
+        .failed
+        .futureValue mustBe a[UpstreamErrorResponse]
+
+      verify(1, putRequestedFor(urlEqualTo(submissionPath)))
     }
   }
 
