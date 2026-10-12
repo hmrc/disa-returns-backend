@@ -351,6 +351,61 @@ class MonthlyReturnSpec extends SpecBase {
     }
   }
 
+  "hasSuccessfulFileUploadMatchingChecksumAndNotMatchingReference" - {
+
+    val successfulStatuses = Seq(FileUploadStatus.ValidationSuccess, FileUploadStatus.Submitted)
+
+    "must identify another successful upload with the same checksum" in
+      successfulStatuses.foreach { status =>
+        val monthlyReturn = emptyMonthlyReturn.copy(
+          fileUploads = List(
+            FileUpload("existing-reference", status, testCreatedOn, fileUploadDetails = Some(fileUploadDetails))
+          )
+        )
+
+        withClue(s"status [${status.value}]") {
+          monthlyReturn.hasSuccessfulFileUploadMatchingChecksumAndNotMatchingReference(
+            testUploadReference,
+            testChecksum
+          ) mustBe true
+        }
+      }
+
+    "must ignore uploads that have not completed successfully" in
+      FileUploadStatus.values.filterNot(successfulStatuses.contains).foreach { status =>
+        val monthlyReturn = emptyMonthlyReturn.copy(
+          fileUploads = List(
+            FileUpload("existing-reference", status, testCreatedOn, fileUploadDetails = Some(fileUploadDetails))
+          )
+        )
+
+        withClue(s"status [${status.value}]") {
+          monthlyReturn.hasSuccessfulFileUploadMatchingChecksumAndNotMatchingReference(
+            testUploadReference,
+            testChecksum
+          ) mustBe false
+        }
+      }
+
+    "must ignore the upload being checked" in {
+      val monthlyReturn = emptyMonthlyReturn.copy(
+        fileUploads = List(
+          FileUpload(
+            testUploadReference,
+            FileUploadStatus.ValidationSuccess,
+            testCreatedOn,
+            fileUploadDetails = Some(fileUploadDetails)
+          )
+        )
+      )
+
+      monthlyReturn.hasSuccessfulFileUploadMatchingChecksumAndNotMatchingReference(
+        testUploadReference,
+        testChecksum
+      ) mustBe false
+    }
+  }
+
   "updateFileUploadProcessingDetails" - {
 
     "must store object-store locations and validation on the matching upload" in {

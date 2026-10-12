@@ -185,6 +185,63 @@ class UpscanCallbackServiceSpec extends SpecBase with BeforeAndAfterEach {
       verifyNoMonthlyReturnFileUploadWorkItemEnqueued()
     }
 
+    "must process a file upload when the checksum only exists on a validation failure" in {
+      val failedValidation                    = FileUploadValidationResult(
+        rowsValidated = 0,
+        validationErrors = 0,
+        status = FileUploadValidationStatus.InvalidFile
+      )
+      val monthlyReturnWithFailedSameChecksum = monthlyReturnWithCreatedUpload.copy(
+        fileUploads = monthlyReturnWithCreatedUpload.fileUploads :+ FileUpload(
+          reference = "failed-reference",
+          status = FileUploadStatus.ValidationFailure,
+          createdOn = testCreatedOn,
+          fileUploadDetails = Some(expectedFileUploadDetails.copy(validation = Some(failedValidation)))
+        )
+      )
+
+      stubGetMonthlyReturn(Future.successful(Some(monthlyReturnWithFailedSameChecksum)))
+      when(
+        mockMonthlyReturnRepository.completeUpscan(
+          any[String],
+          any[String],
+          any[Int],
+          any[String],
+          any[FileUploadStatus],
+          any[Option[FileUploadDetails]],
+          any[Option[FileUploadFailureReason]],
+          any[Option[String]]
+        )
+      ).thenReturn(Future.successful(true))
+      stubEnqueueMonthlyReturnFileUploadWorkItem()
+
+      service
+        .monthlyReturnUpscanCallback(
+          zReference,
+          taxYear,
+          month,
+          UpscanSuccess(
+            reference = upscanReference,
+            downloadUrl = upscanDownloadUrl,
+            uploadDetails = uploadDetails
+          )
+        )
+        .futureValue
+
+      verifyMonthlyReturnUpserted(FileUploadStatus.UpscanSuccess, Some(expectedFileUploadDetails))
+      verify(mockMonthlyReturnAuditService).auditUpscanValidationSuccess(
+        eqTo(monthlyReturnWithFailedSameChecksum),
+        eqTo(createdFileUpload),
+        eqTo(expectedFileUploadDetails)
+      )
+      verify(mockMonthlyReturnAuditService, never()).auditDuplicateFileUploadValidation(
+        any[MonthlyReturn],
+        any[String],
+        any[FileUploadDetails]
+      )
+      verifyEnqueueMonthlyReturnFileUploadWorkItem()
+    }
+
     "must not complete a file upload for a nil return" in {
       stubGetMonthlyReturn(Future.successful(Some(monthlyReturn.copy(nilReturn = true))))
 
