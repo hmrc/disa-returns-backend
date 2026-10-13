@@ -76,31 +76,9 @@ class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
     }
 
     "set the file upload status to DUPLICATE when a successfully validated checksum already exists" in {
-      postJson(monthlyPath, nilReturnFalseRequest).status                                  shouldBe CREATED
-      postJson(filesPath, Json.obj(referenceFieldName -> upscanReference)).status          shouldBe CREATED
+      postJson(monthlyPath, nilReturnFalseRequest).status shouldBe CREATED
+      createSuccessfullyValidatedUpload(upscanReference)
       postJson(filesPath, Json.obj(referenceFieldName -> duplicateUploadReference)).status shouldBe CREATED
-
-      monthlyReturnRepository
-        .completeUpscan(
-          testZReference,
-          testTaxYear,
-          testMonth,
-          upscanReference,
-          FileUploadStatus.UpscanSuccess,
-          Some(fileUploadDetails)
-        )
-        .futureValue shouldBe true
-      monthlyReturnRepository
-        .updateFileUploadProcessingDetails(
-          testZReference,
-          testTaxYear,
-          testMonth,
-          upscanReference,
-          FileUploadValidationResult(1, 0, FileUploadValidationStatus.ValidationSuccess),
-          Some("object-store-location"),
-          None
-        )
-        .futureValue shouldBe true
 
       val result = postUploadResult(successfulUploadResultFor(duplicateUploadReference))
 
@@ -110,6 +88,24 @@ class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
       monthlyReturn.status shouldBe OK
       (fileUpload(monthlyReturn.json, duplicateUploadReference) \ statusFieldName)
         .as[String]        shouldBe duplicateStatusString
+    }
+
+    "accept the same file after its successful previous upload has been removed" in {
+      postJson(monthlyPath, nilReturnFalseRequest).status shouldBe CREATED
+      createSuccessfullyValidatedUpload(upscanReference)
+
+      delete(s"$filesPath/$upscanReference").status shouldBe NO_CONTENT
+      postJson(filesPath, Json.obj(referenceFieldName -> duplicateUploadReference)).status shouldBe CREATED
+
+      postUploadResult(successfulUploadResultFor(duplicateUploadReference)).status shouldBe ACCEPTED
+
+      val monthlyReturn = get(monthlyPath)
+      val fileUploads   = (monthlyReturn.json \ fileUploadsFieldName).as[Seq[JsValue]]
+
+      monthlyReturn.status shouldBe OK
+      fileUploads.map(upload => (upload \ referenceFieldName).as[String]) shouldBe Seq(duplicateUploadReference)
+      (fileUpload(monthlyReturn.json, duplicateUploadReference) \ statusFieldName)
+        .as[String] shouldBe upscanSuccessStatusString
     }
 
     "return 202 Accepted for FAILED QUARANTINE callback payload" in {
@@ -199,6 +195,32 @@ class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
       downloadUrl = testDownloadUrl,
       uploadDetails = uploadDetails
     )
+
+  private def createSuccessfullyValidatedUpload(reference: String): Unit = {
+    postJson(filesPath, Json.obj(referenceFieldName -> reference)).status shouldBe CREATED
+
+    monthlyReturnRepository
+      .completeUpscan(
+        testZReference,
+        testTaxYear,
+        testMonth,
+        reference,
+        FileUploadStatus.UpscanSuccess,
+        Some(fileUploadDetails)
+      )
+      .futureValue shouldBe true
+    monthlyReturnRepository
+      .updateFileUploadProcessingDetails(
+        testZReference,
+        testTaxYear,
+        testMonth,
+        reference,
+        FileUploadValidationResult(1, 0, FileUploadValidationStatus.ValidationSuccess),
+        Some("object-store-location"),
+        None
+      )
+      .futureValue shouldBe true
+  }
 
   private def fileUpload(monthlyReturn: JsValue, reference: String): JsObject =
     (monthlyReturn \ fileUploadsFieldName)
