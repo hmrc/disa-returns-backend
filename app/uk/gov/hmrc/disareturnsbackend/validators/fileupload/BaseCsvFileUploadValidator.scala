@@ -71,9 +71,10 @@ abstract class BaseCsvFileUploadValidator[C <: FileUploadValidationContext](
     val (headerRowIndex, parsedHeaderRow) =
       skipRowsBeforeHeader(parser, currentRowIndex = 0, parsedRow = parser.parseNext())
     val headerRow: Option[Vector[String]] = parsedHeaderRow.map(_.toVector.map(schema.normaliseHeader))
-    val headerRowIsInvalid: Boolean       = !headerRow.exists(schema.validHeader)
 
-    if (headerRowIsInvalid) {
+    if (headerRow.isEmpty) {
+      FileUploadValidationResults.invalidFile(FileUploadValidationResults.noDataRowsErrorType)
+    } else if (!headerRow.exists(schema.validHeader)) {
       FileUploadValidationResults.invalidFile(FileUploadValidationResults.invalidHeaderErrorType)
     } else {
       skipRowsBetweenHeaderAndData(parser, currentRowIndex = headerRowIndex + 1)

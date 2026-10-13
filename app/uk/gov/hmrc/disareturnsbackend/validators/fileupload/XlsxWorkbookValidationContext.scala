@@ -31,7 +31,9 @@ final class XlsxWorkbookValidationContext[C <: FileUploadValidationContext](
   private val inlineErrorLimit = math.max(0, maxInlineErrors)
 
   // SAX event-based XML parser callbacks need local state, so we keep it here so rows are still streamed.
+  private var workbookRecognised     = false
   private var workbookHasSingleSheet = false
+  private var contentSeen            = false
   private var headerSeen             = false
   private var headerIsValid          = false
   private var rowsValidated          = 0L
@@ -39,8 +41,14 @@ final class XlsxWorkbookValidationContext[C <: FileUploadValidationContext](
   private var inlineErrors           = Vector.empty[FileUploadValidationError]
   private var errorVolumes           = Map.empty[String, Long]
 
+  def markWorkbookRecognised(): Unit =
+    workbookRecognised = true
+
   def markWorkbookHasSingleSheet(): Unit =
     workbookHasSingleSheet = true
+
+  def markContentSeen(): Unit =
+    contentSeen = true
 
   def validateHeaderRow(header: Vector[String]): Unit = {
     headerSeen = true
@@ -83,7 +91,9 @@ final class XlsxWorkbookValidationContext[C <: FileUploadValidationContext](
 
   def summary: XlsxWorkbookValidationSummary =
     XlsxWorkbookValidationSummary(
+      workbookRecognised = workbookRecognised,
       workbookHasSingleSheet = workbookHasSingleSheet,
+      contentSeen = contentSeen,
       headerSeen = headerSeen,
       headerIsValid = headerIsValid,
       rowsValidated = rowsValidated,

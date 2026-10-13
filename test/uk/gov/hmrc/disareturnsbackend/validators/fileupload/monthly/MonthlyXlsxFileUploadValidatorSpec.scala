@@ -16,8 +16,7 @@
 
 package uk.gov.hmrc.disareturnsbackend.validators.fileupload.monthly
 
-import uk.gov.hmrc.disareturnsbackend.validators.fileupload.FileUploadRow
-import uk.gov.hmrc.disareturnsbackend.validators.fileupload.FileUploadValidatorResult
+import uk.gov.hmrc.disareturnsbackend.validators.fileupload.{FileUploadRow, FileUploadValidationResults, FileUploadValidatorResult}
 
 import base.SpecBase
 import org.apache.pekko.actor.ActorSystem
@@ -28,6 +27,7 @@ import uk.gov.hmrc.disareturnsbackend.config.AppConfig
 import uk.gov.hmrc.disareturnsbackend.models.FileUploadValidationStatus
 
 import java.nio.file.{Files, Path}
+import java.nio.file.Paths
 import scala.concurrent.Future
 import scala.util.Using
 
@@ -49,6 +49,24 @@ class MonthlyXlsxFileUploadValidatorSpec extends SpecBase {
       result.validation.rowsValidated mustBe 1
       result.validation.validationErrors mustBe 0
       result.errorFileWritten mustBe false
+    }
+
+    "must return NoDataRows for the blank XLSX fixture" in {
+      val errorsFile = Files.createTempFile("disa-errors", ".xlsx")
+
+      try {
+        val result = inject[MonthlyXlsxFileUploadValidator]
+          .validate(
+            Paths.get("conf/test-only/file-upload/monthly/blank-invalid.xlsx"),
+            errorsFile,
+            context
+          )
+          .futureValue
+
+        result.validation.status mustBe FileUploadValidationStatus.InvalidFile
+        result.validation.invalidFileReason mustBe Some(FileUploadValidationResults.noDataRowsErrorType)
+        result.errorFileWritten mustBe false
+      } finally Files.deleteIfExists(errorsFile)
     }
 
     "must return InvalidFile for an invalid header and not process later rows" in {

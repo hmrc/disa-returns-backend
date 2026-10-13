@@ -19,7 +19,9 @@ package uk.gov.hmrc.disareturnsbackend.validators.fileupload
 import uk.gov.hmrc.disareturnsbackend.models.FileUploadValidationError
 
 final case class XlsxWorkbookValidationSummary(
+  workbookRecognised: Boolean,
   workbookHasSingleSheet: Boolean,
+  contentSeen: Boolean,
   headerSeen: Boolean,
   headerIsValid: Boolean,
   rowsValidated: Long,

@@ -66,6 +66,7 @@ abstract class BaseXlsxFileUploadValidator[C <: FileUploadValidationContext](
 
   private def parseWorkbook(file: Path, tracker: XlsxWorkbookValidationContext[C]): Unit =
     Using.resource(OPCPackage.open(file.toFile, PackageAccess.READ)) { pkg =>
+      tracker.markWorkbookRecognised()
       val reader = new XSSFReader(pkg)
       parseOnlySheetIfPresent(pkg, reader, tracker)
     }
@@ -109,6 +110,7 @@ abstract class BaseXlsxFileUploadValidator[C <: FileUploadValidationContext](
   private def createEventParser(tracker: XlsxWorkbookValidationContext[C]): XlsxFileUploadEventParser =
     new XlsxFileUploadEventParser(
       schema = schema,
+      onNonEmptyCell = () => tracker.markContentSeen(),
       onHeader = tracker.validateHeaderRow,
       onDataRow = tracker.validateDataRow
     )
@@ -123,13 +125,15 @@ abstract class BaseXlsxFileUploadValidator[C <: FileUploadValidationContext](
     val isInvalidFile: Boolean         = isInvalidWorkbookException(exception) && noRowsWereValidated && noErrorFileWasWritten
 
     exception match {
-      case InvalidHeaderException if isInvalidFile  =>
+      case InvalidHeaderException if isInvalidFile          =>
         FileUploadValidationResults.invalidFile(FileUploadValidationResults.invalidHeaderErrorType)
-      case MultipleSheetsException if isInvalidFile =>
+      case MultipleSheetsException if isInvalidFile         =>
         FileUploadValidationResults.invalidFile(FileUploadValidationResults.invalidWorkbookErrorType)
-      case _ if isInvalidFile                       =>
+      case _ if isInvalidFile && summary.workbookRecognised =>
+        FileUploadValidationResults.invalidFile(FileUploadValidationResults.invalidWorkbookErrorType)
+      case _ if isInvalidFile                               =>
         FileUploadValidationResults.invalidFile(FileUploadValidationResults.invalidFileErrorType)
-      case _                                        =>
+      case _                                                =>
         throw exception
     }
   }
@@ -137,6 +141,7 @@ abstract class BaseXlsxFileUploadValidator[C <: FileUploadValidationContext](
   private def createValidationResult(summary: XlsxWorkbookValidationSummary): FileUploadValidatorResult = {
 
     val workbookDoesNotHaveSingleSheet = !summary.workbookHasSingleSheet
+    val workbookIsEmpty                = !summary.contentSeen
     val headerWasNotSeen               = !summary.headerSeen
     val headerIsInvalid                = !summary.headerIsValid
     val noRowsWereValidated            = summary.rowsValidated == 0
@@ -144,6 +149,8 @@ abstract class BaseXlsxFileUploadValidator[C <: FileUploadValidationContext](
 
     if (workbookDoesNotHaveSingleSheet) {
       FileUploadValidationResults.invalidFile(invalidWorkbookErrorType)
+    } else if (workbookIsEmpty) {
+      FileUploadValidationResults.invalidFile(noDataRowsErrorType)
     } else if (headerIsInvalid || headerWasNotSeen) {
       FileUploadValidationResults.invalidFile(invalidHeaderErrorType)
     } else if (noRowsWereValidated) {

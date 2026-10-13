@@ -25,6 +25,7 @@ import scala.collection.mutable
 
 final class XlsxFileUploadEventParser(
   schema: FileUploadSchema,
+  onNonEmptyCell: () => Unit,
   onHeader: Vector[String] => Unit,
   onDataRow: Vector[String] => Unit
 ) extends SheetContentsHandler {
@@ -37,7 +38,13 @@ final class XlsxFileUploadEventParser(
 
   override def cell(cellReference: String, formattedValue: String, comment: XSSFComment): Unit = {
     val columnIndex = new CellReference(cellReference).getCol
-    rowCells.update(columnIndex, Option(formattedValue).getOrElse(""))
+    val cellValue   = Option(formattedValue).getOrElse("").trim
+
+    if (cellValue.nonEmpty) {
+      onNonEmptyCell()
+    }
+
+    rowCells.update(columnIndex, cellValue)
   }
 
   override def endRow(rowNum: Int): Unit = {

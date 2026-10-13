@@ -27,6 +27,7 @@ class XlsxFileUploadEventParserSpec extends SpecBase {
       var dataRows = Vector.empty[Vector[String]]
       val parser   = new XlsxFileUploadEventParser(
         TestFileUploadSchema,
+        () => (),
         header => headers = header,
         row => dataRows = dataRows :+ row
       )
@@ -55,7 +56,7 @@ class XlsxFileUploadEventParserSpec extends SpecBase {
 
     "must normalise headers through the schema" in {
       var headers = Vector.empty[String]
-      val parser  = new XlsxFileUploadEventParser(TestFileUploadSchema, header => headers = header, _ => ())
+      val parser  = new XlsxFileUploadEventParser(TestFileUploadSchema, () => (), header => headers = header, _ => ())
 
       parser.startRow(2)
       parser.cell("A3", "  Column\u00a0 A  ", null)
@@ -67,7 +68,8 @@ class XlsxFileUploadEventParserSpec extends SpecBase {
 
     "must cap materialised cells at schema headers length plus one" in {
       var dataRows = Vector.empty[Vector[String]]
-      val parser   = new XlsxFileUploadEventParser(TestFileUploadSchema, _ => (), row => dataRows = dataRows :+ row)
+      val parser   =
+        new XlsxFileUploadEventParser(TestFileUploadSchema, () => (), _ => (), row => dataRows = dataRows :+ row)
 
       parser.startRow(4)
       parser.cell("A5", "value-a", null)
@@ -75,6 +77,23 @@ class XlsxFileUploadEventParserSpec extends SpecBase {
       parser.endRow(4)
 
       dataRows mustBe Vector(Vector("value-a", "", ""))
+    }
+
+    "must report non-empty cells" in {
+      var nonEmptyCellsSeen = 0
+      val parser            = new XlsxFileUploadEventParser(
+        TestFileUploadSchema,
+        () => nonEmptyCellsSeen += 1,
+        _ => (),
+        _ => ()
+      )
+
+      parser.startRow(2)
+      parser.cell("A3", "", null)
+      parser.cell("B3", "value", null)
+      parser.endRow(2)
+
+      nonEmptyCellsSeen mustBe 1
     }
   }
 

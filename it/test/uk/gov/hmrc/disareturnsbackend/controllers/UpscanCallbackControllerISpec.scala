@@ -76,7 +76,7 @@ class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
     }
 
     "set the file upload status to DUPLICATE when a successfully validated checksum already exists" in {
-      postJson(monthlyPath, nilReturnFalseRequest).status shouldBe CREATED
+      postJson(monthlyPath, nilReturnFalseRequest).status                                  shouldBe CREATED
       createSuccessfullyValidatedUpload(upscanReference)
       postJson(filesPath, Json.obj(referenceFieldName -> duplicateUploadReference)).status shouldBe CREATED
 
@@ -94,7 +94,7 @@ class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
       postJson(monthlyPath, nilReturnFalseRequest).status shouldBe CREATED
       createSuccessfullyValidatedUpload(upscanReference)
 
-      delete(s"$filesPath/$upscanReference").status shouldBe NO_CONTENT
+      delete(s"$filesPath/$upscanReference").status                                        shouldBe NO_CONTENT
       postJson(filesPath, Json.obj(referenceFieldName -> duplicateUploadReference)).status shouldBe CREATED
 
       postUploadResult(successfulUploadResultFor(duplicateUploadReference)).status shouldBe ACCEPTED
@@ -102,10 +102,10 @@ class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
       val monthlyReturn = get(monthlyPath)
       val fileUploads   = (monthlyReturn.json \ fileUploadsFieldName).as[Seq[JsValue]]
 
-      monthlyReturn.status shouldBe OK
+      monthlyReturn.status                                                shouldBe OK
       fileUploads.map(upload => (upload \ referenceFieldName).as[String]) shouldBe Seq(duplicateUploadReference)
       (fileUpload(monthlyReturn.json, duplicateUploadReference) \ statusFieldName)
-        .as[String] shouldBe upscanSuccessStatusString
+        .as[String]                                                       shouldBe upscanSuccessStatusString
     }
 
     "return 202 Accepted for FAILED QUARANTINE callback payload" in {
