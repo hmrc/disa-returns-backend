@@ -92,6 +92,15 @@ class BaseCsvFileUploadValidatorSpec extends SpecBase {
       result.errorVolumes mustBe Map(FileUploadValidationResults.noDataRowsErrorType -> 1L)
     }
 
+    "must return NoDataRows for an empty CSV" in {
+      val result = validateCsv("").futureValue
+
+      result.validation.status mustBe FileUploadValidationStatus.InvalidFile
+      result.validation.rowsValidated mustBe 0
+      result.validation.invalidFileReason mustBe Some(FileUploadValidationResults.noDataRowsErrorType)
+      result.errorVolumes mustBe Map(FileUploadValidationResults.noDataRowsErrorType -> 1L)
+    }
+
     "must return InvalidFile for an empty header row" in {
       val result = validateCsv(csv(Seq(Vector("value-a", "value-b")), headers = Vector("", ""))).futureValue
 

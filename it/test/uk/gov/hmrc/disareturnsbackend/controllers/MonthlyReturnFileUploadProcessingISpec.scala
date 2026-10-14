@@ -51,6 +51,7 @@ class MonthlyReturnFileUploadProcessingISpec
   private val validationFailedValue  = "ValidationFailed"
   private val invalidFileValue       = "InvalidFile"
   private val invalidHeaderValue     = "InvalidHeader"
+  private val noDataRowsValue        = "NoDataRows"
 
   private val expectedRowsValidated         = 1L
   private val expectedNoValidationErrors    = 0L
@@ -114,12 +115,17 @@ class MonthlyReturnFileUploadProcessingISpec
   )
 
   private val invalidFileFixtures = Seq(
-    csvFixture("invalid header", "invalid-header"),
-    xlsxFixture("invalid header", "invalid-header"),
-    csvFixture("blank invalid", "blank-invalid"),
-    xlsxFixture("blank invalid", "blank-invalid"),
-    csvFixture("garbage invalid", "garbage-invalid"),
-    xlsxFixture("garbage invalid", "garbage-invalid")
+    csvFixture("invalid header", "invalid-header")    -> invalidHeaderValue,
+    xlsxFixture("invalid header", "invalid-header")   -> invalidHeaderValue,
+    csvFixture("blank invalid", "blank-invalid")      -> noDataRowsValue,
+    xlsxFixture("blank invalid", "blank-invalid")     -> noDataRowsValue,
+    csvFixture("garbage invalid", "garbage-invalid")  -> invalidHeaderValue,
+    xlsxFixture("garbage invalid", "garbage-invalid") -> invalidFileValue
+  )
+
+  private val garbageRetryFixtures = Seq(
+    csvFixture("garbage invalid retry", "garbage-invalid")  -> invalidHeaderValue,
+    xlsxFixture("garbage invalid retry", "garbage-invalid") -> invalidFileValue
   )
 
   "monthly return file-upload processing" should {
@@ -144,23 +150,22 @@ class MonthlyReturnFileUploadProcessingISpec
         assertInlineErrorLimitExceededFileProcessed(fixture)
     }
 
-    invalidFileFixtures.foreach { fixture =>
+    invalidFileFixtures.foreach { case (fixture, expectedReason) =>
       s"process ${fixture.scenarioName} as InvalidFile without uploading an errors workbook" in
-        assertInvalidFileProcessed(fixture)
+        assertInvalidFileProcessed(fixture, expectedReason)
     }
 
-    "process the same garbage invalid CSV again after its first validation failure" in {
-      val fixture       = csvFixture("garbage invalid retry", "garbage-invalid")
-      val firstScenario = createScenario(fixture)
-      val retryScenario = createScenario(fixture.copy(reference = s"${fixture.reference}-retry"))
+    garbageRetryFixtures.foreach { case (fixture, expectedReason) =>
+      s"process the same ${fixture.scenarioName} file again after its first validation failure" in {
+        val firstScenario = createScenario(fixture)
+        val retryScenario = createScenario(fixture.copy(reference = s"${fixture.reference}-retry"))
 
-      createReturnUploadAndSendReadyCallback(firstScenario)
-      val firstUpload = assertInvalidFileWithoutErrorsWorkbook(firstScenario)
-      assertInvalidHeader(firstUpload)
+        createReturnUploadAndSendReadyCallback(firstScenario)
+        assertInvalidFileWithoutErrorsWorkbook(firstScenario, expectedReason)
 
-      createUploadAndSendReadyCallback(retryScenario)
-      val retryUpload = assertInvalidFileWithoutErrorsWorkbook(retryScenario)
-      assertInvalidHeader(retryUpload)
+        createUploadAndSendReadyCallback(retryScenario)
+        assertInvalidFileWithoutErrorsWorkbook(retryScenario, expectedReason)
+      }
     }
   }
 
@@ -255,12 +260,12 @@ class MonthlyReturnFileUploadProcessingISpec
     )
   }
 
-  private def assertInvalidFileProcessed(fixture: UploadFixture): Unit = {
+  private def assertInvalidFileProcessed(fixture: UploadFixture, expectedReason: String): Unit = {
     val scenario = createScenario(fixture)
 
     createReturnUploadAndSendReadyCallback(scenario)
 
-    assertInvalidFileWithoutErrorsWorkbook(scenario)
+    assertInvalidFileWithoutErrorsWorkbook(scenario, expectedReason)
   }
 
   private def createReturnUploadAndSendReadyCallback(
@@ -304,7 +309,7 @@ class MonthlyReturnFileUploadProcessingISpec
     assertErrorsWorkbookContainsRows(scenario, Seq(expectedErrorWorkbookRow -> expectedRowLevelErrorCodes))
   }
 
-  private def assertInvalidFileWithoutErrorsWorkbook(scenario: FileScenario): JsObject = {
+  private def assertInvalidFileWithoutErrorsWorkbook(scenario: FileScenario, expectedReason: String): Unit = {
     val fileUpload = eventuallyProcessedFileUpload(scenario)
     val details    = (fileUpload \ fileUploadDetailsFieldName).as[JsObject]
     val validation = (details \ validationFieldName).as[JsObject]
@@ -314,16 +319,12 @@ class MonthlyReturnFileUploadProcessingISpec
     (validation \ rowsValidatedFieldName).as[Long]                           shouldBe expectedNoValidationErrors
     (validation \ validationErrorsFieldName).as[Long]                        shouldBe expectedNoValidationErrors
     (validation \ inlineErrorsFieldName).asOpt[Seq[JsObject]].getOrElse(Nil) shouldBe Nil
+    (validation \ invalidFileReasonFieldName).as[String]                     shouldBe expectedReason
     (details \ objectStoreFileLocationFieldName).as[String]                  shouldBe scenario.reference
     (details \ objectStoreFileErrorsLocationFieldName).toOption              shouldBe None
     verifyObjectStorePut(scenario.reference)
     verifyObjectStorePutNotMade(scenario.errorsReference)
-    fileUpload
   }
-
-  private def assertInvalidHeader(fileUpload: JsObject): Unit =
-    (fileUpload \ fileUploadDetailsFieldName \ validationFieldName \ invalidFileReasonFieldName)
-      .as[String] shouldBe invalidHeaderValue
 
   private def eventuallyProcessedFileUpload(scenario: FileScenario): JsObject =
     eventually {

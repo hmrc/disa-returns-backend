@@ -134,6 +134,15 @@ class BaseXlsxFileUploadValidatorSpec extends SpecBase {
       result.errorVolumes mustBe Map(FileUploadValidationResults.noDataRowsErrorType -> 1L)
     }
 
+    "must return NoDataRows for a valid empty workbook" in {
+      val result = validateWorkbook(rows = Nil, createTemplateRows = false).futureValue
+
+      result.validation.status mustBe FileUploadValidationStatus.InvalidFile
+      result.validation.rowsValidated mustBe 0
+      result.validation.invalidFileReason mustBe Some(FileUploadValidationResults.noDataRowsErrorType)
+      result.errorVolumes mustBe Map(FileUploadValidationResults.noDataRowsErrorType -> 1L)
+    }
+
     "must return InvalidFile for an empty header row" in {
       val result = validateWorkbook(headers = Vector("", ""), rows = Seq(Vector("value-a", "value-b"))).futureValue
 
@@ -303,10 +312,11 @@ class BaseXlsxFileUploadValidatorSpec extends SpecBase {
     farRightCell: Option[(String, String)] = None,
     addExtraSheet: Boolean = false,
     createPrimarySheet: Boolean = true,
+    createTemplateRows: Boolean = true,
     deleteErrorsFile: Boolean = true
   ): Future[FileUploadValidatorResult] = {
     val file = Files.createTempFile("disa-upload", ".xlsx")
-    writeWorkbook(file, headers, rows, farRightCell, addExtraSheet, createPrimarySheet)
+    writeWorkbook(file, headers, rows, farRightCell, addExtraSheet, createPrimarySheet, createTemplateRows)
 
     validator.validate(file, errorsFile, context).andThen { case _ =>
       Files.deleteIfExists(file)
@@ -320,20 +330,24 @@ class BaseXlsxFileUploadValidatorSpec extends SpecBase {
     rows: Seq[Vector[String]],
     farRightCell: Option[(String, String)],
     addExtraSheet: Boolean,
-    createPrimarySheet: Boolean
+    createPrimarySheet: Boolean,
+    createTemplateRows: Boolean
   ): Unit =
     Using.resource(new XSSFWorkbook()) { workbook =>
       if (createPrimarySheet) {
-        val sheet     = workbook.createSheet("Test upload")
-        sheet.createRow(TestFileUploadSchema.xlsxRuleRowIndexZeroBased).createCell(0).setCellValue("Rules")
-        val headerRow = sheet.createRow(TestFileUploadSchema.xlsxHeaderRowIndexZeroBased)
-        headers.zipWithIndex.foreach { case (header, index) => headerRow.createCell(index).setCellValue(header) }
+        val sheet = workbook.createSheet("Test upload")
 
-        rows.zipWithIndex.foreach { case (values, rowIndex) =>
-          val row = sheet.createRow(TestFileUploadSchema.xlsxDataStartRowIndexZeroBased + rowIndex)
-          values.zipWithIndex.foreach { case (value, columnIndex) => row.createCell(columnIndex).setCellValue(value) }
-          farRightCell.foreach { case (cellReference, value) =>
-            row.createCell(new CellReference(cellReference).getCol).setCellValue(value)
+        if (createTemplateRows) {
+          sheet.createRow(TestFileUploadSchema.xlsxRuleRowIndexZeroBased).createCell(0).setCellValue("Rules")
+          val headerRow = sheet.createRow(TestFileUploadSchema.xlsxHeaderRowIndexZeroBased)
+          headers.zipWithIndex.foreach { case (header, index) => headerRow.createCell(index).setCellValue(header) }
+
+          rows.zipWithIndex.foreach { case (values, rowIndex) =>
+            val row = sheet.createRow(TestFileUploadSchema.xlsxDataStartRowIndexZeroBased + rowIndex)
+            values.zipWithIndex.foreach { case (value, columnIndex) => row.createCell(columnIndex).setCellValue(value) }
+            farRightCell.foreach { case (cellReference, value) =>
+              row.createCell(new CellReference(cellReference).getCol).setCellValue(value)
+            }
           }
         }
       }
