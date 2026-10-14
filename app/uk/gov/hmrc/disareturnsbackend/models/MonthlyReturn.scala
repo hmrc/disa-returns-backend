@@ -133,9 +133,12 @@ final case class MonthlyReturn(
       }
     }
 
-  def hasFileUploadMatchingChecksumAndNotMatchingReference(reference: String, checksum: String): Boolean =
+  def hasSuccessfulFileUploadMatchingChecksumAndNotMatchingReference(reference: String, checksum: String): Boolean =
     fileUploads.exists { fileUpload =>
-      fileUpload.reference != reference && fileUpload.hasMatchingChecksum(checksum)
+      val hasSuccessfulStatus =
+        fileUpload.status == FileUploadStatus.ValidationSuccess || fileUpload.status == FileUploadStatus.Submitted
+
+      fileUpload.reference != reference && hasSuccessfulStatus && fileUpload.hasMatchingChecksum(checksum)
     }
 
   def markUpscanExpired(reference: String, updatedOn: Instant): MonthlyReturn = {

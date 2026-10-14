@@ -131,7 +131,7 @@ class UpscanCallbackService @Inject() (
             case Some(details) =>
               val isDuplicateSuccessfulUpload =
                 status == FileUploadStatus.UpscanSuccess && monthlyReturn
-                  .hasFileUploadMatchingChecksumAndNotMatchingReference(
+                  .hasSuccessfulFileUploadMatchingChecksumAndNotMatchingReference(
                     reference,
                     details.checksum
                   )

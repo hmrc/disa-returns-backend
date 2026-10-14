@@ -22,7 +22,8 @@ import play.api.http.Status.*
 import play.api.libs.json.*
 import play.api.libs.ws.readableAsString
 import uk.gov.hmrc.disareturnsbackend.BaseIntegrationSpec
-import uk.gov.hmrc.disareturnsbackend.models.{UpscanDetails, UpscanFailure, UpscanFailureDetails, UpscanFailureReason, UpscanResult, UpscanSuccess}
+import uk.gov.hmrc.disareturnsbackend.models.*
+import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnRepository
 
 class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
 
@@ -35,6 +36,7 @@ class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
 
   private val upscanReference          = testUploadReference
   private val duplicateUploadReference = s"$testUploadReference-duplicate"
+  private val monthlyReturnRepository  = inject[MonthlyReturnRepository]
 
   private val uploadDetails = UpscanDetails(
     fileName = testFileName,
@@ -48,6 +50,15 @@ class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
     reference = upscanReference,
     downloadUrl = testDownloadUrl,
     uploadDetails = uploadDetails
+  )
+
+  private val fileUploadDetails = FileUploadDetails(
+    fileName = uploadDetails.fileName,
+    fileMimeType = uploadDetails.fileMimeType,
+    uploadTimestamp = uploadDetails.uploadTimestamp,
+    checksum = uploadDetails.checksum,
+    size = uploadDetails.size,
+    upscanDownloadUrl = testDownloadUrl
   )
 
   "POST to upscan callback" should {
@@ -64,12 +75,32 @@ class UpscanCallbackControllerISpec extends BaseIntegrationSpec {
       result.status shouldBe ACCEPTED
     }
 
-    "set the file upload status to DUPLICATE when the checksum already exists" in {
+    "set the file upload status to DUPLICATE when a successfully validated checksum already exists" in {
       postJson(monthlyPath, nilReturnFalseRequest).status                                  shouldBe CREATED
       postJson(filesPath, Json.obj(referenceFieldName -> upscanReference)).status          shouldBe CREATED
       postJson(filesPath, Json.obj(referenceFieldName -> duplicateUploadReference)).status shouldBe CREATED
 
-      postUploadResult(successfulUploadResult).status shouldBe ACCEPTED
+      monthlyReturnRepository
+        .completeUpscan(
+          testZReference,
+          testTaxYear,
+          testMonth,
+          upscanReference,
+          FileUploadStatus.UpscanSuccess,
+          Some(fileUploadDetails)
+        )
+        .futureValue shouldBe true
+      monthlyReturnRepository
+        .updateFileUploadProcessingDetails(
+          testZReference,
+          testTaxYear,
+          testMonth,
+          upscanReference,
+          FileUploadValidationResult(1, 0, FileUploadValidationStatus.ValidationSuccess),
+          Some("object-store-location"),
+          None
+        )
+        .futureValue shouldBe true
 
       val result = postUploadResult(successfulUploadResultFor(duplicateUploadReference))
 
