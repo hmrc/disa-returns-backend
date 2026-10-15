@@ -18,7 +18,8 @@ package uk.gov.hmrc.disareturnsbackend.validators.fileupload.monthly
 
 import base.SpecBase
 import org.apache.poi.xssf.usermodel.XSSFWorkbook
-import uk.gov.hmrc.disareturnsbackend.models.FileUploadValidationStatus
+import uk.gov.hmrc.disareturnsbackend.models.{FileUploadValidationError, FileUploadValidationStatus}
+import uk.gov.hmrc.disareturnsbackend.validators.fileupload.monthly.MonthlyFileUploadErrorCodes.InvalidRowColumnCount
 import uk.gov.hmrc.disareturnsbackend.validators.fileupload.FileUploadValidatorResult
 
 import java.nio.charset.StandardCharsets
@@ -82,6 +83,47 @@ class MonthlyCsvFileUploadValidatorSpec extends SpecBase {
           sheet.getRow(1).getCell(1).getStringCellValue mustBe expectedRowValidationWorkbookErrorCodes
         }
       } finally Files.deleteIfExists(errorsFile)
+    }
+
+    "must report only E001 when a row has too few columns" in {
+      val result = validateCsv(csv(validDataRow.dropRight(1))).futureValue
+
+      result.validation.status mustBe FileUploadValidationStatus.ValidationFailed
+      result.validation.rowsValidated mustBe 1
+      result.validation.validationErrors mustBe 1
+      result.validation.inlineErrors mustBe List(FileUploadValidationError(1, List(InvalidRowColumnCount)))
+      result.errorFileWritten mustBe true
+    }
+
+    "must give E001 precedence over cell errors when a row has too many columns" in {
+      val result = validateCsv(csv(validDataRow.updated(0, "") :+ "unexpected")).futureValue
+
+      result.validation.status mustBe FileUploadValidationStatus.ValidationFailed
+      result.validation.rowsValidated mustBe 1
+      result.validation.validationErrors mustBe 1
+      result.validation.inlineErrors mustBe List(FileUploadValidationError(1, List(InvalidRowColumnCount)))
+      result.errorFileWritten mustBe true
+    }
+
+    "must retain errors from other rows when a later row has E001" in {
+      val result = validateCsv(
+        csv(Seq(validDataRow.updated(0, ""), validDataRow.updated(0, "") :+ "unexpected"))
+      ).futureValue
+
+      result.validation.status mustBe FileUploadValidationStatus.ValidationFailed
+      result.validation.rowsValidated mustBe 2
+      result.validation.validationErrors mustBe 2
+      result.validation.inlineErrors mustBe List(
+        FileUploadValidationError(1, List(accountNumberRequiredErrorCode)),
+        FileUploadValidationError(2, List(InvalidRowColumnCount))
+      )
+    }
+
+    "must treat a quoted comma as part of one field" in {
+      val escapedRow = validDataRow.updated(0, "\"ACC,123\"").mkString(",")
+      val content    = s"${MonthlyFileUploadTemplate.headers.mkString(",")}\n$escapedRow"
+
+      validateCsv(content).futureValue.validation.status mustBe FileUploadValidationStatus.ValidationSuccess
     }
 
     "must validate generated rows without accumulating row errors" in {

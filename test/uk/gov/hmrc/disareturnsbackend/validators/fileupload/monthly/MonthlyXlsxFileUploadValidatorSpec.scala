@@ -24,7 +24,8 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{never, verify}
 import uk.gov.hmrc.disareturnsbackend.config.AppConfig
-import uk.gov.hmrc.disareturnsbackend.models.FileUploadValidationStatus
+import uk.gov.hmrc.disareturnsbackend.models.{FileUploadValidationError, FileUploadValidationStatus}
+import uk.gov.hmrc.disareturnsbackend.validators.fileupload.monthly.MonthlyFileUploadErrorCodes.InvalidRowColumnCount
 
 import java.nio.file.{Files, Path}
 import java.nio.file.Paths
@@ -110,12 +111,45 @@ class MonthlyXlsxFileUploadValidatorSpec extends SpecBase {
     }
 
     "must cap sparse far-right cells without huge row allocation" in {
-      val result = validateWorkbook(Seq(validDataRow), farRightCell = Some("XFD3" -> "unexpected")).futureValue
+      val result = validateWorkbook(
+        Seq(validDataRow.updated(0, "")),
+        farRightCell = Some("XFD3" -> "unexpected")
+      ).futureValue
 
       result.validation.status mustBe FileUploadValidationStatus.ValidationFailed
       result.validation.rowsValidated mustBe 1
       result.validation.validationErrors mustBe 1
+      result.validation.inlineErrors mustBe List(FileUploadValidationError(1, List(InvalidRowColumnCount)))
       result.errorFileWritten mustBe true
+    }
+
+    "must materialise omitted trailing cells as blanks" in {
+      val result = validateWorkbook(validDataRow.dropRight(3)).futureValue
+
+      result.validation.status mustBe FileUploadValidationStatus.ValidationSuccess
+      result.validation.rowsValidated mustBe 1
+    }
+
+    "must ignore a stored empty cell beyond column S" in {
+      val result = validateWorkbook(Seq(validDataRow), farRightCell = Some("XFD3" -> "")).futureValue
+
+      result.validation.status mustBe FileUploadValidationStatus.ValidationSuccess
+      result.validation.rowsValidated mustBe 1
+    }
+
+    "must retain errors from other rows when a later row has E001" in {
+      val result = validateWorkbook(
+        Seq(validDataRow.updated(0, ""), validDataRow.updated(0, "")),
+        farRightCell = Some("T4" -> "unexpected")
+      ).futureValue
+
+      result.validation.status mustBe FileUploadValidationStatus.ValidationFailed
+      result.validation.rowsValidated mustBe 2
+      result.validation.validationErrors mustBe 2
+      result.validation.inlineErrors mustBe List(
+        FileUploadValidationError(1, List(accountNumberRequiredErrorCode)),
+        FileUploadValidationError(2, List(InvalidRowColumnCount))
+      )
     }
   }
 
@@ -154,12 +188,14 @@ class MonthlyXlsxFileUploadValidatorSpec extends SpecBase {
       rows.zipWithIndex.foreach { case (values, rowIndex) =>
         val row = sheet.createRow(MonthlyFileUploadTemplate.xlsxDataStartRowIndexZeroBased + rowIndex)
         values.zipWithIndex.foreach { case (value, columnIndex) => row.createCell(columnIndex).setCellValue(value) }
-        farRightCell.foreach { case (cellReference, value) =>
-          row
-            .createCell(
-              org.apache.poi.ss.util.CellReference.convertColStringToIndex(cellReference.takeWhile(_.isLetter))
-            )
-            .setCellValue(value)
+        if (rowIndex == rows.size - 1) {
+          farRightCell.foreach { case (cellReference, value) =>
+            row
+              .createCell(
+                org.apache.poi.ss.util.CellReference.convertColStringToIndex(cellReference.takeWhile(_.isLetter))
+              )
+              .setCellValue(value)
+          }
         }
       }
 

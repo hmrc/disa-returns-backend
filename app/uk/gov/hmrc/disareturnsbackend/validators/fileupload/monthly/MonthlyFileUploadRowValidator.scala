@@ -24,9 +24,8 @@ import uk.gov.hmrc.disareturnsbackend.validators.fileupload.{FileUploadRow, File
 class MonthlyFileUploadRowValidator @Inject() ()
     extends FileUploadRowValidator[MonthlyReturnFileUploadValidationContext] {
 
-  private val validators: Vector[MonthlyFileUploadColumnValidator] =
+  private val cellValidators: Vector[MonthlyFileUploadColumnValidator] =
     Vector(
-      RowColumnCountValidator,
       AccountNumberValidator,
       NationalInsuranceNumberValidator,
       FirstNameValidator,
@@ -48,8 +47,12 @@ class MonthlyFileUploadRowValidator @Inject() ()
       LisaClosureReasonValidator
     )
 
-  override def validate(row: FileUploadRow, context: MonthlyReturnFileUploadValidationContext): Seq[String] =
-    validators.flatMap(_.validate(row, context))
+  override def validate(row: FileUploadRow, context: MonthlyReturnFileUploadValidationContext): Seq[String] = {
+    val rowColumnCountErrors = RowColumnCountValidator.validate(row, context)
+
+    if (rowColumnCountErrors.nonEmpty) rowColumnCountErrors
+    else cellValidators.flatMap(_.validate(row, context))
+  }
 
   def isInCurrentOrPreviousReportingMonth(date: LocalDate, taxYear: String, month: Int): Boolean =
     ReportingPeriodValidator.isInCurrentOrPreviousReportingMonth(date, taxYear, month)

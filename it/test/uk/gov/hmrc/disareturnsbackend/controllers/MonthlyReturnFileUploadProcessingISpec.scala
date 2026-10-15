@@ -62,6 +62,7 @@ class MonthlyReturnFileUploadProcessingISpec
   private val configuredInlineErrorLimit    = 2
   private val expectedRowsValidatedForLimit = 3L
   private val expectedValidationErrorsLimit = 9L
+  private val invalidRowColumnCountErrorCode = "E001"
 
   private val expectedInlineErrorCodes     = Seq(
     invalidNationalInsuranceErrorCode,
@@ -104,6 +105,11 @@ class MonthlyReturnFileUploadProcessingISpec
     xlsxFixture("row-level errors invalid", "row-errors-invalid")
   )
 
+  private val rowColumnCountInvalidFixtures = Seq(
+    csvFixture("row column count invalid", "row-column-count-invalid"),
+    xlsxFixture("row column count invalid", "row-column-count-invalid")
+  )
+
   private val emptyRowInvalidFixtures = Seq(
     csvFixture("empty row invalid", "empty-row-invalid"),
     xlsxFixture("empty row invalid", "empty-row-invalid")
@@ -138,6 +144,11 @@ class MonthlyReturnFileUploadProcessingISpec
     rowErrorsInvalidFixtures.foreach { fixture =>
       s"process ${fixture.scenarioName} with row-level validation errors and upload an errors workbook" in
         assertRowErrorsFileProcessed(fixture)
+    }
+
+    rowColumnCountInvalidFixtures.foreach { fixture =>
+      s"process ${fixture.scenarioName} with E001 taking precedence over cell errors" in
+        assertRowColumnCountFileProcessed(fixture)
     }
 
     emptyRowInvalidFixtures.foreach { fixture =>
@@ -197,6 +208,36 @@ class MonthlyReturnFileUploadProcessingISpec
     createReturnUploadAndSendReadyCallback(scenario, expectErrorsUpload = true)
 
     assertValidationFailedWithErrorsWorkbook(scenario)
+  }
+
+  private def assertRowColumnCountFileProcessed(fixture: UploadFixture): Unit = {
+    val scenario = createScenario(fixture)
+
+    createReturnUploadAndSendReadyCallback(scenario, expectErrorsUpload = true)
+
+    val fileUpload = eventuallyProcessedFileUpload(scenario)
+    val details    = (fileUpload \ fileUploadDetailsFieldName).as[JsObject]
+    val validation = (details \ validationFieldName).as[JsObject]
+
+    (fileUpload \ statusFieldName).as[String]                              shouldBe validationFailureStatusString
+    (validation \ statusFieldName).as[String]                              shouldBe validationFailedValue
+    (validation \ rowsValidatedFieldName).as[Long]                         shouldBe expectedRowsValidated
+    (validation \ validationErrorsFieldName).as[Long]                      shouldBe 1L
+    (validation \ invalidFileReasonFieldName).toOption                     shouldBe None
+    val inlineErrors = (validation \ inlineErrorsFieldName).as[Seq[JsObject]]
+    inlineErrors.size                                                       shouldBe 1
+    (inlineErrors.head \ rowNumberFieldName).as[Long]                       shouldBe expectedInlineErrorRow
+    (inlineErrors.head \ errorCodesFieldName).as[Seq[String]]               shouldBe Seq(
+      invalidRowColumnCountErrorCode
+    )
+    (details \ objectStoreFileLocationFieldName).as[String]                 shouldBe scenario.reference
+    (details \ objectStoreFileErrorsLocationFieldName).as[String]           shouldBe scenario.errorsReference
+    verifyObjectStorePut(scenario.reference)
+    verifyObjectStorePut(scenario.errorsReference)
+    assertErrorsWorkbookContainsRows(
+      scenario,
+      Seq(expectedErrorWorkbookRow -> invalidRowColumnCountErrorCode)
+    )
   }
 
   private def assertEmptyRowInvalidFileProcessed(fixture: UploadFixture): Unit = {
