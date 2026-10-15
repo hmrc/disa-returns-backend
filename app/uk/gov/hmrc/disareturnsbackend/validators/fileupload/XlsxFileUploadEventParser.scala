@@ -30,11 +30,14 @@ final class XlsxFileUploadEventParser(
   onDataRow: Vector[String] => Unit
 ) extends SheetContentsHandler {
 
-  private val rowCells                 = mutable.Map.empty[Int, String]
-  private val maximumUsefulColumnCount = schema.headers.length + 1
+  private val rowCells             = mutable.Map.empty[Int, String]
+  private val expectedColumnCount  = schema.headers.length
+  private var hasNonEmptyExtraCell = false
 
-  override def startRow(rowNum: Int): Unit =
+  override def startRow(rowNum: Int): Unit = {
     rowCells.clear()
+    hasNonEmptyExtraCell = false
+  }
 
   override def cell(cellReference: String, formattedValue: String, comment: XSSFComment): Unit = {
     val columnIndex = new CellReference(cellReference).getCol
@@ -44,21 +47,25 @@ final class XlsxFileUploadEventParser(
       onNonEmptyCell()
     }
 
-    rowCells.update(columnIndex, cellValue)
+    if (columnIndex < expectedColumnCount) {
+      rowCells.update(columnIndex, cellValue)
+    } else if (cellValue.nonEmpty) {
+      hasNonEmptyExtraCell = true
+    }
   }
 
   override def endRow(rowNum: Int): Unit = {
-    val maxObservedColumnIndex: Int  = if (rowCells.isEmpty) -1 else rowCells.keys.max
-    val cappedColumnCount: Int       = math.min(maxObservedColumnIndex + 1, maximumUsefulColumnCount)
-    val orderedCells: Vector[String] =
-      Vector.tabulate(cappedColumnCount)(columnIndex => rowCells.getOrElse(columnIndex, ""))
-    val rowIsHeaderRow: Boolean      = rowNum == schema.xlsxHeaderRowIndexZeroBased
-    val rowIsDataRow: Boolean        = rowNum >= schema.xlsxDataStartRowIndexZeroBased
+    val orderedCells: Vector[String]         =
+      Vector.tabulate(expectedColumnCount)(columnIndex => rowCells.getOrElse(columnIndex, ""))
+    val cellsWithColumnCount: Vector[String] =
+      if (hasNonEmptyExtraCell) orderedCells :+ "Unexpected column" else orderedCells
+    val rowIsHeaderRow: Boolean              = rowNum == schema.xlsxHeaderRowIndexZeroBased
+    val rowIsDataRow: Boolean                = rowNum >= schema.xlsxDataStartRowIndexZeroBased
 
     if (rowIsHeaderRow) {
-      onHeader(orderedCells.map(schema.normaliseHeader))
+      onHeader(cellsWithColumnCount.map(schema.normaliseHeader))
     } else if (rowIsDataRow) {
-      onDataRow(orderedCells)
+      onDataRow(cellsWithColumnCount)
     }
   }
 

@@ -66,7 +66,7 @@ class XlsxFileUploadEventParserSpec extends SpecBase {
       headers mustBe TestFileUploadSchema.headers
     }
 
-    "must cap materialised cells at schema headers length plus one" in {
+    "must materialise schema cells and mark a non-empty extra cell" in {
       var dataRows = Vector.empty[Vector[String]]
       val parser   =
         new XlsxFileUploadEventParser(TestFileUploadSchema, () => (), _ => (), row => dataRows = dataRows :+ row)
@@ -76,7 +76,20 @@ class XlsxFileUploadEventParserSpec extends SpecBase {
       parser.cell("XFD5", "far-right", null)
       parser.endRow(4)
 
-      dataRows mustBe Vector(Vector("value-a", "", ""))
+      dataRows mustBe Vector(Vector("value-a", "", "Unexpected column"))
+    }
+
+    "must materialise omitted schema cells and ignore an empty extra cell" in {
+      var dataRows = Vector.empty[Vector[String]]
+      val parser   =
+        new XlsxFileUploadEventParser(TestFileUploadSchema, () => (), _ => (), row => dataRows = dataRows :+ row)
+
+      parser.startRow(4)
+      parser.cell("A5", "value-a", null)
+      parser.cell("XFD5", "", null)
+      parser.endRow(4)
+
+      dataRows mustBe Vector(Vector("value-a", ""))
     }
 
     "must report non-empty cells" in {
