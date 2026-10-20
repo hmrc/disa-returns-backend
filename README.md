@@ -623,6 +623,7 @@ Monthly file-upload validation tests are maintained in `it/resources/file-upload
 | `lisa-closed-valid` | `.csv`, `.xlsx` | Valid closed LISA monthly return row with closure fields. Expected result: `VALIDATION_SUCCESS`. |
 | `lisa-open-valid` | `.csv`, `.xlsx` | Valid open LISA monthly return row with LISA-specific fields. Expected result: `VALIDATION_SUCCESS`. |
 | `row-errors-invalid` | `.csv`, `.xlsx` | One data row with row-level validation errors for national insurance number, first name, and current year subscriptions. Expected result: `VALIDATION_FAILURE` with an errors workbook. |
+| `row-column-count-invalid` | `.csv`, `.xlsx` | One data row with a cell error and non-empty content beyond column S. Expected result: `VALIDATION_FAILURE` with only `E001` for that row and an errors workbook. |
 
 When using `OBJECT_STORE_STUB` locally, object-store stores files under its filesystem-backed stub and exposes them through its list endpoint. After a successful validation run, this command lists files uploaded by `disa-returns-backend`:
 

@@ -56,7 +56,7 @@ class MonthlyFileUploadRowValidatorSpec extends SpecBase {
       )
     }
 
-    "must return multiple validation errors in deterministic validator order" in {
+    "must return only the row column count error when the row has too many columns" in {
       val values = validValues
         .updated("Account Number", "")
         .updated("National Insurance Number", "bad")
@@ -79,27 +79,15 @@ class MonthlyFileUploadRowValidatorSpec extends SpecBase {
         .updated("LISA Reason for closure", "CLOSED!")
 
       validator.validate(FileUploadRow(1, values, MonthlyFileUploadTemplate.headers.length + 1), context) mustBe Seq(
-        InvalidRowColumnCount,
-        AccountNumberRequired,
-        NationalInsuranceTooShort,
-        FirstNameInvalidCharacters,
-        MiddleNameMaxLength,
-        SurnameInvalidCharacters,
-        DateOfBirthInvalidCharacters,
-        IsaTypeInvalid,
-        FlexibleIsaInvalid,
-        TransferInInvalidCharacters,
-        TransferOutInvalidCharacters,
-        FirstSubscriptionInvalidCharacters,
-        LastSubscriptionOutsideReportingPeriod,
-        CurrentYearSubscriptionsInvalidCharacters,
-        LisaQualifyingAdditionInvalidCharacters,
-        LisaBonusClaimInvalidCharacters,
-        MarketValueInvalidCharacters,
-        ClosureDateInvalidCharacters,
-        IsaClosureReasonInvalidCharacters,
-        LisaClosureReasonInvalidCharacters
+        InvalidRowColumnCount
       )
+    }
+
+    "must return only the row column count error when the row has too few columns" in {
+      validator.validate(
+        FileUploadRow(1, validValues.updated("Account Number", ""), MonthlyFileUploadTemplate.headers.length - 1),
+        context
+      ) mustBe Seq(InvalidRowColumnCount)
     }
 
     "must suppress duplicate errors for empty and invalid-character values" in {
