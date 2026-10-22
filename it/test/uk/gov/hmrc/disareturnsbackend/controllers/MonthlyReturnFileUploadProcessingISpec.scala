@@ -53,15 +53,15 @@ class MonthlyReturnFileUploadProcessingISpec
   private val invalidHeaderValue     = "InvalidHeader"
   private val noDataRowsValue        = "NoDataRows"
 
-  private val expectedRowsValidated         = 1L
-  private val expectedNoValidationErrors    = 0L
-  private val expectedRowValidationErrors   = 3L
-  private val expectedEmptyRowErrors        = 11L
-  private val expectedErrorWorkbookRow      = 1.0
-  private val expectedInlineErrorRow        = 1L
-  private val configuredInlineErrorLimit    = 2
-  private val expectedRowsValidatedForLimit = 3L
-  private val expectedValidationErrorsLimit = 9L
+  private val expectedRowsValidated          = 1L
+  private val expectedNoValidationErrors     = 0L
+  private val expectedRowValidationErrors    = 3L
+  private val expectedEmptyRowErrors         = 11L
+  private val expectedErrorWorkbookRow       = 1.0
+  private val expectedInlineErrorRow         = 1L
+  private val configuredInlineErrorLimit     = 2
+  private val expectedRowsValidatedForLimit  = 3L
+  private val expectedValidationErrorsLimit  = 9L
   private val invalidRowColumnCountErrorCode = "E001"
 
   private val expectedInlineErrorCodes     = Seq(
@@ -219,19 +219,19 @@ class MonthlyReturnFileUploadProcessingISpec
     val details    = (fileUpload \ fileUploadDetailsFieldName).as[JsObject]
     val validation = (details \ validationFieldName).as[JsObject]
 
-    (fileUpload \ statusFieldName).as[String]                              shouldBe validationFailureStatusString
-    (validation \ statusFieldName).as[String]                              shouldBe validationFailedValue
-    (validation \ rowsValidatedFieldName).as[Long]                         shouldBe expectedRowsValidated
-    (validation \ validationErrorsFieldName).as[Long]                      shouldBe 1L
-    (validation \ invalidFileReasonFieldName).toOption                     shouldBe None
+    (fileUpload \ statusFieldName).as[String]          shouldBe validationFailureStatusString
+    (validation \ statusFieldName).as[String]          shouldBe validationFailedValue
+    (validation \ rowsValidatedFieldName).as[Long]     shouldBe expectedRowsValidated
+    (validation \ validationErrorsFieldName).as[Long]  shouldBe 1L
+    (validation \ invalidFileReasonFieldName).toOption shouldBe None
     val inlineErrors = (validation \ inlineErrorsFieldName).as[Seq[JsObject]]
-    inlineErrors.size                                                       shouldBe 1
-    (inlineErrors.head \ rowNumberFieldName).as[Long]                       shouldBe expectedInlineErrorRow
-    (inlineErrors.head \ errorCodesFieldName).as[Seq[String]]               shouldBe Seq(
+    inlineErrors.size                                             shouldBe 1
+    (inlineErrors.head \ rowNumberFieldName).as[Long]             shouldBe expectedInlineErrorRow
+    (inlineErrors.head \ errorCodesFieldName).as[Seq[String]]     shouldBe Seq(
       invalidRowColumnCountErrorCode
     )
-    (details \ objectStoreFileLocationFieldName).as[String]                 shouldBe scenario.reference
-    (details \ objectStoreFileErrorsLocationFieldName).as[String]           shouldBe scenario.errorsReference
+    (details \ objectStoreFileLocationFieldName).as[String]       shouldBe scenario.reference
+    (details \ objectStoreFileErrorsLocationFieldName).as[String] shouldBe scenario.errorsReference
     verifyObjectStorePut(scenario.reference)
     verifyObjectStorePut(scenario.errorsReference)
     assertErrorsWorkbookContainsRows(
