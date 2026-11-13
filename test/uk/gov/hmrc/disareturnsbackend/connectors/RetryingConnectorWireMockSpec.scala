@@ -60,7 +60,7 @@ class RetryingConnectorWireMockSpec extends SpecBase with WireMockSupport {
     )
     .build()
 
-  private implicit val hc: HeaderCarrier = HeaderCarrier()
+  private implicit val hc: HeaderCarrier          = HeaderCarrier()
   private implicit val materializer: Materializer = inject[Materializer]
 
   "ObjectStoreConnector.putFile" - {
@@ -84,7 +84,9 @@ class RetryingConnectorWireMockSpec extends SpecBase with WireMockSupport {
               .withStatus(OK)
               .withHeader("Content-Type", "application/json")
               .withBody(
-                s"""{"location":"$objectName","contentLength":${fileContent.length},"contentMD5":"${md5Base64(fileContent)}","lastModified":"2026-05-17T12:00:00Z"}"""
+                s"""{"location":"$objectName","contentLength":${fileContent.length},"contentMD5":"${md5Base64(
+                    fileContent
+                  )}","lastModified":"2026-05-17T12:00:00Z"}"""
               )
           )
       )
@@ -123,7 +125,7 @@ class RetryingConnectorWireMockSpec extends SpecBase with WireMockSupport {
       )
 
       val connector = new ObjectStoreConnector(inject[PlayObjectStoreClient], inject[ActorSystem], retryConfig)
-      val result = connector
+      val result    = connector
         .getFile(objectName)
         .futureValue
         .runWith(Sink.fold(ByteString.empty)(_ ++ _))
@@ -153,7 +155,7 @@ class RetryingConnectorWireMockSpec extends SpecBase with WireMockSupport {
       )
 
       val connector = new UpscanConnector(inject[HttpClientV2], retryConfig, inject[ActorSystem])
-      val result = connector
+      val result    = connector
         .downloadFile(s"$wireMockUrl$path")
         .futureValue
         .runWith(Sink.fold(ByteString.empty)(_ ++ _))
@@ -181,7 +183,7 @@ class RetryingConnectorWireMockSpec extends SpecBase with WireMockSupport {
       )
 
       val connector = new UpscanConnector(inject[HttpClientV2], retryConfig, inject[ActorSystem])
-      val result = connector
+      val result    = connector
         .downloadFile(s"$wireMockUrl$path")
         .futureValue
         .runWith(Sink.fold(ByteString.empty)(_ ++ _))
