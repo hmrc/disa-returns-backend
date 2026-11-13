@@ -17,7 +17,7 @@
 package uk.gov.hmrc.disareturnsbackend.controllers
 
 import play.api.http.HeaderNames.LOCATION
-import play.api.http.Status.{BAD_REQUEST, CONFLICT, CREATED, FORBIDDEN, NOT_FOUND, NO_CONTENT, OK, SERVICE_UNAVAILABLE, UNAUTHORIZED, UNPROCESSABLE_ENTITY}
+import play.api.http.Status.*
 import play.api.libs.json.{JsValue, Json}
 import play.api.libs.ws.WSResponse
 import play.api.libs.ws.readableAsString

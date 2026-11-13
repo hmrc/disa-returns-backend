@@ -18,11 +18,11 @@ package uk.gov.hmrc.disareturnsbackend.controllers
 
 import base.SpecBase
 import org.mockito.ArgumentMatchers.eq as eqTo
-import org.mockito.Mockito.{reset, verify, when}
+import org.mockito.Mockito.*
 import org.scalatest.BeforeAndAfterEach
 import play.api.Application
 import play.api.inject.bind
-import play.api.libs.json.{JsValue, Json, OWrites}
+import play.api.libs.json.*
 import play.api.mvc.Result
 import play.api.test.FakeRequest
 import play.api.test.Helpers.*

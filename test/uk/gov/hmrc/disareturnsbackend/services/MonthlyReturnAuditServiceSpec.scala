@@ -20,7 +20,7 @@ import base.SpecBase
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{verify, when}
-import play.api.libs.json.{JsArray, JsObject, Json}
+import play.api.libs.json.*
 import uk.gov.hmrc.disareturnsbackend.config.AppConfig
 import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.validators.fileupload.FileUploadValidatorResult

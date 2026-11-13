@@ -20,11 +20,12 @@ import base.SpecBase
 import org.apache.pekko.actor.ActorSystem
 import org.bson.types.ObjectId
 import org.mockito.ArgumentMatchers.{any, eq as eqTo}
-import org.mockito.Mockito.{timeout as mockitoTimeout, verify, when}
+import org.mockito.Mockito.*
+import org.mockito.Mockito.timeout as mockitoTimeout
 import play.api.inject.ApplicationLifecycle
-import uk.gov.hmrc.mongo.workitem.{ProcessingStatus, WorkItem, WorkItemRepository}
+import uk.gov.hmrc.mongo.workitem.*
 
-import java.time.{Clock, Duration, Instant, ZoneOffset}
+import java.time.*
 import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.duration.DurationInt
 import scala.concurrent.{Future, Promise}

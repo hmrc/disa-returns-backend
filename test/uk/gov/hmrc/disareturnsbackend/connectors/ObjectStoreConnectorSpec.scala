@@ -25,12 +25,13 @@ import org.apache.pekko.stream.scaladsl.{Sink, Source}
 import org.apache.pekko.util.ByteString
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{times, verify, when}
+import org.mockito.Mockito.*
 import play.api.http.Status.INTERNAL_SERVER_ERROR
 import uk.gov.hmrc.http.{HeaderCarrier, UpstreamErrorResponse}
 import uk.gov.hmrc.objectstore.client.http.Payload
 import uk.gov.hmrc.objectstore.client.play.PlayObjectStoreClient
-import uk.gov.hmrc.objectstore.client.{Md5Hash, Object as StoredObject, ObjectMetadata, ObjectSummaryWithMd5, Path}
+import uk.gov.hmrc.objectstore.client.*
+import uk.gov.hmrc.objectstore.client.Object as StoredObject
 
 import java.nio.file.Files
 import java.security.MessageDigest
@@ -41,6 +42,12 @@ import scala.concurrent.Future
 class ObjectStoreConnectorSpec extends SpecBase {
 
   private implicit val hc: HeaderCarrier = HeaderCarrier()
+  private val objectName                 = "object-name"
+  private val fileContent                = "file-content"
+  private val fileLength                 = fileContent.length.toLong
+  private val textPlainContentType       = "text/plain"
+  private val tempFilePrefix             = "disa-object-store"
+  private val tempFileSuffix             = ".txt"
   private val callAmountWithRetries: Int = 4
   private val retryConfig: Config        =
     ConfigFactory.parseString("http-verbs.retries.intervals = [1 millisecond, 1 millisecond, 1 millisecond]")
@@ -49,29 +56,31 @@ class ObjectStoreConnectorSpec extends SpecBase {
 
     "must upload the file as a streaming Payload and return the object-store location" in {
       val client                                                        = mock[PlayObjectStoreClient]
-      val file                                                          = Files.createTempFile("disa-object-store", ".txt")
-      Files.writeString(file, "file-content")
+      val file                                                          = Files.createTempFile(tempFilePrefix, tempFileSuffix)
+      Files.writeString(file, fileContent)
       val summaryLocation                                               = Path.Directory("").file("uploaded-file")
       val payloadCaptor: ArgumentCaptor[Payload[Source[ByteString, ?]]] =
         ArgumentCaptor.forClass(classOf[Payload[Source[ByteString, ?]]])
 
       when(client.putObject(any, any[Payload[Source[ByteString, ?]]], any, any, any, any)(any, any))
         .thenReturn(
-          Future.successful(ObjectSummaryWithMd5(summaryLocation, 12L, Md5Hash(md5Base64("file-content")), Instant.now))
+          Future.successful(
+            ObjectSummaryWithMd5(summaryLocation, fileLength, Md5Hash(md5Base64(fileContent)), Instant.now)
+          )
         )
 
       try {
         val service = new ObjectStoreConnector(client, inject[ActorSystem], retryConfig)
 
-        service.putFile("object-name", file, "text/plain").futureValue mustBe summaryLocation.asUri
+        service.putFile(objectName, file, textPlainContentType).futureValue mustBe summaryLocation.asUri
 
         verify(client).putObject(any, payloadCaptor.capture(), any, any, any, any)(any, any)
         val payload = payloadCaptor.getValue
-        payload.length mustBe 12L
-        payload.md5Hash mustBe Md5Hash(md5Base64("file-content"))
+        payload.length mustBe fileLength
+        payload.md5Hash mustBe Md5Hash(md5Base64(fileContent))
         payload.content
           .runWith(Sink.fold(ByteString.empty)(_ ++ _))(inject[Materializer])
-          .futureValue mustBe ByteString("file-content")
+          .futureValue mustBe ByteString(fileContent)
       } finally Files.deleteIfExists(file)
     }
 
@@ -80,7 +89,7 @@ class ObjectStoreConnectorSpec extends SpecBase {
       val service     = new ObjectStoreConnector(client, inject[ActorSystem], retryConfig)
       val missingFile = Files.createTempDirectory("disa-missing-parent").resolve("missing.txt")
 
-      val result = service.putFile("object-name", missingFile, "text/plain")
+      val result = service.putFile(objectName, missingFile, textPlainContentType)
 
       result.failed.futureValue mustBe a[java.nio.file.NoSuchFileException]
       Files.deleteIfExists(missingFile.getParent)
@@ -89,15 +98,15 @@ class ObjectStoreConnectorSpec extends SpecBase {
     "must retry when object-store returns a 5xx error" in {
       val client       = mock[PlayObjectStoreClient]
       val service      = new ObjectStoreConnector(client, inject[ActorSystem], retryConfig)
-      val file         = Files.createTempFile("disa-object-store", ".txt")
-      Files.writeString(file, "file-content")
+      val file         = Files.createTempFile(tempFilePrefix, tempFileSuffix)
+      Files.writeString(file, fileContent)
       val errorMessage = "object-store upload failed"
 
       when(client.putObject(any, any[Payload[Source[ByteString, ?]]], any, any, any, any)(any, any))
         .thenReturn(Future.failed(UpstreamErrorResponse(errorMessage, INTERNAL_SERVER_ERROR)))
 
       try {
-        val result = service.putFile("object-name", file, "text/plain").failed.futureValue
+        val result = service.putFile(objectName, file, textPlainContentType).failed.futureValue
 
         result mustBe UpstreamErrorResponse(errorMessage, INTERNAL_SERVER_ERROR)
         verify(client, times(callAmountWithRetries))
@@ -108,22 +117,22 @@ class ObjectStoreConnectorSpec extends SpecBase {
     "must download the file as a stream" in {
       val client  = mock[PlayObjectStoreClient]
       val service = new ObjectStoreConnector(client, inject[ActorSystem], retryConfig)
-      val path    = Path.Directory("").file("object-name")
-      val content = Source.single(ByteString("file-content"))
+      val path    = Path.Directory("").file(objectName)
+      val content = Source.single(ByteString(fileContent))
       val stored  = StoredObject(
         path,
         content,
-        ObjectMetadata("text/plain", 12L, Md5Hash(md5Base64("file-content")), Instant.now, Map.empty)
+        ObjectMetadata(textPlainContentType, fileLength, Md5Hash(md5Base64(fileContent)), Instant.now, Map.empty)
       )
 
       when(client.getObject[Source[ByteString, NotUsed]](any, any)(any, any))
         .thenReturn(Future.successful(Some(stored)))
 
       service
-        .getFile("object-name")
+        .getFile(objectName)
         .futureValue
         .runWith(Sink.fold(ByteString.empty)(_ ++ _))(inject[Materializer])
-        .futureValue mustBe ByteString("file-content")
+        .futureValue mustBe ByteString(fileContent)
 
       verify(client).getObject[Source[ByteString, NotUsed]](any, any)(any, any)
     }
@@ -147,7 +156,7 @@ class ObjectStoreConnectorSpec extends SpecBase {
       when(client.getObject[Source[ByteString, NotUsed]](any, any)(any, any))
         .thenReturn(Future.failed(UpstreamErrorResponse(errorMessage, INTERNAL_SERVER_ERROR)))
 
-      service.getFile("object-name").failed.futureValue mustBe
+      service.getFile(objectName).failed.futureValue mustBe
         UpstreamErrorResponse(errorMessage, INTERNAL_SERVER_ERROR)
       verify(client, times(callAmountWithRetries)).getObject[Source[ByteString, NotUsed]](any, any)(any, any)
     }

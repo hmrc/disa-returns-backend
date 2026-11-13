@@ -30,7 +30,7 @@ import java.nio.file.{Files, Path as FilePath}
 import java.security.MessageDigest
 import java.util.Base64
 import javax.inject.{Inject, Singleton}
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future, blocking}
+import scala.concurrent.*
 import scala.util.Using
 
 @Singleton

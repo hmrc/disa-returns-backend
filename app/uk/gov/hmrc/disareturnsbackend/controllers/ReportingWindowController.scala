@@ -17,7 +17,7 @@
 package uk.gov.hmrc.disareturnsbackend.controllers
 
 import play.api.libs.json.Json
-import play.api.mvc.{Action, AnyContent, ControllerComponents}
+import play.api.mvc.*
 import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector
 import uk.gov.hmrc.disareturnsbackend.controllers.actions.RequestAuthAction
 import uk.gov.hmrc.http.HeaderCarrier

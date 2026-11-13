@@ -17,7 +17,7 @@
 package uk.gov.hmrc.disareturnsbackend.models
 
 import base.SpecBase
-import play.api.libs.json.{JsError, JsNumber, JsString, Json}
+import play.api.libs.json.*
 
 class UuidFormatSpec extends SpecBase {
 

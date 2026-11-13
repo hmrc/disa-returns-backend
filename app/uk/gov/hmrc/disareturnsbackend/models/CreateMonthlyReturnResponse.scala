@@ -16,7 +16,7 @@
 
 package uk.gov.hmrc.disareturnsbackend.models
 
-import play.api.libs.json.{Format, Json, OFormat}
+import play.api.libs.json.*
 
 import java.util.UUID
 

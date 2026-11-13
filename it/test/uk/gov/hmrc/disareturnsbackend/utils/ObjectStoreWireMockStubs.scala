@@ -17,8 +17,10 @@
 package uk.gov.hmrc.disareturnsbackend.utils
 
 import com.github.tomakehurst.wiremock.client.WireMock.*
+import com.github.tomakehurst.wiremock.stubbing.Scenario
 import com.github.tomakehurst.wiremock.verification.LoggedRequest
 import org.scalatest.Assertions.fail
+import play.api.http.Status.{INTERNAL_SERVER_ERROR, OK}
 import play.api.libs.json.Json
 
 import scala.jdk.CollectionConverters.*
@@ -26,26 +28,32 @@ import scala.jdk.CollectionConverters.*
 trait ObjectStoreWireMockStubs {
 
   private val objectStoreOwner = "disa-returns-backend"
+  private val recoveredState   = "recovered"
 
   protected def stubObjectStorePut(objectName: String): Unit =
     stubFor(
       put(urlEqualTo(objectStorePath(objectName)))
-        .willReturn(
-          aResponse()
-            .withStatus(200)
-            .withHeader("Content-Type", "application/json")
-            .withBody(
-              Json
-                .obj(
-                  "location"      -> objectName,
-                  "contentLength" -> 123,
-                  "contentMD5"    -> "CY9rzUYh03PK3k6DJie09g==",
-                  "lastModified"  -> "2026-05-17T12:00:00Z"
-                )
-                .toString()
-            )
-        )
+        .willReturn(successfulPutResponse(objectName))
     )
+
+  protected def stubObjectStorePutWithRetry(objectName: String): Unit = {
+    val path     = objectStorePath(objectName)
+    val scenario = s"object-store put retry $objectName"
+
+    stubFor(
+      put(urlEqualTo(path))
+        .inScenario(scenario)
+        .whenScenarioStateIs(Scenario.STARTED)
+        .willReturn(aResponse().withStatus(INTERNAL_SERVER_ERROR))
+        .willSetStateTo(recoveredState)
+    )
+    stubFor(
+      put(urlEqualTo(path))
+        .inScenario(scenario)
+        .whenScenarioStateIs(recoveredState)
+        .willReturn(successfulPutResponse(objectName))
+    )
+  }
 
   protected def verifyObjectStorePut(objectName: String): Unit =
     verify(putRequestedFor(urlEqualTo(objectStorePath(objectName))))
@@ -60,6 +68,21 @@ trait ObjectStoreWireMockStubs {
 
   protected def objectStorePutRequests(objectName: String): Seq[LoggedRequest] =
     findAll(putRequestedFor(urlEqualTo(objectStorePath(objectName)))).asScala.toSeq
+
+  private def successfulPutResponse(objectName: String) =
+    aResponse()
+      .withStatus(OK)
+      .withHeader("Content-Type", "application/json")
+      .withBody(
+        Json
+          .obj(
+            "location"      -> objectName,
+            "contentLength" -> 123,
+            "contentMD5"    -> "CY9rzUYh03PK3k6DJie09g==",
+            "lastModified"  -> "2026-05-17T12:00:00Z"
+          )
+          .toString()
+      )
 
   private def objectStorePath(objectName: String): String =
     s"/object-store/object/$objectStoreOwner/$objectName"

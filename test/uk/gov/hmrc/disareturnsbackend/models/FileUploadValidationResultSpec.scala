@@ -17,7 +17,7 @@
 package uk.gov.hmrc.disareturnsbackend.models
 
 import base.SpecBase
-import play.api.libs.json.{JsError, JsString, Json}
+import play.api.libs.json.*
 
 class FileUploadValidationResultSpec extends SpecBase {
 

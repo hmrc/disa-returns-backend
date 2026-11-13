@@ -16,7 +16,7 @@
 
 package uk.gov.hmrc.disareturnsbackend.models
 
-import play.api.libs.json.{JsValue, Json, OFormat}
+import play.api.libs.json.*
 import uk.gov.hmrc.disareturnsbackend.utils.JsonFormatSpec
 
 class UpscanDetailsSpec extends JsonFormatSpec[UpscanDetails] {

@@ -16,7 +16,7 @@
 
 package uk.gov.hmrc.disareturnsbackend.validators.fileupload
 
-import uk.gov.hmrc.disareturnsbackend.models.{FileUploadValidationError, FileUploadValidationResult, FileUploadValidationStatus}
+import uk.gov.hmrc.disareturnsbackend.models.*
 
 object FileUploadValidationResults {
 

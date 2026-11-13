@@ -18,18 +18,18 @@ package uk.gov.hmrc.disareturnsbackend.validators.fileupload
 
 import org.apache.pekko.actor.ActorSystem
 import org.apache.poi.ooxml.POIXMLException
-import org.apache.poi.openxml4j.exceptions.{InvalidFormatException, NotOfficeXmlFileException, OLE2NotOfficeXmlFileException}
+import org.apache.poi.openxml4j.exceptions.*
 import org.apache.poi.openxml4j.opc.{OPCPackage, PackageAccess}
 import org.apache.poi.ss.usermodel.DataFormatter
-import org.apache.poi.xssf.eventusermodel.{ReadOnlySharedStringsTable, XSSFReader, XSSFSheetXMLHandler}
+import org.apache.poi.xssf.eventusermodel.*
 import org.apache.poi.xssf.model.StylesTable
 import org.xml.sax.{InputSource, SAXException}
-import uk.gov.hmrc.disareturnsbackend.validators.fileupload.FileUploadValidationResults.{invalidHeaderErrorType, invalidWorkbookErrorType, noDataRowsErrorType}
+import uk.gov.hmrc.disareturnsbackend.validators.fileupload.FileUploadValidationResults.*
 
 import java.io.InputStream
 import java.nio.file.Path
 import javax.xml.parsers.{ParserConfigurationException, SAXParserFactory}
-import scala.concurrent.{ExecutionContextExecutor, Future, blocking}
+import scala.concurrent.*
 import scala.util.{Try, Using}
 
 abstract class BaseXlsxFileUploadValidator[C <: FileUploadValidationContext](

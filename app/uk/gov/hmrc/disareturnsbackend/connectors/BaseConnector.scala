@@ -20,7 +20,7 @@ import org.apache.pekko.stream.Materializer
 import org.apache.pekko.stream.scaladsl.{Sink, Source}
 import org.apache.pekko.util.ByteString
 import play.api.http.Status.OK
-import uk.gov.hmrc.http.{HttpResponse, Retries, UpstreamErrorResponse}
+import uk.gov.hmrc.http.*
 import uk.gov.hmrc.http.client.{RequestBuilder, readStreamHttpResponse}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -51,7 +51,8 @@ trait BaseConnector extends Retries {
   }
 
   protected def retryCondition: PartialFunction[Exception, Boolean] = {
-    case UpstreamErrorResponse.Upstream5xxResponse(_) =>
+    case _: BadGatewayException | _: GatewayTimeoutException => true
+    case UpstreamErrorResponse.Upstream5xxResponse(_)        =>
       true
   }
 }

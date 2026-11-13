@@ -16,7 +16,7 @@
 
 package uk.gov.hmrc.disareturnsbackend.models
 
-import play.api.libs.json.{Format, JsError, JsString, JsSuccess, Reads, Writes}
+import play.api.libs.json.*
 
 sealed trait FileUploadFailureReason {
   val value: String

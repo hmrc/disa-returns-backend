@@ -17,7 +17,7 @@
 package uk.gov.hmrc.disareturnsbackend.utils
 
 import base.SpecBase
-import play.api.libs.json.{Format, JsValue, Json}
+import play.api.libs.json.*
 
 trait JsonFormatSpec[A] extends SpecBase {
 

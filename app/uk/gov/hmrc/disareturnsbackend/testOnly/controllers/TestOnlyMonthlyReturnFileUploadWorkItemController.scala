@@ -17,7 +17,7 @@
 package uk.gov.hmrc.disareturnsbackend.testOnly.controllers
 
 import play.api.Logging
-import play.api.mvc.{Action, AnyContent, ControllerComponents}
+import play.api.mvc.*
 import uk.gov.hmrc.disareturnsbackend.repositories.MonthlyReturnFileUploadWorkItemRepository
 import uk.gov.hmrc.play.bootstrap.backend.controller.BackendController
 

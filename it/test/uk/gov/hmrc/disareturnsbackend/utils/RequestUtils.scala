@@ -18,7 +18,7 @@ package uk.gov.hmrc.disareturnsbackend.utils
 
 import play.api.http.HeaderNames.{AUTHORIZATION, CONTENT_TYPE}
 import play.api.libs.json.JsValue
-import play.api.libs.ws.{WSClient, WSRequest, WSResponse, writeableOf_JsValue, writeableOf_String}
+import play.api.libs.ws.*
 import play.api.test.Helpers.await
 import play.api.test.{DefaultAwaitTimeout, Helpers}
 
