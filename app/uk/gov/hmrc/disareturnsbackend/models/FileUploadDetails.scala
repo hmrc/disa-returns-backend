@@ -16,7 +16,7 @@
 
 package uk.gov.hmrc.disareturnsbackend.models
 
-import play.api.libs.json.{JsObject, JsString, JsValue, Json, OFormat, Reads}
+import play.api.libs.json.*
 
 import java.time.Instant
 

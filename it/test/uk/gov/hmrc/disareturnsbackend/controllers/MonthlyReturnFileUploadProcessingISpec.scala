@@ -17,10 +17,10 @@
 package uk.gov.hmrc.disareturnsbackend.controllers
 
 import org.apache.poi.xssf.usermodel.XSSFWorkbook
-import play.api.http.Status.{ACCEPTED, CREATED, OK}
-import play.api.libs.json.{JsObject, JsValue, Json}
+import play.api.http.Status.*
+import play.api.libs.json.*
 import uk.gov.hmrc.disareturnsbackend.WireMockIntegrationSpec
-import uk.gov.hmrc.disareturnsbackend.models.{UpscanDetails, UpscanResult, UpscanSuccess}
+import uk.gov.hmrc.disareturnsbackend.models.*
 import uk.gov.hmrc.disareturnsbackend.utils.Constants.{CSV_MIME_TYPE, XLSX_MIME_TYPE}
 import uk.gov.hmrc.disareturnsbackend.utils.{ObjectStoreWireMockStubs, UpscanWireMockStubs}
 
@@ -139,6 +139,20 @@ class MonthlyReturnFileUploadProcessingISpec
     validFixtures.foreach { fixture =>
       s"process ${fixture.scenarioName} successfully" in
         assertValidFileProcessed(fixture)
+    }
+
+    "retry transient failures from Upscan and Object Store" in {
+      val scenario = createScenario(validFixtures.head, retryUpscanDownload = true)
+
+      postJson(scenario.monthlyPath, nilReturnFalseRequest).status                                shouldBe CREATED
+      postJson(scenario.filesPath, Json.obj(referenceFieldName -> scenario.reference)).status     shouldBe CREATED
+      stubObjectStorePutWithRetry(scenario.reference)
+      postJson(scenario.callbackPath, Json.toJson(createSuccessfulUploadResult(scenario))).status shouldBe ACCEPTED
+
+      eventuallyProcessedFileUpload(scenario)
+
+      verifyUpscanDownload(scenario.downloadPath, 2)
+      objectStorePutRequests(scenario.reference).size shouldBe 2
     }
 
     rowErrorsInvalidFixtures.foreach { fixture =>
@@ -415,13 +429,17 @@ class MonthlyReturnFileUploadProcessingISpec
     }
   }
 
-  private def createScenario(fixture: UploadFixture): FileScenario =
+  private def createScenario(fixture: UploadFixture, retryUpscanDownload: Boolean = false): FileScenario =
     FileScenario(
       reference = fixture.reference,
       downloadPath = fixture.downloadPath,
       fileName = fixture.fileName,
       fileMimeType = fixture.mimeType,
-      downloadUrl = stubUpscanDownload(fixture.downloadPath, fixture.resource, fixture.mimeType)
+      downloadUrl = if (retryUpscanDownload) {
+        stubUpscanDownloadWithRetry(fixture.downloadPath, fixture.resource, fixture.mimeType)
+      } else {
+        stubUpscanDownload(fixture.downloadPath, fixture.resource, fixture.mimeType)
+      }
     )
 
   private def csvFixture(scenarioName: String, baseName: String): UploadFixture =

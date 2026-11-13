@@ -17,7 +17,7 @@
 package uk.gov.hmrc.disareturnsbackend.testOnly.controllers
 
 import play.api.Application
-import play.api.http.Status.{CREATED, NOT_FOUND, NO_CONTENT, OK}
+import play.api.http.Status.*
 import play.api.inject.bind
 import play.api.inject.guice.GuiceApplicationBuilder
 import play.api.libs.json.Json

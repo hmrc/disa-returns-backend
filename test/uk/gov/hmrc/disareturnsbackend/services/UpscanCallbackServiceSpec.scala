@@ -19,7 +19,7 @@ package uk.gov.hmrc.disareturnsbackend.services
 import base.SpecBase
 import org.bson.types.ObjectId
 import org.mockito.ArgumentMatchers.{any, eq as eqTo}
-import org.mockito.Mockito.{never, reset, verify, when}
+import org.mockito.Mockito.*
 import org.scalatest.BeforeAndAfterEach
 import uk.gov.hmrc.disareturnsbackend.mappers.{UpscanCallbackMapper, UpscanCallbackMapperImpl}
 import uk.gov.hmrc.disareturnsbackend.models.*

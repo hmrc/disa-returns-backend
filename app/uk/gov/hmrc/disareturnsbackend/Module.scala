@@ -16,14 +16,15 @@
 
 package uk.gov.hmrc.disareturnsbackend
 
-import config.{InternalAuthTokenInitialiser, InternalAuthTokenInitialiserImpl, NoOpInternalAuthTokenInitialiser}
+import config.*
 import play.api.{Configuration, Environment}
-import play.api.inject.{Binding, Module as AppModule, bind as binding}
-import uk.gov.hmrc.disareturnsbackend.converters.{MonthlyReturnCsvConverter, MonthlyReturnCsvConverterImpl, MonthlyReturnNdjsonWriter, MonthlyReturnNdjsonWriterImpl, MonthlyReturnXlsxConverter, MonthlyReturnXlsxConverterImpl}
-import uk.gov.hmrc.disareturnsbackend.controllers.actions.{RequestAuthAction, RequestAuthAndValidationAction, RequestAuthAndValidationActionImpl}
+import play.api.inject.*
+import play.api.inject.{Module as AppModule, bind as binding}
+import uk.gov.hmrc.disareturnsbackend.converters.*
+import uk.gov.hmrc.disareturnsbackend.controllers.actions.*
 import uk.gov.hmrc.disareturnsbackend.jobs.{MonthlyReturnSubmissionWorkItemJob, MonthlyReturnWorkItemJob}
 import uk.gov.hmrc.disareturnsbackend.mappers.{UpscanCallbackMapper, UpscanCallbackMapperImpl}
-import uk.gov.hmrc.disareturnsbackend.services.{MonthlyReturnAuditService, MonthlyReturnFileUploadProcessingService, MonthlyReturnFileUploadProcessingServiceImpl}
+import uk.gov.hmrc.disareturnsbackend.services.*
 import uk.gov.hmrc.disareturnsbackend.testOnly.TestOnlySubmissionTimeSource
 import uk.gov.hmrc.disareturnsbackend.utils.{SystemClock, TimeSource}
 

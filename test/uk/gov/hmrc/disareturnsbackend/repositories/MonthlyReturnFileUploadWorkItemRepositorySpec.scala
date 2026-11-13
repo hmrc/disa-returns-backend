@@ -22,7 +22,7 @@ import uk.gov.hmrc.disareturnsbackend.models.MonthlyReturnFileUploadWorkItem
 import uk.gov.hmrc.mongo.test.DefaultPlayMongoRepositorySupport
 import uk.gov.hmrc.mongo.workitem.{ProcessingStatus, WorkItem}
 
-import java.time.{Clock, Instant, ZoneOffset}
+import java.time.*
 
 class MonthlyReturnFileUploadWorkItemRepositorySpec
     extends SpecBase

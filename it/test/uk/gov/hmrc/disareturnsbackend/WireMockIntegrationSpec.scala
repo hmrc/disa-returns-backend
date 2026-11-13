@@ -44,6 +44,7 @@ trait WireMockIntegrationSpec extends BaseIntegrationSpec with Eventually {
       "microservice.services.object-store.protocol"                   -> "http",
       "microservice.services.object-store.host"                       -> "localhost",
       "microservice.services.object-store.port"                       -> wireMockPort,
+      "http-verbs.retries.intervals"                                  -> Seq("1ms", "1ms", "1ms"),
       "fileUploadMaxInlineErrors"                                     -> 2,
       "monthly-return-file-upload-work-item-job.pollInterval"         -> "100 milliseconds",
       "monthly-return-file-upload-work-item-job.inProgressRetryAfter" -> "1 second"

@@ -17,7 +17,7 @@
 package uk.gov.hmrc.disareturnsbackend.models
 
 import base.SpecBase
-import play.api.libs.json.{JsError, Json, OWrites}
+import play.api.libs.json.*
 import uk.gov.hmrc.disareturnsbackend.models.UpscanFailureReason._
 
 class UpscanResultSpec extends SpecBase {

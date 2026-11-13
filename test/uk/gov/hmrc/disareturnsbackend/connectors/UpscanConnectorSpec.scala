@@ -23,10 +23,10 @@ import org.apache.pekko.stream.Materializer
 import org.apache.pekko.stream.scaladsl.Source
 import org.apache.pekko.util.ByteString
 import org.mockito.ArgumentMatchers.{any, eq as eqTo}
-import org.mockito.Mockito.{reset, times, verify, when}
+import org.mockito.Mockito.*
 import play.api.http.Status.{INTERNAL_SERVER_ERROR, OK}
 import uk.gov.hmrc.http.client.{HttpClientV2, RequestBuilder}
-import uk.gov.hmrc.http.{HeaderCarrier, HttpResponse, StringContextOps, UpstreamErrorResponse}
+import uk.gov.hmrc.http.*
 
 import scala.concurrent.Future
 
@@ -87,6 +87,19 @@ class UpscanConnectorSpec extends SpecBase {
         result mustBe UpstreamErrorResponse(errorMessage, INTERNAL_SERVER_ERROR)
         verify(mockRequestBuilder, times(callAmountWithRetries)).stream[HttpResponse](using any(), any())
       }
+
+      "must retry connection and timeout exceptions" in
+        Seq(
+          new BadGatewayException("upscan connection failed"),
+          new GatewayTimeoutException("upscan request timed out")
+        ).foreach { exception =>
+          reset(mockHttpClient, mockRequestBuilder)
+          when(mockHttpClient.get(eqTo(url"$downloadUrl"))(any())).thenReturn(mockRequestBuilder)
+          when(mockRequestBuilder.stream[HttpResponse](using any(), any())).thenReturn(Future.failed(exception))
+
+          connector.downloadFile(downloadUrl).failed.futureValue mustBe exception
+          verify(mockRequestBuilder, times(callAmountWithRetries)).stream[HttpResponse](using any(), any())
+        }
     }
   }
 }

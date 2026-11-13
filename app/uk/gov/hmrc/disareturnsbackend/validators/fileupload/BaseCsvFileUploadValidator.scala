@@ -23,7 +23,7 @@ import uk.gov.hmrc.disareturnsbackend.models.FileUploadValidationError
 import java.io.{BufferedReader, InputStreamReader}
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path}
-import scala.concurrent.{ExecutionContextExecutor, Future, blocking}
+import scala.concurrent.*
 import scala.annotation.tailrec
 import scala.util.Using
 

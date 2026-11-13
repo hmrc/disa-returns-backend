@@ -17,12 +17,16 @@
 package uk.gov.hmrc.disareturnsbackend.utils
 
 import com.github.tomakehurst.wiremock.client.WireMock.*
+import com.github.tomakehurst.wiremock.stubbing.Scenario
 import org.scalatest.Assertions.fail
+import play.api.http.Status.{OK, SERVICE_UNAVAILABLE}
 import uk.gov.hmrc.http.test.WireMockSupport
 
 import java.nio.file.{Files, Paths}
 
 trait UpscanWireMockStubs { self: WireMockSupport =>
+
+  private val recoveredState = "recovered"
 
   protected def stubUpscanDownload(path: String, resourcePath: String, contentType: String): String = {
     val bytes = readResourceBytes(resourcePath)
@@ -36,7 +40,7 @@ trait UpscanWireMockStubs { self: WireMockSupport =>
       get(urlEqualTo(path))
         .willReturn(
           aResponse()
-            .withStatus(200)
+            .withStatus(OK)
             .withHeader("Content-Type", contentType)
             .withBody(bytes)
         )
@@ -44,6 +48,35 @@ trait UpscanWireMockStubs { self: WireMockSupport =>
 
     s"$wireMockUrl$path"
   }
+
+  protected def stubUpscanDownloadWithRetry(path: String, resourcePath: String, contentType: String): String = {
+    val bytes    = readResourceBytes(resourcePath)
+    val scenario = s"upscan download retry $path"
+
+    stubFor(
+      get(urlEqualTo(path))
+        .inScenario(scenario)
+        .whenScenarioStateIs(Scenario.STARTED)
+        .willReturn(aResponse().withStatus(SERVICE_UNAVAILABLE).withBody("temporarily unavailable"))
+        .willSetStateTo(recoveredState)
+    )
+    stubFor(
+      get(urlEqualTo(path))
+        .inScenario(scenario)
+        .whenScenarioStateIs(recoveredState)
+        .willReturn(
+          aResponse()
+            .withStatus(OK)
+            .withHeader("Content-Type", contentType)
+            .withBody(bytes)
+        )
+    )
+
+    s"$wireMockUrl$path"
+  }
+
+  protected def verifyUpscanDownload(path: String, requestCount: Int): Unit =
+    verify(requestCount, getRequestedFor(urlEqualTo(path)))
 
   protected def readResourceBytes(resourcePath: String): Array[Byte] =
     Option(getClass.getClassLoader.getResourceAsStream(resourcePath)) match {
