@@ -40,7 +40,6 @@ private val fileUploadsField                                     = "fileUploads"
 private val fileUploadsNonEmptyField                             = "fileUploads.0"
 private val lastUpdatedField                                     = "lastUpdated"
 private val matchingFileUploadDetailsField                       = "fileUploads.$.fileUploadDetails"
-private val matchingFileUploadField                              = "fileUploads.$"
 private val matchingFileUploadFailureMessageField                = "fileUploads.$.failureMessage"
 private val matchingFileUploadFailureReasonField                 = "fileUploads.$.failureReason"
 private val matchingFileUploadObjectStoreFileErrorsLocationField =

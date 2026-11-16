@@ -20,8 +20,7 @@ import base.SpecBase
 import org.apache.pekko.actor.ActorSystem
 import org.bson.types.ObjectId
 import org.mockito.ArgumentMatchers.{any, eq as eqTo}
-import org.mockito.Mockito.*
-import org.mockito.Mockito.timeout as mockitoTimeout
+import org.mockito.Mockito.{timeout as mockitoTimeout, *}
 import play.api.inject.ApplicationLifecycle
 import uk.gov.hmrc.mongo.workitem.*
 

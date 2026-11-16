@@ -30,8 +30,7 @@ import play.api.http.Status.INTERNAL_SERVER_ERROR
 import uk.gov.hmrc.http.{HeaderCarrier, UpstreamErrorResponse}
 import uk.gov.hmrc.objectstore.client.http.Payload
 import uk.gov.hmrc.objectstore.client.play.PlayObjectStoreClient
-import uk.gov.hmrc.objectstore.client.*
-import uk.gov.hmrc.objectstore.client.Object as StoredObject
+import uk.gov.hmrc.objectstore.client.{Object as StoredObject, *}
 
 import java.nio.file.Files
 import java.security.MessageDigest

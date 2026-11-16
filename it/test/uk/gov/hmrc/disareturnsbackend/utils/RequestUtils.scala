@@ -20,7 +20,7 @@ import play.api.http.HeaderNames.{AUTHORIZATION, CONTENT_TYPE}
 import play.api.libs.json.JsValue
 import play.api.libs.ws.*
 import play.api.test.Helpers.await
-import play.api.test.{DefaultAwaitTimeout, Helpers}
+import play.api.test.DefaultAwaitTimeout
 
 trait RequestUtils extends DefaultAwaitTimeout {
 
@@ -54,12 +54,6 @@ trait RequestUtils extends DefaultAwaitTimeout {
     await(
       request(path)
         .post(body)
-    )
-
-  protected def putString(path: String, body: String = ""): WSResponse =
-    await(
-      request(path)
-        .put(body)
     )
 
   protected def putJson(path: String, body: JsValue): WSResponse =

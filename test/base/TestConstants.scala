@@ -51,10 +51,9 @@ trait TestConstants {
   protected val testDownloadUrl        =
     "https://fus-outbound-bucket.s3.eu-west-2.amazonaws.com/object-key?X-Amz-Signature=abc"
 
-  protected val testExistingUpdatedOn: Instant   = Instant.parse("2026-05-17T11:00:00Z")
-  protected val testRepositoryCreatedOn: Instant = Instant.parse("2026-05-17T11:30:00Z")
-  protected val testCreatedOn: Instant           = Instant.parse("2026-05-17T12:00:00Z")
-  protected val testUpscanCompletedOn: Instant   = Instant.parse("2026-05-17T12:01:00Z")
+  protected val testExistingUpdatedOn: Instant = Instant.parse("2026-05-17T11:00:00Z")
+  protected val testCreatedOn: Instant         = Instant.parse("2026-05-17T12:00:00Z")
+  protected val testUpscanCompletedOn: Instant = Instant.parse("2026-05-17T12:01:00Z")
 
   protected val testExistingUpdatedOnString: String      = testExistingUpdatedOn.toString
   protected val testCreatedOnString: String              = testCreatedOn.toString
