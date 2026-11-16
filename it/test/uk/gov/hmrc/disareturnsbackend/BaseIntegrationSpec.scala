@@ -71,6 +71,11 @@ trait BaseIntegrationSpec
       "auditing.enabled"                                       -> false,
       "create-internal-auth-token-on-start"                    -> false,
       "mongodb.uri"                                            -> "mongodb://localhost:27017/disa-returns-backend-it",
+      // Make ttl dynamic to account for mongo ttl monitor using wall clock
+      "mongodb.monthlyReturnTimeToLiveInDays"                   -> math.max(
+        20L,
+        Duration.between(integrationTestNow, Instant.now()).toDays + 20L
+      ),
       "microservice.services.auth.protocol"                    -> "http",
       "microservice.services.auth.host"                        -> "localhost",
       "microservice.services.auth.port"                        -> wireMockPort,
@@ -231,7 +236,6 @@ trait BaseIntegrationSpec
 
   def serviceUrl(path: String): String = s"http://localhost:$port$path"
 
-  protected val emptyJson: JsObject             = Json.obj()
   protected val nilReturnFalseRequest: JsObject = Json.obj(nilReturnFieldName -> false)
 
   def clearMongoCollections(): Unit = {

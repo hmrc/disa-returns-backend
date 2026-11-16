@@ -16,7 +16,6 @@
 
 package uk.gov.hmrc.disareturnsbackend.validators.fileupload.monthly
 
-import java.time.LocalDate
 import javax.inject.{Inject, Singleton}
 import uk.gov.hmrc.disareturnsbackend.validators.fileupload.{FileUploadRow, FileUploadRowValidator}
 
@@ -53,7 +52,4 @@ class MonthlyFileUploadRowValidator @Inject() ()
     if (rowColumnCountErrors.nonEmpty) rowColumnCountErrors
     else cellValidators.flatMap(_.validate(row, context))
   }
-
-  def isInCurrentOrPreviousReportingMonth(date: LocalDate, taxYear: String, month: Int): Boolean =
-    ReportingPeriodValidator.isInCurrentOrPreviousReportingMonth(date, taxYear, month)
 }

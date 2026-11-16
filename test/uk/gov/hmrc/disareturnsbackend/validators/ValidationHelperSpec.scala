@@ -47,22 +47,19 @@ class ValidationHelperSpec extends SpecBase {
     }
   }
 
-  "MonthValidator.isValid" - {
+  "MonthValidator.parse" - {
 
-    "must return true for a valid month" in {
-      MonthValidator.isValid("1") mustBe true
-      MonthValidator.isValid("12") mustBe true
-    }
-
-    "must return false for an invalid month" in {
-      MonthValidator.isValid("0") mustBe false
-      MonthValidator.isValid(invalidTestMonth.toString) mustBe false
-      MonthValidator.isValid("MONTH") mustBe false
-      MonthValidator.isValid(null) mustBe false
-    }
-
-    "must parse a valid month" in {
+    "must parse a valid month including the range boundaries" in {
+      MonthValidator.parse("1") mustBe Some(1)
+      MonthValidator.parse("12") mustBe Some(12)
       MonthValidator.parse(testRouteMonth) mustBe Some(testMonth)
+    }
+
+    "must reject an invalid month" in {
+      MonthValidator.parse("0") mustBe None
+      MonthValidator.parse(invalidTestMonth.toString) mustBe None
+      MonthValidator.parse("MONTH") mustBe None
+      MonthValidator.parse(null) mustBe None
     }
   }
 

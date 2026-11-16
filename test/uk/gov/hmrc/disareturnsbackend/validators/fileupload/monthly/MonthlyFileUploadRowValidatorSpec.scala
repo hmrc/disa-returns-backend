@@ -139,14 +139,34 @@ class MonthlyFileUploadRowValidatorSpec extends SpecBase {
     }
 
     "must calculate current or previous reporting month" in {
-      validator.isInCurrentOrPreviousReportingMonth(LocalDate.parse("2026-04-06"), "2026-27", 5) mustBe true
-      validator.isInCurrentOrPreviousReportingMonth(LocalDate.parse("2026-05-31"), "2026-27", 5) mustBe true
-      validator.isInCurrentOrPreviousReportingMonth(LocalDate.parse("2026-06-01"), "2026-27", 5) mustBe false
+      ReportingPeriodValidator.isInCurrentOrPreviousReportingMonth(
+        LocalDate.parse("2026-04-06"),
+        "2026-27",
+        5
+      ) mustBe true
+      ReportingPeriodValidator.isInCurrentOrPreviousReportingMonth(
+        LocalDate.parse("2026-05-31"),
+        "2026-27",
+        5
+      ) mustBe true
+      ReportingPeriodValidator.isInCurrentOrPreviousReportingMonth(
+        LocalDate.parse("2026-06-01"),
+        "2026-27",
+        5
+      ) mustBe false
     }
 
     "must calculate reporting year for January to March reporting months" in {
-      validator.isInCurrentOrPreviousReportingMonth(LocalDate.parse("2027-02-01"), "2026-27", 2) mustBe true
-      validator.isInCurrentOrPreviousReportingMonth(LocalDate.parse("2026-02-01"), "2026-27", 2) mustBe false
+      ReportingPeriodValidator.isInCurrentOrPreviousReportingMonth(
+        LocalDate.parse("2027-02-01"),
+        "2026-27",
+        2
+      ) mustBe true
+      ReportingPeriodValidator.isInCurrentOrPreviousReportingMonth(
+        LocalDate.parse("2026-02-01"),
+        "2026-27",
+        2
+      ) mustBe false
     }
   }
 

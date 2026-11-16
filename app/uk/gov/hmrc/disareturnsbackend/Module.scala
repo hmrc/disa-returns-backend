@@ -18,8 +18,7 @@ package uk.gov.hmrc.disareturnsbackend
 
 import config.*
 import play.api.{Configuration, Environment}
-import play.api.inject.*
-import play.api.inject.{Module as AppModule, bind as binding}
+import play.api.inject.{Binding, Module as AppModule, bind as binding}
 import uk.gov.hmrc.disareturnsbackend.converters.*
 import uk.gov.hmrc.disareturnsbackend.controllers.actions.*
 import uk.gov.hmrc.disareturnsbackend.jobs.{MonthlyReturnSubmissionWorkItemJob, MonthlyReturnWorkItemJob}
