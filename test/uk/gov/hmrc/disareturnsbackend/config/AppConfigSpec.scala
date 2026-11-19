@@ -25,6 +25,19 @@ class AppConfigSpec extends SpecBase {
 
   "AppConfig" - {
 
+    "must disable agent authentication when the flag is absent" in {
+      appConfig(None).agentAuthenticationEnabled mustBe false
+    }
+
+    "must read the agent authentication flag" in {
+      appConfig(None, agentAuthenticationEnabled = Some(true)).agentAuthenticationEnabled mustBe true
+      appConfig(None, agentAuthenticationEnabled = Some(false)).agentAuthenticationEnabled mustBe false
+    }
+
+    "must resolve the disa-account service URL" in {
+      appConfig(None).disaAccountService mustBe "http://disa-account"
+    }
+
     "must read fileUploadMaxInlineErrors from config" in {
       appConfig(fileUploadMaxInlineErrors = Some(10)).fileUploadMaxInlineErrors mustBe 10
     }
@@ -65,11 +78,13 @@ class AppConfigSpec extends SpecBase {
     fileUploadMaxInlineErrors: Option[Int],
     enqueueAttempts: Option[Int] = None,
     validationEnabled: Option[Boolean] = None,
-    submissionEnabled: Option[Boolean] = None
+    submissionEnabled: Option[Boolean] = None,
+    agentAuthenticationEnabled: Option[Boolean] = None
   ): AppConfig = {
     val servicesConfig = mock[ServicesConfig]
     when(servicesConfig.baseUrl("internal-auth")).thenReturn("http://internal-auth")
     when(servicesConfig.baseUrl("disa-returns-submission")).thenReturn("http://disa-returns-submission")
+    when(servicesConfig.baseUrl("disa-account")).thenReturn("http://disa-account")
 
     val configValues = Map[String, Any](
       "appName"                                                       -> "disa-returns-backend",
@@ -80,7 +95,8 @@ class AppConfigSpec extends SpecBase {
     ) ++ fileUploadMaxInlineErrors.map("fileUploadMaxInlineErrors" -> _) ++
       enqueueAttempts.map("monthly-return-submission-work-item-job.submissionTransferEnqueueAttempts" -> _) ++
       validationEnabled.map("monthly-return-file-upload-work-item-job.enabled" -> _) ++
-      submissionEnabled.map("monthly-return-submission-work-item-job.enabled" -> _)
+      submissionEnabled.map("monthly-return-submission-work-item-job.enabled" -> _) ++
+      agentAuthenticationEnabled.map("features.agent-authentication-enabled" -> _)
 
     new AppConfig(Configuration.from(configValues), servicesConfig)
   }

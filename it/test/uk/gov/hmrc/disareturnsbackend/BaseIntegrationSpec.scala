@@ -72,7 +72,7 @@ trait BaseIntegrationSpec
       "create-internal-auth-token-on-start"                    -> false,
       "mongodb.uri"                                            -> "mongodb://localhost:27017/disa-returns-backend-it",
       // Make ttl dynamic to account for mongo ttl monitor using wall clock
-      "mongodb.monthlyReturnTimeToLiveInDays"                   -> math.max(
+      "mongodb.monthlyReturnTimeToLiveInDays"                  -> math.max(
         20L,
         Duration.between(integrationTestNow, Instant.now()).toDays + 20L
       ),
@@ -81,7 +81,10 @@ trait BaseIntegrationSpec
       "microservice.services.auth.port"                        -> wireMockPort,
       "microservice.services.disa-returns-submission.protocol" -> "http",
       "microservice.services.disa-returns-submission.host"     -> "localhost",
-      "microservice.services.disa-returns-submission.port"     -> wireMockPort
+      "microservice.services.disa-returns-submission.port"     -> wireMockPort,
+      "microservice.services.disa-account.protocol"            -> "http",
+      "microservice.services.disa-account.host"                -> "localhost",
+      "microservice.services.disa-account.port"                -> wireMockPort
     )
 
   protected def inject[T: ClassTag]: T =
@@ -193,7 +196,9 @@ trait BaseIntegrationSpec
   protected def stubAuth(
     zReference: String = testZReference,
     authorizationHeader: String = testBearerToken,
-    state: String = "Activated"
+    state: String = "Activated",
+    affinityGroup: String = "Organisation",
+    includeDisaEnrolment: Boolean = true
   ): Unit =
     stubFor(
       post(urlEqualTo("/auth/authorise"))
@@ -205,18 +210,21 @@ trait BaseIntegrationSpec
             .withBody(
               Json
                 .obj(
-                  "allEnrolments" -> Json.arr(
-                    Json.obj(
-                      "key"         -> "HMRC-DISA-ORG",
-                      "identifiers" -> Json.arr(
-                        Json.obj(
-                          "key"   -> "ZREF",
-                          "value" -> zReference
-                        )
-                      ),
-                      "state"       -> state
-                    )
-                  )
+                  "affinityGroup" -> affinityGroup,
+                  "allEnrolments" -> (if (includeDisaEnrolment)
+                                        Json.arr(
+                                          Json.obj(
+                                            "key"         -> "HMRC-DISA-ORG",
+                                            "identifiers" -> Json.arr(
+                                              Json.obj(
+                                                "key"   -> "ZREF",
+                                                "value" -> zReference
+                                              )
+                                            ),
+                                            "state"       -> state
+                                          )
+                                        )
+                                      else Json.arr())
                 )
                 .toString()
             )
@@ -230,7 +238,6 @@ trait BaseIntegrationSpec
         .willReturn(
           aResponse()
             .withStatus(UNAUTHORIZED)
-            .withHeader(WWW_AUTHENTICATE, """MDTP detail="InvalidBearerToken"""")
         )
     )
 
