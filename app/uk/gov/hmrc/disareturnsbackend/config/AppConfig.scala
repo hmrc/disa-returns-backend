@@ -39,6 +39,12 @@ class AppConfig @Inject() (
 
   val returnsSubmissionService: String = servicesConfig.baseUrl("disa-returns-submission")
 
+  val disaAccountService: String = servicesConfig.baseUrl("disa-account")
+
+  val agentAuthenticationEnabled: Boolean = config
+    .getOptional[Boolean]("features.agent-authentication-enabled")
+    .getOrElse(false)
+
   val monthlyReturnFileUploadJobEnabled: Boolean = config
     .getOptional[Boolean]("monthly-return-file-upload-work-item-job.enabled")
     .getOrElse(true)
