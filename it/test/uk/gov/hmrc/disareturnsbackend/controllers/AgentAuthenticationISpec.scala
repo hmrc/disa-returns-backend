@@ -70,13 +70,23 @@ abstract class AgentAuthenticationISpec extends BaseIntegrationSpec {
       verify(0, getRequestedFor(urlEqualTo(preferencesPath)))
     }
 
+    "preserve ISA manager access when both principal enrolments are present" in {
+      stubAuth(includeAgentEnrolment = true)
+
+      get(reportingPath).status                           shouldBe OK
+      postJson(monthlyPath, nilReturnFalseRequest).status shouldBe CREATED
+      get(monthlyPath).status                             shouldBe OK
+
+      verify(0, getRequestedFor(urlEqualTo(preferencesPath)))
+    }
+
     if (!agentAuthenticationEnabled) {
       endpoints.foreach { endpoint =>
         Seq(false, true).foreach { matchingPrincipal =>
           s"reject ${endpoint.name} for disabled agents with matching principal enrolment=$matchingPrincipal" in {
             seedMonthlyReturn()
             val original = repository.get(testZReference, testTaxYear, testMonth).futureValue
-            stubAuth(affinityGroup = "Agent", includeDisaEnrolment = matchingPrincipal)
+            stubAuth(affinityGroup = "Agent", includeDisaEnrolment = matchingPrincipal, includeAgentEnrolment = true)
 
             endpoint.request().status shouldBe FORBIDDEN
 
@@ -87,8 +97,8 @@ abstract class AgentAuthenticationISpec extends BaseIntegrationSpec {
         }
       }
     } else {
-      "forward the bearer token and allow reporting status and the monthly return lifecycle without a DISA principal enrolment" in {
-        stubAuth(affinityGroup = "Agent", includeDisaEnrolment = false)
+      "allow an agent with an active agent principal enrolment and no DISA principal enrolment through reporting status and the monthly return lifecycle" in {
+        stubAuth(affinityGroup = "Agent", includeDisaEnrolment = false, includeAgentEnrolment = true)
         stubFor(
           wmGet(urlEqualTo(preferencesPath)).willReturn(
             okJson(Json.obj("zReference" -> lowercaseTestZReference).toString())
@@ -109,6 +119,29 @@ abstract class AgentAuthenticationISpec extends BaseIntegrationSpec {
         verify(9, postRequestedFor(urlEqualTo("/auth/authorise")))
       }
 
+      endpoints.foreach { endpoint =>
+        Seq(false, true).foreach { matchingDisaEnrolment =>
+          Seq("missing", "NotYetActivated").foreach { agentState =>
+            s"reject ${endpoint.name} with $agentState agent principal enrolment and matching DISA enrolment=$matchingDisaEnrolment" in {
+              seedMonthlyReturn()
+              val original = repository.get(testZReference, testTaxYear, testMonth).futureValue
+              stubAuth(
+                affinityGroup = "Agent",
+                includeDisaEnrolment = matchingDisaEnrolment,
+                includeAgentEnrolment = agentState != "missing",
+                agentEnrolmentState = agentState
+              )
+
+              endpoint.request().status shouldBe FORBIDDEN
+
+              verify(0, getRequestedFor(urlEqualTo(preferencesPath)))
+              assertNoProtectedOperation()
+              repository.get(testZReference, testTaxYear, testMonth).futureValue shouldBe original
+            }
+          }
+        }
+      }
+
       val failures = Seq(
         ("different selection", OK, Json.obj("zReference" -> wrongTestZReference).toString(), FORBIDDEN),
         ("expired authentication", UNAUTHORIZED, "", UNAUTHORIZED),
@@ -127,7 +160,7 @@ abstract class AgentAuthenticationISpec extends BaseIntegrationSpec {
           s"reject ${endpoint.name} for $description without executing the protected operation" in {
             seedMonthlyReturn()
             val original = repository.get(testZReference, testTaxYear, testMonth).futureValue
-            stubAuth(affinityGroup = "Agent")
+            stubAuth(affinityGroup = "Agent", includeAgentEnrolment = true)
             stubFor(
               wmGet(urlEqualTo(preferencesPath)).willReturn(aResponse().withStatus(upstreamStatus).withBody(body))
             )
@@ -146,7 +179,7 @@ abstract class AgentAuthenticationISpec extends BaseIntegrationSpec {
 
       Seq(reportingPath, monthlyPath).foreach { path =>
         s"return 503 for a preferences connection failure at $path" in {
-          stubAuth(affinityGroup = "Agent", includeDisaEnrolment = false)
+          stubAuth(affinityGroup = "Agent", includeDisaEnrolment = false, includeAgentEnrolment = true)
           stubFor(wmGet(urlEqualTo(preferencesPath)).willReturn(aResponse().withFault(Fault.CONNECTION_RESET_BY_PEER)))
 
           get(path).status shouldBe SERVICE_UNAVAILABLE

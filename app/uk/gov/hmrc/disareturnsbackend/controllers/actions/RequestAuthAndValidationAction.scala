@@ -71,8 +71,9 @@ class RequestAuthAndValidationActionImpl @Inject() (
     with Results
     with Logging {
 
-  private val enrolmentKey  = "HMRC-DISA-ORG"
-  private val identifierKey = "ZREF"
+  private val enrolmentKey      = "HMRC-DISA-ORG"
+  private val agentEnrolmentKey = "HMRC-AS-AGENT"
+  private val identifierKey     = "ZREF"
 
   private val authFunctions = new AuthorisedFunctions {
     override def authConnector: AuthConnector = RequestAuthAndValidationActionImpl.this.authConnector
@@ -178,10 +179,15 @@ class RequestAuthAndValidationActionImpl @Inject() (
     zReference: String
   )(block: => Future[Result])(implicit hc: HeaderCarrier): Future[Result] =
     affinityGroup match {
-      case Some(AffinityGroup.Agent) if !appConfig.agentAuthenticationEnabled =>
+      case Some(AffinityGroup.Agent) if !appConfig.agentAuthenticationEnabled                             =>
         logger.warn("[RequestAuthAndValidationAction] Agent authentication is disabled")
         Future.successful(Forbidden)
-      case Some(AffinityGroup.Agent)                                          =>
+      case Some(AffinityGroup.Agent) if !enrolments.getEnrolment(agentEnrolmentKey).exists(_.isActivated) =>
+        logger.warn(
+          s"[RequestAuthAndValidationAction] Agent is missing an activated $agentEnrolmentKey principal enrolment"
+        )
+        Future.successful(Forbidden)
+      case Some(AffinityGroup.Agent)                                                                      =>
         disaAccountConnector
           .getAgentZReference()
           .map[Either[Result, String]](Right(_))
@@ -212,8 +218,8 @@ class RequestAuthAndValidationActionImpl @Inject() (
               logger.warn("[RequestAuthAndValidationAction] Agent preference does not match the requested ZReference")
               Future.successful(Forbidden)
           }
-      case _ if hasMatchingDisaEnrolment(enrolments, zReference)              => block
-      case _                                                                  =>
+      case _ if hasMatchingDisaEnrolment(enrolments, zReference)                                          => block
+      case _                                                                                              =>
         logger.warn(
           s"[RequestAuthAndValidationAction] DISA enrolment [$enrolmentKey/$identifierKey] does not match zReference [$zReference]"
         )

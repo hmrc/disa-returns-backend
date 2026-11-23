@@ -290,7 +290,10 @@ class RequestAuthAndValidationActionImplSpec extends SpecBase with BeforeAndAfte
       Seq(false, true).foreach { matchingEnrolment =>
         s"must reject a disabled agent with matching principal enrolment=$matchingEnrolment without calling preferences" in {
           authoriseWith(
-            if (matchingEnrolment) disaEnrolments(testZReference) else Enrolments(Set.empty),
+            Enrolments(
+              agentEnrolments().enrolments ++ (if (matchingEnrolment) disaEnrolments(testZReference).enrolments
+                                               else Set.empty)
+            ),
             Some(AffinityGroup.Agent)
           )
           var executed = false
@@ -303,9 +306,26 @@ class RequestAuthAndValidationActionImplSpec extends SpecBase with BeforeAndAfte
         }
       }
 
-      "must authorise an enabled agent without a principal enrolment using the original bearer token" in {
+      Seq(false, true).foreach { matchingDisaEnrolment =>
+        Seq("missing", "NotYetActivated").foreach { agentState =>
+          s"must reject an enabled agent with $agentState agent principal enrolment and matching DISA enrolment=$matchingDisaEnrolment" in {
+            when(mockAppConfig.agentAuthenticationEnabled).thenReturn(true)
+            val principalEnrolments =
+              (if (matchingDisaEnrolment) disaEnrolments(testZReference).enrolments else Set.empty[Enrolment]) ++
+                (if (agentState == "missing") Set.empty[Enrolment] else agentEnrolments(agentState).enrolments)
+            authoriseWith(Enrolments(principalEnrolments), Some(AffinityGroup.Agent))
+            var executed            = false
+
+            status(invoke() { executed = true; Future.successful(Ok) }) mustBe FORBIDDEN
+            executed mustBe false
+            verifyNoInteractions(mockDisaAccountConnector)
+          }
+        }
+      }
+
+      "must authorise an enabled agent with an active agent principal enrolment and no DISA principal enrolment using the original bearer token" in {
         when(mockAppConfig.agentAuthenticationEnabled).thenReturn(true)
-        authoriseWith(Enrolments(Set.empty), Some(AffinityGroup.Agent))
+        authoriseWith(agentEnrolments(), Some(AffinityGroup.Agent))
         when(mockDisaAccountConnector.getAgentZReference()(any()))
           .thenReturn(Future.successful(lowercaseTestZReference))
 
@@ -319,7 +339,10 @@ class RequestAuthAndValidationActionImplSpec extends SpecBase with BeforeAndAfte
 
       "must reject a different preference even when the agent has a matching principal enrolment" in {
         when(mockAppConfig.agentAuthenticationEnabled).thenReturn(true)
-        authoriseWith(disaEnrolments(testZReference), Some(AffinityGroup.Agent))
+        authoriseWith(
+          Enrolments(disaEnrolments(testZReference).enrolments ++ agentEnrolments().enrolments),
+          Some(AffinityGroup.Agent)
+        )
         when(mockDisaAccountConnector.getAgentZReference()(any())).thenReturn(Future.successful(wrongTestZReference))
         var executed = false
 
@@ -340,7 +363,7 @@ class RequestAuthAndValidationActionImplSpec extends SpecBase with BeforeAndAfte
       ).foreach { case (description, error, expectedStatus) =>
         s"must handle $description without executing the protected operation" in {
           when(mockAppConfig.agentAuthenticationEnabled).thenReturn(true)
-          authoriseWith(Enrolments(Set.empty), Some(AffinityGroup.Agent))
+          authoriseWith(agentEnrolments(), Some(AffinityGroup.Agent))
           when(mockDisaAccountConnector.getAgentZReference()(any())).thenReturn(Future.failed(error))
           var executed = false
 
@@ -355,7 +378,7 @@ class RequestAuthAndValidationActionImplSpec extends SpecBase with BeforeAndAfte
       ).foreach { case (upstreamStatus, message) =>
         s"must distinguish upstream $upstreamStatus in warning logs" in {
           when(mockAppConfig.agentAuthenticationEnabled).thenReturn(true)
-          authoriseWith(Enrolments(Set.empty), Some(AffinityGroup.Agent))
+          authoriseWith(agentEnrolments(), Some(AffinityGroup.Agent))
           when(mockDisaAccountConnector.getAgentZReference()(any()))
             .thenReturn(Future.failed(UpstreamErrorResponse("preferences failed", upstreamStatus)))
           val logger        = LoggerFactory.getLogger(classOf[RequestAuthAndValidationActionImpl]).asInstanceOf[Logger]
@@ -391,7 +414,7 @@ class RequestAuthAndValidationActionImplSpec extends SpecBase with BeforeAndAfte
 
       "must validate request parameters before calling preferences" in {
         when(mockAppConfig.agentAuthenticationEnabled).thenReturn(true)
-        authoriseWith(Enrolments(Set.empty), Some(AffinityGroup.Agent))
+        authoriseWith(agentEnrolments(), Some(AffinityGroup.Agent))
         var executed = false
 
         status(invoke(invalidTestZReference) { executed = true; Future.successful(Ok) }) mustBe BAD_REQUEST
@@ -414,7 +437,7 @@ class RequestAuthAndValidationActionImplSpec extends SpecBase with BeforeAndAfte
       if (endpoint == "monthly return") {
         "must preserve period validation before calling preferences" in {
           when(mockAppConfig.agentAuthenticationEnabled).thenReturn(true)
-          authoriseWith(Enrolments(Set.empty), Some(AffinityGroup.Agent))
+          authoriseWith(agentEnrolments(), Some(AffinityGroup.Agent))
           val action = authActionAt("2026-07-07T12:00:00Z")
 
           status(
@@ -429,6 +452,9 @@ class RequestAuthAndValidationActionImplSpec extends SpecBase with BeforeAndAfte
 
   private def authorisedRequest =
     FakeRequest("GET", "/test").withHeaders(AUTHORIZATION -> testBearerToken)
+
+  private def agentEnrolments(state: String = "Activated"): Enrolments =
+    Enrolments(Set(Enrolment(testAgentEnrolmentKey, Seq.empty, state)))
 
   private def disaEnrolments(zReference: String, state: String = "Activated"): Enrolments =
     Enrolments(

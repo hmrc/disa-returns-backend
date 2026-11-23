@@ -198,8 +198,23 @@ trait BaseIntegrationSpec
     authorizationHeader: String = testBearerToken,
     state: String = "Activated",
     affinityGroup: String = "Organisation",
-    includeDisaEnrolment: Boolean = true
-  ): Unit =
+    includeDisaEnrolment: Boolean = true,
+    includeAgentEnrolment: Boolean = false,
+    agentEnrolmentState: String = "Activated"
+  ): Unit = {
+    val disaEnrolments  = if (includeDisaEnrolment) {
+      Json.arr(
+        Json.obj(
+          "key"         -> "HMRC-DISA-ORG",
+          "identifiers" -> Json.arr(Json.obj("key" -> "ZREF", "value" -> zReference)),
+          "state"       -> state
+        )
+      )
+    } else Json.arr()
+    val agentEnrolments = if (includeAgentEnrolment) {
+      Json.arr(Json.obj("key" -> testAgentEnrolmentKey, "identifiers" -> Json.arr(), "state" -> agentEnrolmentState))
+    } else Json.arr()
+
     stubFor(
       post(urlEqualTo("/auth/authorise"))
         .withHeader(AUTHORIZATION, equalTo(authorizationHeader))
@@ -209,27 +224,12 @@ trait BaseIntegrationSpec
             .withHeader("Content-Type", "application/json")
             .withBody(
               Json
-                .obj(
-                  "affinityGroup" -> affinityGroup,
-                  "allEnrolments" -> (if (includeDisaEnrolment)
-                                        Json.arr(
-                                          Json.obj(
-                                            "key"         -> "HMRC-DISA-ORG",
-                                            "identifiers" -> Json.arr(
-                                              Json.obj(
-                                                "key"   -> "ZREF",
-                                                "value" -> zReference
-                                              )
-                                            ),
-                                            "state"       -> state
-                                          )
-                                        )
-                                      else Json.arr())
-                )
+                .obj("affinityGroup" -> affinityGroup, "allEnrolments" -> (disaEnrolments ++ agentEnrolments))
                 .toString()
             )
         )
     )
+  }
 
   protected def stubInvalidBearerToken(): Unit =
     stubFor(
@@ -238,6 +238,7 @@ trait BaseIntegrationSpec
         .willReturn(
           aResponse()
             .withStatus(UNAUTHORIZED)
+            .withHeader(WWW_AUTHENTICATE, """MDTP detail="InvalidBearerToken"""")
         )
     )
 

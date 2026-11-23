@@ -31,7 +31,9 @@ ISA manager requests with a valid bearer token but no matching DISA enrolment re
 Agent authentication is controlled by `features.agent-authentication-enabled`. It is enabled locally, disabled in
 app-config-base, and enabled in QA. If the configuration key is absent, it defaults to `false`.
 Disabled agents receive `403 Forbidden`, even if they have a matching principal DISA enrolment. Enabled agents
-are authorised using `GET /disa-account/agents/preferences`, forwarding the user's bearer token. The response must contain
+must have an activated `HMRC-AS-AGENT` principal enrolment before the backend retrieves preferences; otherwise they
+receive `403 Forbidden`. They are then authorised using `GET /disa-account/agents/preferences`, forwarding the user's
+bearer token. The response must contain
 a valid `zReference` matching the validated path Z-reference (case-insensitively). The preferences endpoint checks
 delegated access; this backend does not repeat that check. ISA manager requests never call agent preferences.
 
