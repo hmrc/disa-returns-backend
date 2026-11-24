@@ -17,18 +17,22 @@
 package uk.gov.hmrc.disareturnsbackend.controllers.actions
 
 import play.api.Logging
+import play.api.http.Status.{FORBIDDEN, NOT_FOUND, UNAUTHORIZED}
 import play.api.libs.json.Json
 import play.api.mvc.*
-import uk.gov.hmrc.auth.core.retrieve.v2.Retrievals
 import uk.gov.hmrc.auth.core.*
+import uk.gov.hmrc.auth.core.retrieve.v2.Retrievals
+import uk.gov.hmrc.auth.core.retrieve.~
+import uk.gov.hmrc.disareturnsbackend.config.AppConfig
+import uk.gov.hmrc.disareturnsbackend.connectors.DisaAccountConnector
 import uk.gov.hmrc.disareturnsbackend.models.*
+import uk.gov.hmrc.disareturnsbackend.utils.Constants.{AGENT_ENROLMENT_KEY, DISA_ENROLMENT_KEY, Z_REFERENCE_IDENTIFIER_KEY}
 import uk.gov.hmrc.disareturnsbackend.utils.TimeSource
 import uk.gov.hmrc.disareturnsbackend.validators.*
-import uk.gov.hmrc.http.HeaderCarrier
+import uk.gov.hmrc.http.{HeaderCarrier, UpstreamErrorResponse}
 import uk.gov.hmrc.play.http.HeaderCarrierConverter
 
 import java.time.*
-import java.util.Locale
 import javax.inject.*
 import scala.concurrent.*
 import scala.util.control.NonFatal
@@ -58,16 +62,15 @@ trait RequestAuthAction {
 class RequestAuthAndValidationActionImpl @Inject() (
   cc: ControllerComponents,
   authConnector: AuthConnector,
-  timeSource: TimeSource
+  timeSource: TimeSource,
+  appConfig: AppConfig,
+  disaAccountConnector: DisaAccountConnector
 )(implicit
   ec: ExecutionContext
 ) extends RequestAuthAndValidationAction
     with RequestAuthAction
     with Results
     with Logging {
-
-  private val enrolmentKey  = "HMRC-DISA-ORG"
-  private val identifierKey = "ZREF"
 
   private val authFunctions = new AuthorisedFunctions {
     override def authConnector: AuthConnector = RequestAuthAndValidationActionImpl.this.authConnector
@@ -88,7 +91,7 @@ class RequestAuthAndValidationActionImpl @Inject() (
         request: Request[A],
         block: ValidatedMonthlyReturnRequest[A] => Future[Result]
       ): Future[Result] =
-        authorised(request) { (enrolments, hc) =>
+        authorised(request) { (enrolments, affinityGroup, hc) =>
           implicit val headerCarrier: HeaderCarrier = hc
           ValidationHelper.validateParams(zReference, taxYear, month) match {
             case Right((validZReference, validTaxYear, validMonth)) =>
@@ -98,13 +101,10 @@ class RequestAuthAndValidationActionImpl @Inject() (
                     s"[RequestAuthAndValidationAction] Monthly return request is outside the allowed period for zReference [$validZReference], taxYear [$validTaxYear], month [$validMonth]"
                   )
                   Future.successful(UnprocessableEntity)
-                } else if (hasMatchingDisaEnrolment(enrolments, validZReference)) {
-                  block(ValidatedMonthlyReturnRequest(validZReference, validTaxYear, validMonth, request))
                 } else {
-                  logger.warn(
-                    s"[RequestAuthAndValidationAction] DISA enrolment [$enrolmentKey/$identifierKey] does not match zReference [$validZReference]"
-                  )
-                  Future.successful(Forbidden)
+                  authoriseZReference(enrolments, affinityGroup, validZReference) {
+                    block(ValidatedMonthlyReturnRequest(validZReference, validTaxYear, validMonth, request))
+                  }
                 }
               }
 
@@ -127,30 +127,30 @@ class RequestAuthAndValidationActionImpl @Inject() (
         request: Request[A],
         block: ValidatedZReferenceRequest[A] => Future[Result]
       ): Future[Result] =
-        authorised(request) { (enrolments, _) =>
-          val normalized = zReference.trim.toUpperCase(Locale.ROOT)
-          if (!ZReferenceValidator.isValid(normalized)) {
+        authorised(request) { (enrolments, affinityGroup, hc) =>
+          implicit val headerCarrier: HeaderCarrier = hc
+          val normalised                            = zReference.trim.toUpperCase
+          if (!ZReferenceValidator.isValid(normalised)) {
             logger.warn(s"[RequestAuthAndValidationAction] Invalid zReference [$zReference]")
             Future.successful(BadRequest(Json.obj("message" -> "Invalid field: [zReference]")))
-          } else if (hasMatchingDisaEnrolment(enrolments, normalized)) {
-            block(ValidatedZReferenceRequest(normalized, request))
           } else {
-            logger.warn(
-              s"[RequestAuthAndValidationAction] DISA enrolment [$enrolmentKey/$identifierKey] does not match zReference [$normalized]"
-            )
-            Future.successful(Forbidden)
+            authoriseZReference(enrolments, affinityGroup, normalised) {
+              block(ValidatedZReferenceRequest(normalised, request))
+            }
           }
         }
     }
 
   private def authorised[A](
     request: Request[A]
-  )(block: (Enrolments, HeaderCarrier) => Future[Result]): Future[Result] = {
+  )(block: (Enrolments, Option[AffinityGroup], HeaderCarrier) => Future[Result]): Future[Result] = {
     implicit val hc: HeaderCarrier = HeaderCarrierConverter.fromRequest(request)
 
     authFunctions
       .authorised()
-      .retrieve(Retrievals.allEnrolments)(enrolments => block(enrolments, hc))
+      .retrieve(Retrievals.allEnrolments and Retrievals.affinityGroup) { case enrolments ~ affinityGroup =>
+        block(enrolments, affinityGroup, hc)
+      }
       .recover {
         case exception: InternalError =>
           logger.error("[RequestAuthAndValidationAction] Auth request failed with internal error", exception)
@@ -169,6 +169,59 @@ class RequestAuthAndValidationActionImpl @Inject() (
           ServiceUnavailable
       }
   }
+
+  private def authoriseZReference(
+    enrolments: Enrolments,
+    affinityGroup: Option[AffinityGroup],
+    zReference: String
+  )(block: => Future[Result])(implicit hc: HeaderCarrier): Future[Result] =
+    affinityGroup match {
+      case Some(AffinityGroup.Agent) if !appConfig.agentAuthenticationEnabled                               =>
+        logger.warn("[RequestAuthAndValidationAction] Agent authentication is disabled")
+        Future.successful(Forbidden)
+      case Some(AffinityGroup.Agent) if !enrolments.getEnrolment(AGENT_ENROLMENT_KEY).exists(_.isActivated) =>
+        logger.warn(
+          s"[RequestAuthAndValidationAction] Agent is missing an activated $AGENT_ENROLMENT_KEY principal enrolment"
+        )
+        Future.successful(Forbidden)
+      case Some(AffinityGroup.Agent)                                                                        =>
+        disaAccountConnector
+          .getAgentZReference()
+          .map[Either[Result, String]](Right(_))
+          .recover {
+            case error: UpstreamErrorResponse if error.statusCode == UNAUTHORIZED =>
+              logger.warn("[RequestAuthAndValidationAction] Agent preferences returned 401 Unauthorized", error)
+              Left(Unauthorized)
+            case error: UpstreamErrorResponse if error.statusCode == FORBIDDEN    =>
+              logger.warn(
+                "[RequestAuthAndValidationAction] Agent preferences returned 403 Forbidden: authorisation denied",
+                error
+              )
+              Left(Forbidden)
+            case error: UpstreamErrorResponse if error.statusCode == NOT_FOUND    =>
+              logger.warn(
+                "[RequestAuthAndValidationAction] Agent preferences returned 404 Not Found: preferences missing or expired",
+                error
+              )
+              Left(Forbidden)
+            case NonFatal(error)                                                  =>
+              logger.error("[RequestAuthAndValidationAction] Agent preferences request failed", error)
+              Left(ServiceUnavailable)
+          }
+          .flatMap {
+            case Left(result)                                                                 => Future.successful(result)
+            case Right(selectedZReference) if selectedZReference.equalsIgnoreCase(zReference) => block
+            case Right(_)                                                                     =>
+              logger.warn("[RequestAuthAndValidationAction] Agent preference does not match the requested ZReference")
+              Future.successful(Forbidden)
+          }
+      case _ if hasMatchingDisaEnrolment(enrolments, zReference)                                            => block
+      case _                                                                                                =>
+        logger.warn(
+          s"[RequestAuthAndValidationAction] DISA enrolment [$DISA_ENROLMENT_KEY/$Z_REFERENCE_IDENTIFIER_KEY] does not match zReference [$zReference]"
+        )
+        Future.successful(Forbidden)
+    }
 
   private def isPreviousMonthlyPeriod(
     zReference: String,
@@ -194,10 +247,10 @@ class RequestAuthAndValidationActionImpl @Inject() (
   private def hasMatchingDisaEnrolment(enrolments: Enrolments, zReference: String): Boolean =
     enrolments.enrolments
       .exists { enrolment =>
-        enrolment.key == enrolmentKey &&
+        enrolment.key == DISA_ENROLMENT_KEY &&
         enrolment.isActivated &&
         enrolment
-          .getIdentifier(identifierKey)
+          .getIdentifier(Z_REFERENCE_IDENTIFIER_KEY)
           .exists(identifier => identifier.value.equalsIgnoreCase(zReference))
       }
 }

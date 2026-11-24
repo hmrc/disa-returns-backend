@@ -23,10 +23,32 @@ Path parameters:
 
 Invalid path parameters return `400 Bad Request`.
 
-The monthly return and reporting-window status endpoints above require a valid bearer token with an activated
-`HMRC-DISA-ORG` enrolment whose `ZREF` identifier matches the path Z-reference.
+The monthly return and reporting-window status endpoints above require a valid bearer token. ISA managers require an
+activated `HMRC-DISA-ORG` enrolment whose `ZREF` identifier matches the path Z-reference, regardless of the agent flag.
 Requests with no or invalid bearer token return `401 Unauthorized`.
-Requests with a valid bearer token but no matching DISA enrolment return `403 Forbidden`.
+ISA manager requests with a valid bearer token but no matching DISA enrolment return `403 Forbidden`.
+
+Agent authentication is controlled by `features.agent-authentication-enabled`. It is enabled locally, disabled in
+app-config-base, and enabled in QA. If the configuration key is absent, it defaults to `false`.
+Disabled agents receive `403 Forbidden`, even if they have a matching principal DISA enrolment. Enabled agents
+must have an activated `HMRC-AS-AGENT` principal enrolment before the backend retrieves preferences; otherwise they
+receive `403 Forbidden`. They are then authorised using `GET /disa-account/agents/preferences`, forwarding the user's
+bearer token. The response must contain
+a valid `zReference` matching the validated path Z-reference (case-insensitively). The preferences endpoint checks
+delegated access; this backend does not repeat that check. ISA manager requests never call agent preferences.
+
+| Agent preferences outcome | Backend response |
+| --- | --- |
+| `200` with a valid matching Z-reference | Continue the protected operation |
+| `200` with a valid different Z-reference | `403 Forbidden` |
+| `401` | `401 Unauthorized` |
+| `403` (authorisation denied) | `403 Forbidden`; logged as upstream `403` |
+| `404` (missing or expired preferences) | `403 Forbidden`; logged separately as upstream `404` |
+| `503`, connection failure, or timeout | `503 Service Unavailable` |
+| Malformed successful response or unexpected upstream failure | `503 Service Unavailable` |
+
+Rejected requests do not execute the protected operation. Existing path and monthly-period validation still applies
+before retrieving preferences.
 
 The Upscan callback and test-only endpoints are not secured by this bearer-token/enrolment check.
 
@@ -45,8 +67,8 @@ proxies `disa-returns-submission`, which remains the source of truth, and return
 
 - Returns `400 Bad Request` for an invalid Z-reference.
 - Returns `401 Unauthorized` for a missing or invalid bearer token.
-- Returns `403 Forbidden` without an activated matching `HMRC-DISA-ORG`/`ZREF` enrolment.
-- Returns `503 Service Unavailable` when authentication fails internally or submission's status lookup still fails after its upstream-5xx retries.
+- Returns `403 Forbidden` when ISA manager enrolments or agent preferences do not authorise access, or agent authentication is disabled.
+- Returns `503 Service Unavailable` when authentication or agent preferences fail unexpectedly, or submission's status lookup still fails after its upstream-5xx retries.
 
 ### Create Monthly Return
 

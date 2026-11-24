@@ -24,7 +24,10 @@ import play.api.libs.json.Json
 import play.api.test.FakeRequest
 import play.api.test.Helpers.*
 import uk.gov.hmrc.auth.core.*
-import uk.gov.hmrc.disareturnsbackend.connectors.ReturnsSubmissionConnector
+import uk.gov.hmrc.auth.core.retrieve.~
+import uk.gov.hmrc.disareturnsbackend.utils.Constants.{DISA_ENROLMENT_KEY, Z_REFERENCE_IDENTIFIER_KEY}
+import uk.gov.hmrc.disareturnsbackend.config.AppConfig
+import uk.gov.hmrc.disareturnsbackend.connectors.{DisaAccountConnector, ReturnsSubmissionConnector}
 import uk.gov.hmrc.disareturnsbackend.controllers.actions.RequestAuthAndValidationActionImpl
 import uk.gov.hmrc.disareturnsbackend.utils.TimeSource
 
@@ -34,7 +37,13 @@ class ReportingWindowControllerSpec extends SpecBase {
   private val authConnector                  = mock[AuthConnector]
   private val returnsSubmissionConnector     = mock[ReturnsSubmissionConnector]
   private val requestAuthAndValidationAction =
-    new RequestAuthAndValidationActionImpl(stubControllerComponents(), authConnector, mock[TimeSource])
+    new RequestAuthAndValidationActionImpl(
+      stubControllerComponents(),
+      authConnector,
+      mock[TimeSource],
+      mock[AppConfig],
+      mock[DisaAccountConnector]
+    )
   private val controller                     = new ReportingWindowController(
     stubControllerComponents(),
     requestAuthAndValidationAction,
@@ -61,7 +70,7 @@ class ReportingWindowControllerSpec extends SpecBase {
     }
 
     "must return Unauthorized when bearer authentication fails" in {
-      when(authConnector.authorise[Enrolments](any(), any())(any(), any()))
+      when(authConnector.authorise[Enrolments ~ Option[AffinityGroup]](any(), any())(any(), any()))
         .thenReturn(Future.failed(MissingBearerToken()))
 
       status(controller.status(testZReference)(FakeRequest())) mustBe UNAUTHORIZED
@@ -86,17 +95,20 @@ class ReportingWindowControllerSpec extends SpecBase {
     FakeRequest(GET, "/reporting-window/status").withHeaders(AUTHORIZATION -> testBearerToken)
 
   private def authoriseWith(zReference: String, state: String = "Activated"): Unit =
-    when(authConnector.authorise[Enrolments](any(), any())(any(), any()))
+    when(authConnector.authorise[Enrolments ~ Option[AffinityGroup]](any(), any())(any(), any()))
       .thenReturn(
         Future.successful(
-          Enrolments(
-            Set(
-              Enrolment(
-                key = "HMRC-DISA-ORG",
-                identifiers = Seq(EnrolmentIdentifier("ZREF", zReference)),
-                state = state
+          new ~(
+            Enrolments(
+              Set(
+                Enrolment(
+                  key = DISA_ENROLMENT_KEY,
+                  identifiers = Seq(EnrolmentIdentifier(Z_REFERENCE_IDENTIFIER_KEY, zReference)),
+                  state = state
+                )
               )
-            )
+            ),
+            Some(AffinityGroup.Organisation)
           )
         )
       )

@@ -18,6 +18,10 @@ package uk.gov.hmrc.disareturnsbackend.utils
 
 object Constants {
 
+  val DISA_ENROLMENT_KEY         = "HMRC-DISA-ORG"
+  val AGENT_ENROLMENT_KEY        = "HMRC-AS-AGENT"
+  val Z_REFERENCE_IDENTIFIER_KEY = "ZREF"
+
   val CSV_MIME_TYPE  = "text/csv"
   val XLSX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 }

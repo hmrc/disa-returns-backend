@@ -34,6 +34,7 @@ import play.api.libs.json.*
 import play.api.libs.ws.WSClient
 import play.api.test.DefaultAwaitTimeout
 import play.api.test.Helpers.await
+import uk.gov.hmrc.disareturnsbackend.utils.Constants.{AGENT_ENROLMENT_KEY, DISA_ENROLMENT_KEY, Z_REFERENCE_IDENTIFIER_KEY}
 import uk.gov.hmrc.disareturnsbackend.utils.RequestUtils
 import uk.gov.hmrc.http.test.WireMockSupport
 import uk.gov.hmrc.mongo.MongoComponent
@@ -72,7 +73,7 @@ trait BaseIntegrationSpec
       "create-internal-auth-token-on-start"                    -> false,
       "mongodb.uri"                                            -> "mongodb://localhost:27017/disa-returns-backend-it",
       // Make ttl dynamic to account for mongo ttl monitor using wall clock
-      "mongodb.monthlyReturnTimeToLiveInDays"                   -> math.max(
+      "mongodb.monthlyReturnTimeToLiveInDays"                  -> math.max(
         20L,
         Duration.between(integrationTestNow, Instant.now()).toDays + 20L
       ),
@@ -81,7 +82,10 @@ trait BaseIntegrationSpec
       "microservice.services.auth.port"                        -> wireMockPort,
       "microservice.services.disa-returns-submission.protocol" -> "http",
       "microservice.services.disa-returns-submission.host"     -> "localhost",
-      "microservice.services.disa-returns-submission.port"     -> wireMockPort
+      "microservice.services.disa-returns-submission.port"     -> wireMockPort,
+      "microservice.services.disa-account.protocol"            -> "http",
+      "microservice.services.disa-account.host"                -> "localhost",
+      "microservice.services.disa-account.port"                -> wireMockPort
     )
 
   protected def inject[T: ClassTag]: T =
@@ -193,8 +197,25 @@ trait BaseIntegrationSpec
   protected def stubAuth(
     zReference: String = testZReference,
     authorizationHeader: String = testBearerToken,
-    state: String = "Activated"
-  ): Unit =
+    state: String = "Activated",
+    affinityGroup: String = "Organisation",
+    includeDisaEnrolment: Boolean = true,
+    includeAgentEnrolment: Boolean = false,
+    agentEnrolmentState: String = "Activated"
+  ): Unit = {
+    val disaEnrolments  = if (includeDisaEnrolment) {
+      Json.arr(
+        Json.obj(
+          "key"         -> DISA_ENROLMENT_KEY,
+          "identifiers" -> Json.arr(Json.obj("key" -> Z_REFERENCE_IDENTIFIER_KEY, "value" -> zReference)),
+          "state"       -> state
+        )
+      )
+    } else Json.arr()
+    val agentEnrolments = if (includeAgentEnrolment) {
+      Json.arr(Json.obj("key" -> AGENT_ENROLMENT_KEY, "identifiers" -> Json.arr(), "state" -> agentEnrolmentState))
+    } else Json.arr()
+
     stubFor(
       post(urlEqualTo("/auth/authorise"))
         .withHeader(AUTHORIZATION, equalTo(authorizationHeader))
@@ -204,24 +225,12 @@ trait BaseIntegrationSpec
             .withHeader("Content-Type", "application/json")
             .withBody(
               Json
-                .obj(
-                  "allEnrolments" -> Json.arr(
-                    Json.obj(
-                      "key"         -> "HMRC-DISA-ORG",
-                      "identifiers" -> Json.arr(
-                        Json.obj(
-                          "key"   -> "ZREF",
-                          "value" -> zReference
-                        )
-                      ),
-                      "state"       -> state
-                    )
-                  )
-                )
+                .obj("affinityGroup" -> affinityGroup, "allEnrolments" -> (disaEnrolments ++ agentEnrolments))
                 .toString()
             )
         )
     )
+  }
 
   protected def stubInvalidBearerToken(): Unit =
     stubFor(
