@@ -1,0 +1,25 @@
+meta {
+  name: 02-204-clear-monthly-return-work-items
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}{{servicePath}}/test-only/monthly-returns/work-items/cleanup
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "zReferences": ["{{zReference}}"]
+  }
+}
+
+assert {
+  res.status: eq 204
+}

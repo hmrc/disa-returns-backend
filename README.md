@@ -378,7 +378,7 @@ monthly-return-file-upload-work-item-job {
 
 monthly-return-submission-work-item-job {
   enabled = true
-  pollInterval = 10 seconds
+  pollInterval = 2 seconds
   failedRetryAfter = 10 minutes
   inProgressRetryAfter = 15 minutes
   workerCount = 2
@@ -518,9 +518,10 @@ The following test-only routes are available only with that router:
 | `GET` | `/disa-returns-backend/test-only/overrides/:zReference` | Gets the aggregate clock and reporting-window overrides. |
 | `PUT` | `/disa-returns-backend/test-only/overrides/:zReference` | Replaces the aggregate overrides. |
 | `DELETE` | `/disa-returns-backend/test-only/overrides/:zReference` | Clears the aggregate overrides. |
-| `DELETE` | `/disa-returns-backend/test-only/monthly-returns` | Removes backend monthly returns. |
-| `DELETE` | `/disa-returns-backend/test-only/monthly-return-file-upload-work-items` | Removes monthly file-upload validation work items. |
-| `DELETE` | `/disa-returns-backend/test-only/monthly-return-submission-work-items` | Removes monthly submission-transfer work items. |
+| `POST` | `/disa-returns-backend/test-only/monthly-returns/cleanup` | Removes matching monthly returns and work items by Z-reference. |
+| `POST` | `/disa-returns-backend/test-only/monthly-returns/work-items/cleanup` | Removes matching work items by Z-reference without deleting returns. |
+| `DELETE` | `/disa-returns-backend/test-only/monthly-returns/cleanup` | Removes all monthly returns and work items. |
+| `DELETE` | `/disa-returns-backend/test-only/monthly-returns/work-items/` | Removes all monthly-return work items without deleting returns. |
 | `GET` | `/disa-returns-backend/test-only/file-upload/monthly/:filename` | Serves a local monthly CSV or XLSX test file. |
 | `GET` | `/disa-returns-backend/test-only/file-upload/monthly-expired-download` | Simulates an expired Upscan download. |
 
@@ -556,25 +557,26 @@ route with one Z-reference and then returns that aggregate. `DELETE` calls submi
 the empty aggregate. Submission is the sole source of truth; backend does not persist overrides. All three routes
 return `503 Service Unavailable` when submission cannot satisfy the request.
 
-Use the monthly returns cleanup route to remove all backend monthly returns from the local database before automation runs:
+#### Monthly-return cleanup
+
+Use scoped cleanup in automated tests. For example, to delete returns and work items for two Z-references:
 
 ```bash
-curl -X DELETE http://localhost:1207/disa-returns-backend/test-only/monthly-returns
+curl -X POST -H 'Content-Type: application/json' \
+  -d '{"zReferences":["Z1234","Z5678"]}' \
+  http://localhost:1207/disa-returns-backend/test-only/monthly-returns/cleanup
 ```
 
-Use the monthly return file-upload work-item cleanup route to delete all monthly return file-upload work-item documents from `monthlyReturnFileUploadWorkItems`:
+Both scoped `POST`s use the same body and match across all periods. References are trimmed, uppercased and deduplicated.
+Missing, empty or invalid lists return `400` before anything is deleted. Cleanup returns `204` even if nothing matches,
+or `503` if a deletion fails.
 
-```bash
-curl -X DELETE http://localhost:1207/disa-returns-backend/test-only/monthly-return-file-upload-work-items
-```
+Work-item cleanup covers `monthlyReturnFileUploadWorkItems` (validation) and `monthlyReturnSubmissionWorkItems`
+(transfer), including items whose return is already missing. Combined cleanup clears the queues before the returns.
+It does not affect submission's data, clock overrides or Object Store files. Wait for active work to finish before
+cleaning up: deleting a queue entry cannot stop a worker that's already processing it.
 
-This deletes all local file-upload validation work-item documents, regardless of status; it does not drop the collection.
-
-Use the separate submission work-item cleanup route to delete all monthly return submission-transfer work items from `monthlyReturnSubmissionWorkItems` without dropping the collection or affecting validation work items:
-
-```bash
-curl -X DELETE http://localhost:1207/disa-returns-backend/test-only/monthly-return-submission-work-items
-```
+Use `DELETE /test-only/monthly-returns/work-items/` to reset both queues without deleting returns.
 
 ### Running the test suite
 
@@ -600,13 +602,18 @@ Otherwise the routes will not be available.
 | `GET /disa-returns-backend/test-only/overrides/:zReference` | Frontend test utility and `bruno/TestOnly/Overrides` | Read submission's aggregate overrides. |
 | `PUT /disa-returns-backend/test-only/overrides/:zReference` | Frontend test utility and `bruno/TestOnly/Overrides` | Fully replace submission's clock and reporting-window overrides. |
 | `DELETE /disa-returns-backend/test-only/overrides/:zReference` | Frontend test utility and `bruno/TestOnly/Overrides` | Clear both submission overrides. |
-| `DELETE /disa-returns-backend/test-only/monthly-returns` | `bruno/TestOnly/MonthlyReturns` | Remove all backend monthly returns from the local database before automation runs. |
-| `DELETE /disa-returns-backend/test-only/monthly-return-file-upload-work-items` | `bruno/TestOnly/MonthlyReturnFileUploadWorkItems` | Delete all local file-upload validation work-item documents from `monthlyReturnFileUploadWorkItems`. |
-| `DELETE /disa-returns-backend/test-only/monthly-return-submission-work-items` | `bruno/TestOnly/MonthlyReturnSubmissionWorkItems` | Delete all local submission-transfer work-item documents from `monthlyReturnSubmissionWorkItems`. |
+| `POST /disa-returns-backend/test-only/monthly-returns/cleanup` | `bruno/TestOnly/MonthlyReturns`, frontend UI tests | Remove returns and both queues' items for supplied Z-references. |
+| `POST /disa-returns-backend/test-only/monthly-returns/work-items/cleanup` | `bruno/TestOnly/MonthlyReturns` | Remove both queues' items for supplied Z-references. |
+| `DELETE /disa-returns-backend/test-only/monthly-returns/cleanup` | `bruno/TestOnly/GlobalCleanup`, frontend performance tests | Remove all returns and both queues' items. |
+| `DELETE /disa-returns-backend/test-only/monthly-returns/work-items/` | `bruno/TestOnly/GlobalCleanup` | Remove both queues' items without removing returns. |
 | `GET /disa-returns-backend/test-only/file-upload/monthly/:filename` | `bruno/MonthlyReturn/Validation` | Serve copied local validation tests from `conf/test-only/file-upload/monthly` so Bruno can use them as Upscan `downloadUrl` values. |
 | `GET /disa-returns-backend/test-only/file-upload/monthly-expired-download` | `bruno/MonthlyReturn/Validation/21-200-upscan-expired` | Return an S3-style expired Upscan download response so Bruno can verify `UPSCAN_EXPIRED` processing. |
 
-`bruno/TestOnly/MonthlyReturns/01-204-clear-monthly-returns` also clears monthly returns for the collection's configured Z-references from `disa-returns-submission` before calling the backend cleanup route, so Bruno scenarios start from a clean declaration source of truth.
+`bruno/TestOnly/MonthlyReturns/01-204-clear-monthly-returns` runs scoped cleanup in backend first, then sends the same
+Z-references to `disa-returns-submission`. Both services must be running versions with the new cleanup routes.
+Use `03-204-clear-backend-monthly-returns` to clean up backend only.
+The global cleanup requests are skipped unless `allowGlobalCleanup=true`. To run them, use
+`bru run TestOnly/GlobalCleanup --env Local --sandbox developer --env-var allowGlobalCleanup=true`.
 
 The monthly file-upload test endpoint only serves simple `.csv` and `.xlsx` filenames copied into `conf/test-only/file-upload/monthly`. The files are runtime resources so they are available when running locally or through service-manager with the test-only router enabled. The expired-download endpoint does not serve a file; it returns `403 Forbidden` with an S3 `AccessDenied` / `Request has expired` XML body.
 
@@ -688,7 +695,8 @@ The Bruno collection is under `bruno/MonthlyReturn` and is organised into:
 - `Validation`
 - `SubmissionTransfer`
 
-Monthly return Bruno setup requests call the test-only cleanup route for the collection's configured Z-references. This avoids collisions with old backend and `disa-returns-submission` data. Upscan callback setup also clears monthly return file-upload work items before creating a fresh callback scenario. Do not run these Bruno folders in parallel, because cleanup requests delete all monthly returns from the backend, delete scoped monthly returns from `disa-returns-submission`, and delete monthly return file-upload work items from the local database.
+Monthly return Bruno setup requests clear returns and work items for the collection's configured Z-references in both
+services.
 
 These Bruno requests clear monthly returns by calling `TestOnly/MonthlyReturns/01-204-clear-monthly-returns` in their pre-request script:
 
@@ -703,7 +711,7 @@ These Bruno requests clear monthly returns by calling `TestOnly/MonthlyReturns/0
 | `MonthlyReturn/Declarations/12-422-create-file-after-submission-declaration` | Creates a backend return, declares it directly in `disa-returns-submission`, then verifies file creation is blocked. |
 | `MonthlyReturn/Delete/00-201-create-return-for-delete` | Creates a clean return for file delete tests using the configured `deleteZReference`. |
 | `MonthlyReturn/Update/07-422-update-after-submission-declaration` | Creates a backend return, declares it directly in `disa-returns-submission`, then verifies nil-return updates are blocked. |
-| `MonthlyReturn/UpscanCallback/00-201-create-return-for-success-callback` | Clears monthly return file-upload work items and creates a clean callback scenario using the configured `callbackZReference`. |
+| `MonthlyReturn/UpscanCallback/00-201-create-return-for-success-callback` | Creates a clean callback scenario using the configured `callbackZReference`. |
 
 Many later requests run one of these setup requests from their pre-request script, so they can also clear monthly returns indirectly. For example, `MonthlyReturn/Get/01-200-get-existing` runs `MonthlyReturn/Create/01-201-create-nil-return-false`, and `MonthlyReturn/Update/02-200-set-nil-return-false` runs the update setup chain.
 

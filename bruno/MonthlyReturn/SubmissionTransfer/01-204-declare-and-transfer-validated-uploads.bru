@@ -29,8 +29,6 @@ script:pre-request {
 
   for (const [request, label] of [
     ["TestOnly/Overrides/04-200-set-clock-inside-declaration-period", "clock override"],
-    ["TestOnly/MonthlyReturnFileUploadWorkItems/01-204-clear-work-items", "validation queue cleanup"],
-    ["TestOnly/MonthlyReturnSubmissionWorkItems/01-204-clear-work-items", "transfer queue cleanup"],
     ["TestOnly/MonthlyReturns/01-204-clear-monthly-returns", "monthly return cleanup"]
   ]) {
     const response = await bru.runRequest(request);
@@ -138,7 +136,7 @@ tests {
     expect(submissions.map(submission => submission.reference)).to.have.members(expected.map(upload => upload.reference));
     expect(submissions).to.have.length(expected.length);
     for (const submission of submissions) {
-      expect(submission.status).to.equal("STORED");
+      expect(submission.status).to.be.oneOf(["STORED", "NPS_SUBMITTED"]);
       expect(submission.submissionDetails.fileMimeType).to.equal("application/x-ndjson");
       expect(submission.submissionDetails.size).to.be.greaterThan(0);
       expect(submission.submissionDetails.objectStoreFileLocation).to.include(submission.reference);

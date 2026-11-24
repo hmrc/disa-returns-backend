@@ -16,7 +16,7 @@
 
 package uk.gov.hmrc.disareturnsbackend.repositories
 
-import org.mongodb.scala.model.Filters
+import org.mongodb.scala.model.*
 import uk.gov.hmrc.disareturnsbackend.config.AppConfig
 import uk.gov.hmrc.disareturnsbackend.models.MonthlyReturnFileUploadWorkItem
 import uk.gov.hmrc.mongo.MongoComponent
@@ -25,6 +25,9 @@ import uk.gov.hmrc.mongo.workitem.*
 import java.time.*
 import javax.inject.{Inject, Singleton}
 import scala.concurrent.{ExecutionContext, Future}
+
+private val fileUploadZReferenceField = "item.zReference"
+private val fileUploadZReferenceIndex = "monthlyReturnFileUploadWorkItemZReferenceIdx"
 
 @Singleton
 class MonthlyReturnFileUploadWorkItemRepository @Inject() (
@@ -36,7 +39,13 @@ class MonthlyReturnFileUploadWorkItemRepository @Inject() (
       collectionName = "monthlyReturnFileUploadWorkItems",
       mongoComponent = mongoComponent,
       itemFormat = MonthlyReturnFileUploadWorkItem.format,
-      workItemFields = WorkItemFields.default
+      workItemFields = WorkItemFields.default,
+      extraIndexes = Seq(
+        IndexModel(
+          Indexes.ascending(fileUploadZReferenceField),
+          IndexOptions().name(fileUploadZReferenceIndex)
+        )
+      )
     ) {
 
   override def now(): Instant =
@@ -56,6 +65,12 @@ class MonthlyReturnFileUploadWorkItemRepository @Inject() (
   def deleteAll(): Future[Long] =
     collection
       .deleteMany(Filters.empty())
+      .toFuture()
+      .map(_.getDeletedCount)
+
+  def deleteByZReferences(zReferences: Seq[String]): Future[Long] =
+    collection
+      .deleteMany(Filters.in(fileUploadZReferenceField, zReferences: _*))
       .toFuture()
       .map(_.getDeletedCount)
 }

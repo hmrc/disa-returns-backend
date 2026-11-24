@@ -33,4 +33,18 @@ script:pre-request {
   if (response.status !== 202) {
     throw new Error(`Expected READY callback setup to respond with 202, got ${response.status}`);
   }
+
+  const url = bru.interpolate("{{baseUrl}}{{servicePath}}/monthly/{{callbackZReference}}/{{taxYear}}/{{month}}/files/{{upscanReference}}");
+  const headers = { Authorization: bru.getVar("bearerToken") };
+  const pollInterval = Number(bru.getEnvVar("validationProcessingPollIntervalMs") ?? 1000);
+  for (let attempt = 0; attempt < 15; attempt++) {
+    const result = await bru.sendRequest({ method: "GET", url, headers, timeout: 3000 });
+    const payload = result.body ?? result.data;
+    const upload = typeof payload === "string" ? JSON.parse(payload) : payload;
+    if (upload.status === "VALIDATION_SUCCESS") {
+      return;
+    }
+    await new Promise(resolve => setTimeout(resolve, pollInterval));
+  }
+  throw new Error(`The original upload did not pass validation before the duplicate callback: ${url}`);
 }

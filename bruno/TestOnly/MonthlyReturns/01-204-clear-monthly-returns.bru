@@ -4,10 +4,30 @@ meta {
   seq: 1
 }
 
-delete {
-  url: {{baseUrl}}{{servicePath}}/test-only/monthly-returns
-  body: none
+post {
+  url: {{submissionBaseUrl}}{{submissionServicePath}}/test-only/monthly-returns/cleanup
+  body: json
   auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "zReferences": [
+      "{{zReference}}",
+      "{{nilZReference}}",
+      "{{missingZReference}}",
+      "{{declarationZReference}}",
+      "{{declarationMissingZReference}}",
+      "{{submissionDeclaredZReference}}",
+      "{{outsidePeriodZReference}}",
+      "{{deleteZReference}}",
+      "{{callbackZReference}}"
+    ]
+  }
 }
 
 assert {
@@ -15,33 +35,16 @@ assert {
 }
 
 script:pre-request {
-  const url = `${bru.getEnvVar("submissionBaseUrl")}${bru.getEnvVar("submissionServicePath")}/test-only/monthly-returns`;
-  let response;
-  
-  try {
-    const zReferences = [
-      "zReference",
-      "nilZReference",
-      "missingZReference",
-      "declarationZReference",
-      "declarationMissingZReference",
-      "submissionDeclaredZReference",
-      "outsidePeriodZReference",
-      "deleteZReference",
-      "callbackZReference"
-    ].map(name => bru.getEnvVar(name));
-    response = await bru.sendRequest({
-      method: "POST",
-      url,
-      headers: { "Content-Type": "application/json" },
-      data: { zReferences },
-      timeout: 3000
-    });
-  } catch (error) {
-    response = error.response;
-  }
-  
-  if (!response || response.status !== 204) {
-    throw new Error(`Expected submission monthly returns cleanup to respond with 204, got ${response?.status ?? "no response"}. Check disa-returns-submission is running with -Dapplication.router=testOnlyDoNotUseInAppConf.Routes. URL: ${url}`);
+  const zReferences = req.getBody().zReferences.map(reference => bru.interpolate(reference));
+  const url = `${bru.getEnvVar("baseUrl")}${bru.getEnvVar("servicePath")}/test-only/monthly-returns/cleanup`;
+  const response = await bru.sendRequest({
+    method: "POST",
+    url,
+    headers: { "Content-Type": "application/json" },
+    data: { zReferences },
+    timeout: 3000
+  });
+  if (response.status !== 204) {
+    throw new Error(`Expected backend monthly returns cleanup to respond with 204, got ${response.status}. URL: ${url}`);
   }
 }

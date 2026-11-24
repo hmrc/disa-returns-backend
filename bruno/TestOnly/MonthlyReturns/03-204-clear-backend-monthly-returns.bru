@@ -1,0 +1,25 @@
+meta {
+  name: 03-204-clear-backend-monthly-returns
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}{{servicePath}}/test-only/monthly-returns/cleanup
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "zReferences": ["{{zReference}}"]
+  }
+}
+
+assert {
+  res.status: eq 204
+}

@@ -2,9 +2,10 @@ GET        /overrides/:zReference                     uk.gov.hmrc.disareturnsbac
 PUT        /overrides/:zReference                     uk.gov.hmrc.disareturnsbackend.testOnly.controllers.TestOnlyOverridesController.set(zReference: String)
 DELETE     /overrides/:zReference                     uk.gov.hmrc.disareturnsbackend.testOnly.controllers.TestOnlyOverridesController.delete(zReference: String)
 
-DELETE     /monthly-returns                            uk.gov.hmrc.disareturnsbackend.testOnly.controllers.TestOnlyMonthlyReturnController.deleteAll()
-DELETE     /monthly-return-file-upload-work-items      uk.gov.hmrc.disareturnsbackend.testOnly.controllers.TestOnlyMonthlyReturnFileUploadWorkItemController.deleteAll()
-DELETE     /monthly-return-submission-work-items       uk.gov.hmrc.disareturnsbackend.testOnly.controllers.TestOnlyMonthlyReturnSubmissionWorkItemController.deleteAll()
+DELETE     /monthly-returns/cleanup                    uk.gov.hmrc.disareturnsbackend.testOnly.controllers.TestOnlyMonthlyReturnController.cleanupAll()
+POST       /monthly-returns/cleanup                    uk.gov.hmrc.disareturnsbackend.testOnly.controllers.TestOnlyMonthlyReturnController.cleanup()
+DELETE     /monthly-returns/work-items/                uk.gov.hmrc.disareturnsbackend.testOnly.controllers.TestOnlyMonthlyReturnController.cleanupAllWorkItems()
+POST       /monthly-returns/work-items/cleanup         uk.gov.hmrc.disareturnsbackend.testOnly.controllers.TestOnlyMonthlyReturnController.cleanupWorkItems()
 
 GET        /file-upload/monthly/:filename              uk.gov.hmrc.disareturnsbackend.testOnly.controllers.TestOnlyFileUploadController.getMonthlyFile(filename: String)
 GET        /file-upload/monthly-expired-download       uk.gov.hmrc.disareturnsbackend.testOnly.controllers.TestOnlyFileUploadController.getExpiredUpscanDownload()
