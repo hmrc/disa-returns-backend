@@ -24,6 +24,7 @@ import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.must.Matchers
 import org.scalatestplus.mockito.MockitoSugar
+import play.api.http.HeaderNames.AUTHORIZATION
 import play.api.http.Status.*
 import play.api.libs.json.{JsNull, JsResultException, Json}
 import uk.gov.hmrc.disareturnsbackend.config.AppConfig
@@ -54,6 +55,7 @@ class DisaAccountConnectorSpec
 
     when(mockAppConfig.disaAccountService).thenReturn(serviceUrl)
     when(mockHttpClient.get(eqTo(preferencesUrl))(eqTo(hc))).thenReturn(mockRequestBuilder)
+    when(mockRequestBuilder.setHeader(AUTHORIZATION -> testBearerToken)).thenReturn(mockRequestBuilder)
 
     val connector = new DisaAccountConnector(mockHttpClient, mockAppConfig)
 
@@ -64,12 +66,13 @@ class DisaAccountConnectorSpec
 
   "DisaAccountConnector.getAgentZReference" - {
     Seq(testZReference, lowercaseTestZReference).foreach { reference =>
-      s"must return valid reference $reference using the preferences URL and original HeaderCarrier" in new TestSetup {
+      s"must return valid reference $reference and explicitly forward the original user's bearer token" in new TestSetup {
         respond(OK, Json.obj("zReference" -> reference).toString())
 
         connector.getAgentZReference().futureValue mustBe reference
 
         verify(mockHttpClient).get(eqTo(preferencesUrl))(eqTo(hc))
+        verify(mockRequestBuilder).setHeader(AUTHORIZATION -> testBearerToken)
         verify(mockRequestBuilder).execute[HttpResponse](any(), any())
       }
     }

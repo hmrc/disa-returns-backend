@@ -36,8 +36,6 @@ trait TestConstants {
   protected val testBearerToken        = "Bearer valid-bearer-token"
   protected val invalidTestBearerToken = "Bearer invalid-bearer-token"
 
-  protected val testAgentEnrolmentKey = "HMRC-AS-AGENT"
-
   protected val testTaxYear                = "2026-27"
   protected val yearOnlyTestTaxYear        = "2026"
   protected val invalidTestTaxYear: String = yearOnlyTestTaxYear

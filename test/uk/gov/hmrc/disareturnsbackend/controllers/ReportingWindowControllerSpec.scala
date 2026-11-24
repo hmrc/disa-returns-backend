@@ -25,6 +25,7 @@ import play.api.test.FakeRequest
 import play.api.test.Helpers.*
 import uk.gov.hmrc.auth.core.*
 import uk.gov.hmrc.auth.core.retrieve.~
+import uk.gov.hmrc.disareturnsbackend.utils.Constants.{DISA_ENROLMENT_KEY, Z_REFERENCE_IDENTIFIER_KEY}
 import uk.gov.hmrc.disareturnsbackend.config.AppConfig
 import uk.gov.hmrc.disareturnsbackend.connectors.{DisaAccountConnector, ReturnsSubmissionConnector}
 import uk.gov.hmrc.disareturnsbackend.controllers.actions.RequestAuthAndValidationActionImpl
@@ -101,8 +102,8 @@ class ReportingWindowControllerSpec extends SpecBase {
             Enrolments(
               Set(
                 Enrolment(
-                  key = "HMRC-DISA-ORG",
-                  identifiers = Seq(EnrolmentIdentifier("ZREF", zReference)),
+                  key = DISA_ENROLMENT_KEY,
+                  identifiers = Seq(EnrolmentIdentifier(Z_REFERENCE_IDENTIFIER_KEY, zReference)),
                   state = state
                 )
               )

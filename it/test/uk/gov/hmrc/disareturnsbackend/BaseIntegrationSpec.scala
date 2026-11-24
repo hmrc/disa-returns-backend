@@ -34,6 +34,7 @@ import play.api.libs.json.*
 import play.api.libs.ws.WSClient
 import play.api.test.DefaultAwaitTimeout
 import play.api.test.Helpers.await
+import uk.gov.hmrc.disareturnsbackend.utils.Constants.{AGENT_ENROLMENT_KEY, DISA_ENROLMENT_KEY, Z_REFERENCE_IDENTIFIER_KEY}
 import uk.gov.hmrc.disareturnsbackend.utils.RequestUtils
 import uk.gov.hmrc.http.test.WireMockSupport
 import uk.gov.hmrc.mongo.MongoComponent
@@ -205,14 +206,14 @@ trait BaseIntegrationSpec
     val disaEnrolments  = if (includeDisaEnrolment) {
       Json.arr(
         Json.obj(
-          "key"         -> "HMRC-DISA-ORG",
-          "identifiers" -> Json.arr(Json.obj("key" -> "ZREF", "value" -> zReference)),
+          "key"         -> DISA_ENROLMENT_KEY,
+          "identifiers" -> Json.arr(Json.obj("key" -> Z_REFERENCE_IDENTIFIER_KEY, "value" -> zReference)),
           "state"       -> state
         )
       )
     } else Json.arr()
     val agentEnrolments = if (includeAgentEnrolment) {
-      Json.arr(Json.obj("key" -> testAgentEnrolmentKey, "identifiers" -> Json.arr(), "state" -> agentEnrolmentState))
+      Json.arr(Json.obj("key" -> AGENT_ENROLMENT_KEY, "identifiers" -> Json.arr(), "state" -> agentEnrolmentState))
     } else Json.arr()
 
     stubFor(

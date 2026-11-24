@@ -16,6 +16,7 @@
 
 package uk.gov.hmrc.disareturnsbackend.connectors
 
+import play.api.http.HeaderNames.AUTHORIZATION
 import play.api.http.Status.OK
 import uk.gov.hmrc.disareturnsbackend.config.AppConfig
 import uk.gov.hmrc.disareturnsbackend.validators.ZReferenceValidator
@@ -35,6 +36,7 @@ class DisaAccountConnector @Inject() (
   def getAgentZReference()(implicit hc: HeaderCarrier): Future[String] =
     httpClient
       .get(url"${appConfig.disaAccountService}/disa-account/agents/preferences")
+      .setHeader(hc.authorization.map(authorization => AUTHORIZATION -> authorization.value).toSeq*)
       .execute[HttpResponse]
       .map { response =>
         response.status match {

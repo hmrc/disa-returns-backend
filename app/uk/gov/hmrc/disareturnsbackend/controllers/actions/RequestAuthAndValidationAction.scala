@@ -26,6 +26,7 @@ import uk.gov.hmrc.auth.core.retrieve.~
 import uk.gov.hmrc.disareturnsbackend.config.AppConfig
 import uk.gov.hmrc.disareturnsbackend.connectors.DisaAccountConnector
 import uk.gov.hmrc.disareturnsbackend.models.*
+import uk.gov.hmrc.disareturnsbackend.utils.Constants.{AGENT_ENROLMENT_KEY, DISA_ENROLMENT_KEY, Z_REFERENCE_IDENTIFIER_KEY}
 import uk.gov.hmrc.disareturnsbackend.utils.TimeSource
 import uk.gov.hmrc.disareturnsbackend.validators.*
 import uk.gov.hmrc.http.{HeaderCarrier, UpstreamErrorResponse}
@@ -70,10 +71,6 @@ class RequestAuthAndValidationActionImpl @Inject() (
     with RequestAuthAction
     with Results
     with Logging {
-
-  private val enrolmentKey      = "HMRC-DISA-ORG"
-  private val agentEnrolmentKey = "HMRC-AS-AGENT"
-  private val identifierKey     = "ZREF"
 
   private val authFunctions = new AuthorisedFunctions {
     override def authConnector: AuthConnector = RequestAuthAndValidationActionImpl.this.authConnector
@@ -179,15 +176,15 @@ class RequestAuthAndValidationActionImpl @Inject() (
     zReference: String
   )(block: => Future[Result])(implicit hc: HeaderCarrier): Future[Result] =
     affinityGroup match {
-      case Some(AffinityGroup.Agent) if !appConfig.agentAuthenticationEnabled                             =>
+      case Some(AffinityGroup.Agent) if !appConfig.agentAuthenticationEnabled                               =>
         logger.warn("[RequestAuthAndValidationAction] Agent authentication is disabled")
         Future.successful(Forbidden)
-      case Some(AffinityGroup.Agent) if !enrolments.getEnrolment(agentEnrolmentKey).exists(_.isActivated) =>
+      case Some(AffinityGroup.Agent) if !enrolments.getEnrolment(AGENT_ENROLMENT_KEY).exists(_.isActivated) =>
         logger.warn(
-          s"[RequestAuthAndValidationAction] Agent is missing an activated $agentEnrolmentKey principal enrolment"
+          s"[RequestAuthAndValidationAction] Agent is missing an activated $AGENT_ENROLMENT_KEY principal enrolment"
         )
         Future.successful(Forbidden)
-      case Some(AffinityGroup.Agent)                                                                      =>
+      case Some(AffinityGroup.Agent)                                                                        =>
         disaAccountConnector
           .getAgentZReference()
           .map[Either[Result, String]](Right(_))
@@ -218,10 +215,10 @@ class RequestAuthAndValidationActionImpl @Inject() (
               logger.warn("[RequestAuthAndValidationAction] Agent preference does not match the requested ZReference")
               Future.successful(Forbidden)
           }
-      case _ if hasMatchingDisaEnrolment(enrolments, zReference)                                          => block
-      case _                                                                                              =>
+      case _ if hasMatchingDisaEnrolment(enrolments, zReference)                                            => block
+      case _                                                                                                =>
         logger.warn(
-          s"[RequestAuthAndValidationAction] DISA enrolment [$enrolmentKey/$identifierKey] does not match zReference [$zReference]"
+          s"[RequestAuthAndValidationAction] DISA enrolment [$DISA_ENROLMENT_KEY/$Z_REFERENCE_IDENTIFIER_KEY] does not match zReference [$zReference]"
         )
         Future.successful(Forbidden)
     }
@@ -250,10 +247,10 @@ class RequestAuthAndValidationActionImpl @Inject() (
   private def hasMatchingDisaEnrolment(enrolments: Enrolments, zReference: String): Boolean =
     enrolments.enrolments
       .exists { enrolment =>
-        enrolment.key == enrolmentKey &&
+        enrolment.key == DISA_ENROLMENT_KEY &&
         enrolment.isActivated &&
         enrolment
-          .getIdentifier(identifierKey)
+          .getIdentifier(Z_REFERENCE_IDENTIFIER_KEY)
           .exists(identifier => identifier.value.equalsIgnoreCase(zReference))
       }
 }

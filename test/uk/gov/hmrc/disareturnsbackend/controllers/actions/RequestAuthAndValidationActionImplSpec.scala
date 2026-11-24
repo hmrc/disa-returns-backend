@@ -31,6 +31,7 @@ import play.api.test.FakeRequest
 import play.api.test.Helpers.*
 import uk.gov.hmrc.auth.core.*
 import uk.gov.hmrc.auth.core.retrieve.~
+import uk.gov.hmrc.disareturnsbackend.utils.Constants.{AGENT_ENROLMENT_KEY, DISA_ENROLMENT_KEY, Z_REFERENCE_IDENTIFIER_KEY}
 import uk.gov.hmrc.disareturnsbackend.config.AppConfig
 import uk.gov.hmrc.disareturnsbackend.connectors.DisaAccountConnector
 import uk.gov.hmrc.disareturnsbackend.utils.TimeSource
@@ -251,7 +252,7 @@ class RequestAuthAndValidationActionImplSpec extends SpecBase with BeforeAndAfte
 
     "must reject a matching reference under a different identifier" in {
       authoriseWith(
-        Enrolments(Set(Enrolment("HMRC-DISA-ORG", Seq(EnrolmentIdentifier("OTHER", testZReference)), "Activated")))
+        Enrolments(Set(Enrolment(DISA_ENROLMENT_KEY, Seq(EnrolmentIdentifier("OTHER", testZReference)), "Activated")))
       )
 
       val result = authAction(testZReference).async(_ => Future.successful(Ok))(authorisedRequest)
@@ -454,7 +455,7 @@ class RequestAuthAndValidationActionImplSpec extends SpecBase with BeforeAndAfte
     FakeRequest("GET", "/test").withHeaders(AUTHORIZATION -> testBearerToken)
 
   private def agentEnrolments(state: String = "Activated"): Enrolments =
-    Enrolments(Set(Enrolment(testAgentEnrolmentKey, Seq.empty, state)))
+    Enrolments(Set(Enrolment(AGENT_ENROLMENT_KEY, Seq.empty, state)))
 
   private def disaEnrolments(zReference: String, state: String = "Activated"): Enrolments =
     Enrolments(
@@ -465,8 +466,8 @@ class RequestAuthAndValidationActionImplSpec extends SpecBase with BeforeAndAfte
 
   private def disaEnrolment(zReference: String, state: String = "Activated"): Enrolment =
     Enrolment(
-      key = "HMRC-DISA-ORG",
-      identifiers = Seq(EnrolmentIdentifier("ZREF", zReference)),
+      key = DISA_ENROLMENT_KEY,
+      identifiers = Seq(EnrolmentIdentifier(Z_REFERENCE_IDENTIFIER_KEY, zReference)),
       state = state
     )
 
