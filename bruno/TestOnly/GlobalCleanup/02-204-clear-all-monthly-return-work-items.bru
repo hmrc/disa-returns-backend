@@ -1,0 +1,15 @@
+meta {
+  name: 02-204-clear-all-monthly-return-work-items
+  type: http
+  seq: 2
+}
+
+delete {
+  url: {{baseUrl}}{{servicePath}}/test-only/monthly-returns/work-items/
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 204
+}

@@ -66,4 +66,10 @@ class MonthlyReturnSubmissionWorkItemRepository @Inject() (
 
   def deleteAll(): Future[Long] =
     collection.deleteMany(Filters.empty()).toFuture().map(_.getDeletedCount)
+
+  def deleteByZReferences(zReferences: Seq[String]): Future[Long] =
+    collection
+      .deleteMany(Filters.in(MonthlyReturnSubmissionWorkItemFields.zReference, zReferences: _*))
+      .toFuture()
+      .map(_.getDeletedCount)
 }

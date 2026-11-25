@@ -33,7 +33,7 @@ class TestOnlyOverridesControllerISpec extends BaseIntegrationSpec {
 
   private val monthlyPath        = s"$testServicePath/monthly/$testZReference/$testTaxYear/$testMonth"
   private val overridesPath      = s"$testServicePath/test-only/overrides/$testZReference"
-  private val monthlyReturnsPath = s"$testServicePath/test-only/monthly-returns"
+  private val monthlyReturnsPath = s"$testServicePath/test-only/monthly-returns/cleanup"
   private val replacement        = Json.obj("clock" -> Json.obj("date" -> "2026-06-20"), "reportingWindow" -> None)
 
   "test-only override routes" should {

@@ -110,5 +110,17 @@ class MonthlyReturnFileUploadWorkItemRepositorySpec
         repository.collection.countDocuments().head().futureValue mustBe 1
       }
     }
+
+    "deleteByZReferences" - {
+
+      "must delete only matching work items without a collection scan" in {
+        val otherZReference = "Z5678"
+        repository.enqueue(testZReference, yearOnlyTestTaxYear, testMonth, testUploadReference).futureValue
+        val other           = repository.enqueue(otherZReference, yearOnlyTestTaxYear, testMonth, testUploadReference).futureValue
+
+        repository.deleteByZReferences(Seq(testZReference)).futureValue mustBe 1L
+        repository.collection.find().head().futureValue mustBe other
+      }
+    }
   }
 }

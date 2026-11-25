@@ -34,9 +34,9 @@ class MonthlyReturnSubmissionProcessingISpec
     with ObjectStoreWireMockStubs
     with UpscanWireMockStubs {
 
-  private val monthlyPath    = s"$testServicePath/monthly/$testZReference/$testTaxYear/$testMonth"
-  private val filesPath      = s"$monthlyPath/files"
-  private val submissionPath =
+  private val monthlyPath     = s"$testServicePath/monthly/$testZReference/$testTaxYear/$testMonth"
+  private val filesPath       = s"$monthlyPath/files"
+  private val submissionPath  =
     s"/disa-returns-submission/monthly/$testZReference/$testTaxYear/$testMonth/submissions/$testUploadReference"
   private val objectStorePath = s"/object-store/object/disa-returns-backend/$testUploadReference"
   private val csvContent      = readResourceBytes("file-upload/monthly/isa-open-valid.csv")
@@ -54,7 +54,7 @@ class MonthlyReturnSubmissionProcessingISpec
 
   "monthly return submission processing" should {
     "retry a transient Object Store download failure" in {
-      postJson(monthlyPath, nilReturnFalseRequest).status shouldBe CREATED
+      postJson(monthlyPath, nilReturnFalseRequest).status                             shouldBe CREATED
       postJson(filesPath, Json.obj(referenceFieldName -> testUploadReference)).status shouldBe CREATED
 
       monthlyReturnRepository

@@ -221,6 +221,12 @@ class MonthlyReturnRepository @Inject() (
       .toFuture()
       .map(_.getDeletedCount)
 
+  def deleteByZReferences(zReferences: Seq[String]): Future[Long] =
+    collection
+      .deleteMany(Filters.in(zReferenceField, zReferences: _*))
+      .toFuture()
+      .map(_.getDeletedCount)
+
   def deleteFileUpload(
     zReference: String,
     taxYear: String,

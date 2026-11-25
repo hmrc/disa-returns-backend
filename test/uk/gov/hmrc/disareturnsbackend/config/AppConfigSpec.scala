@@ -21,6 +21,8 @@ import org.mockito.Mockito.when
 import play.api.Configuration
 import uk.gov.hmrc.play.bootstrap.config.ServicesConfig
 
+import scala.concurrent.duration.DurationInt
+
 class AppConfigSpec extends SpecBase {
 
   "AppConfig" - {
@@ -52,6 +54,10 @@ class AppConfigSpec extends SpecBase {
 
     "must default to three monthly return submission enqueue attempts" in {
       appConfig(None).monthlyReturnSubmissionEnqueueAttempts mustBe 3
+    }
+
+    "must poll the local submission-transfer queue every two seconds" in {
+      inject[AppConfig].monthlyReturnSubmissionJobPollInterval mustBe 2.seconds
     }
 
     "must reject a non-positive enqueue attempt limit" in

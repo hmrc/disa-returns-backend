@@ -28,4 +28,7 @@ lazy val it = project
   .settings(DefaultBuildSettings.itSettings())
 
 addCommandAlias("prePrChecks", ";scalafmtCheckAll;scalafmtSbtCheck")
-addCommandAlias("precommit", ";scalafmtAll;test:scalafmtAll;it/test:scalafmtAll;coverage;test;it/test;coverageReport")
+addCommandAlias(
+  "precommit",
+  ";scalafmtAll;Test / scalafmtAll;it / Test / scalafmtAll;coverage;test;it / test;coverageReport"
+)
